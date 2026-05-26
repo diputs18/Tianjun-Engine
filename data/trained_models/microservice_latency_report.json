@@ -1,0 +1,47 @@
+{
+  "dataset": "Alibaba cluster-trace-microservices-v2022",
+  "mode": "small_slice_training",
+  "note": "This trains a lightweight latency predictor using MSRTMCR time windows plus CallGraph graph features. It is the runnable baseline before adding PyTorch LSTM/GNN training.",
+  "data_status": {
+    "msrtmcr_archive": "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_0.tar.gz",
+    "callgraph_archive": "data\\alibaba_microservices_v2022\\CallGraph\\CallGraph_0.tar.gz",
+    "msmetrics_archive": "downloaded file is incomplete; not used in this run",
+    "nodemetrics_archive": "not downloaded yet; not used in this run"
+  },
+  "samples": 7184,
+  "services_with_series": 7184,
+  "services_with_graph_features": 5860,
+  "window": 2,
+  "feature_layout": {
+    "temporal_rt": 2,
+    "temporal_mcr": 2,
+    "temporal_summary": [
+      "rt_trend",
+      "rt_volatility"
+    ],
+    "graph_features": [
+      "log_in_degree",
+      "log_out_degree",
+      "log_total_degree",
+      "log_avg_edge_rt"
+    ]
+  },
+  "metrics": {
+    "mae_rt": 46.14381277172613,
+    "rmse_rt": 1086.5858269911914,
+    "mape_percent": 127984801.62272386,
+    "p95_abs_error_rt": 49.24264596252214
+  },
+  "top_services": [
+    "MS_66860",
+    "MS_4951",
+    "MS_42505",
+    "MS_73317",
+    "MS_56932",
+    "UNAVAILABLE",
+    "MS_17029",
+    "MS_35821",
+    "MS_14510",
+    "MS_51586"
+  ]
+}

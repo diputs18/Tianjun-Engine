@@ -1,0 +1,64 @@
+# Tianjun Engine example configuration.
+# Copy this file to ./tianjun.toml or set TIANJUN_CONFIG=/path/to/tianjun.toml.
+# ${TIANJUN_HOME} defaults to the project root and can be overridden for deployments.
+
+[server]
+host = "127.0.0.1"
+port = 8024
+# state_db = "${TIANJUN_STATE_DIR}/state.db"  # 可选：显式开启持久化
+heartbeat_timeout_seconds = 15
+policy_update_interval = 2
+
+[scenario]
+# path = "${TIANJUN_HOME}/examples/runtime_scenario.json"  # 可选：显式加载 demo 场景
+
+[model]
+dir = "${TIANJUN_HOME}/data/trained_models"
+# LSTM/GNN predictive models are recommended but not required for starting the
+# LLM chat/control-plane. Set true after installing the ml extra with torch.
+require = false
+
+[llm]
+# Tianjun is LLM-first. DeepSeek exposes an OpenAI-compatible chat API.
+# Do not write real keys into this file.
+# Recommended: tianjun secrets set deepseek --api-key YOUR_KEY
+# Also supported: project .env or DEEPSEEK_API_KEY environment variable.
+base_url = "https://api.deepseek.com"
+model = "deepseek-v4-flash"
+api_key_env = "DEEPSEEK_API_KEY"
+api_key_secret = "llm.api_key"
+secrets_file = "${TIANJUN_CONFIG_DIR}/secrets.toml"
+timeout_seconds = 30
+temperature = 0.2
+max_tokens = 700
+required = true
+offline = false
+
+[chat]
+require_llm = true
+# Leave empty to reuse [scenario].path.
+scenario = ""
+
+[mcp]
+base_url = "http://127.0.0.1:8024"
+transport = "stdio"
+
+[runtime_demo]
+max_rounds = 40
+
+[agent]
+server = "http://127.0.0.1:8024"
+max_cycles = 30
+poll_interval_seconds = 1.0
+
+[real_agent]
+server = "http://127.0.0.1:8024"
+node_config = "${TIANJUN_HOME}/examples/real_node_agent.example.json"
+once = false
+execute = false
+
+[security]
+require_commit_confirmation = true
+allow_process_executor = false
+allow_docker_executor = false
+allow_kubernetes_executor = false

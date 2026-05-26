@@ -1,0 +1,2714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>天钧引擎 - Hermes 算力网络智能体</title>
+  <style>
+
+:root {
+  --bg: #07131d;
+  --panel: rgba(13, 31, 47, 0.82);
+  --panel-soft: rgba(22, 48, 70, 0.62);
+  --line: rgba(132, 205, 255, 0.18);
+  --line-strong: rgba(132, 205, 255, 0.34);
+  --text: #eef8ff;
+  --muted: #8aa4b8;
+  --cyan: #5fd8ff;
+  --blue: #3d8dff;
+  --green: #6ff1b2;
+  --yellow: #ffd36b;
+  --red: #ff6d80;
+  --shadow: 0 28px 90px rgba(0, 0, 0, 0.32);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(95, 216, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 86% 12%, rgba(111, 241, 178, 0.12), transparent 24%),
+    linear-gradient(135deg, #07131d 0%, #081b2a 48%, #061018 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(132, 205, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(132, 205, 255, 0.045) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(180deg, rgba(0,0,0,.75), transparent 82%);
+}
+
+.shell {
+  width: min(1580px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0 42px;
+  position: relative;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 22px;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  font-size: 12px;
+}
+
+h1, h2, p { margin: 0; }
+
+h1 {
+  font-family: "STSong", "Songti SC", "Noto Serif CJK SC", serif;
+  font-size: clamp(42px, 6vw, 78px);
+  line-height: .95;
+  letter-spacing: -.06em;
+}
+
+.subtitle {
+  margin-top: 14px;
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.8;
+  font-size: 15px;
+}
+
+.status-deck {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.status-chip, .pill-button, .prompt-row button {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 14px;
+  backdrop-filter: blur(18px);
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.status-chip strong { color: var(--text); }
+
+#statusDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 18px var(--yellow);
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+
+button:hover { transform: translateY(-1px); border-color: var(--cyan); }
+
+.conversation-stage {
+  display: grid;
+  grid-template-columns: minmax(560px, 1.18fr) minmax(360px, .82fr);
+  gap: 18px;
+  margin-bottom: 18px;
+  align-items: start;
+}
+
+.hermes-console, .model-card, .score-card, .topology-card, .decision-card,
+.nodes-card, .tasks-card, .records-card, .metric-card {
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(16, 38, 58, .92), rgba(8, 20, 32, .76));
+  border-radius: 30px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(22px);
+}
+
+.interaction-stack {
+  display: grid;
+  grid-template-rows: minmax(0, 940px) minmax(0, 390px);
+  gap: 18px;
+  min-height: 0;
+  height: 1348px;
+}
+.hermes-console { padding: 22px; height: 940px; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.insight-stack {
+  display: grid;
+  grid-template-rows: minmax(0, 680px) minmax(0, 650px);
+  gap: 18px;
+  min-height: 0;
+  height: 1348px;
+}
+.model-card, .score-card, .decision-card, .nodes-card, .tasks-card, .records-card { padding: 20px; }
+.model-card, .score-card, .decision-card { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.topology-card { padding: 22px; min-height: 520px; }
+
+.section-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.section-title span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 13px;
+  color: #06131e;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--cyan), var(--green));
+  box-shadow: 0 0 28px rgba(95,216,255,.22);
+}
+
+.section-title.compact { align-items: center; margin-bottom: 14px; }
+.section-title h2 { font-size: 22px; letter-spacing: -.03em; }
+.section-title p { color: var(--muted); margin-top: 6px; line-height: 1.7; font-size: 13px; }
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 4px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  max-height: none;
+  scrollbar-gutter: stable;
+}
+
+.message {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  line-height: 1.72;
+  color: #dceeff;
+  background: rgba(255,255,255,.045);
+}
+
+.message b { display: block; color: var(--cyan); margin-bottom: 5px; }
+.message.user { width: min(78%, 640px); align-self: flex-end; background: rgba(95,216,255,.12); }
+.message.assistant { width: 100%; align-self: stretch; }
+.message .md-body,
+.message .stream-content { color: #dceeff; }
+.message .md-body p,
+.message .stream-content p { margin: 0 0 9px; }
+.message .md-body > :last-child,
+.message .stream-content > :last-child { margin-bottom: 0; }
+.message .md-title {
+  margin: 2px 0 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(95,216,255,.2);
+  color: #f1f9ff;
+  font-size: 17px;
+  letter-spacing: -.01em;
+}
+.message .md-gap { height: 7px; }
+.message strong {
+  color: #f2faff;
+  font-weight: 650;
+}
+.message code {
+  padding: 2px 7px;
+  border: 1px solid rgba(95,216,255,.18);
+  border-radius: 7px;
+  background: rgba(95,216,255,.08);
+  color: #82ecff;
+  font: 600 .94em "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+.message ul,
+.message ol {
+  margin: 2px 0 11px;
+  padding-left: 22px;
+  color: #d4e7fa;
+}
+.message li { margin: 4px 0; padding-left: 3px; }
+.message li::marker { color: var(--cyan); }
+
+.composer {
+  border: 1px solid var(--line-strong);
+  border-radius: 24px;
+  padding: 12px;
+  background: rgba(4, 12, 20, .58);
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  line-height: 1.7;
+  font: inherit;
+}
+
+.composer-actions, .prompt-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.intent-summary-panel {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  background: rgba(6, 18, 29, .42);
+  border-radius: 18px;
+  padding: 13px;
+}
+
+.summary-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.summary-head span {
+  color: var(--cyan);
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.summary-head strong {
+  color: var(--green);
+  font-size: 13px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-grid div {
+  border: 1px solid rgba(132, 205, 255, .14);
+  background: rgba(13, 31, 47, .56);
+  border-radius: 12px;
+  padding: 10px;
+  min-height: 70px;
+}
+
+.summary-grid label {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 7px;
+}
+
+.summary-grid b {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.primary-button, .ghost-button {
+  border: 0;
+  border-radius: 16px;
+  padding: 11px 16px;
+  color: #06131e;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--cyan), var(--green));
+}
+
+.ghost-button {
+  color: var(--text);
+  background: rgba(255,255,255,.08);
+  border: 1px solid var(--line);
+}
+
+.danger-soft { border-color: rgba(255,109,128,.35); color: #ffd8dd; }
+.prompt-row button { color: var(--muted); padding: 8px 11px; font-size: 13px; }
+.prompt-row { display: none !important; }
+
+.model-grid, .fusion-list, .decision-list, .nodes-list, .record-list {
+  display: grid;
+  gap: 12px;
+}
+
+.model-grid, .fusion-list {
+  flex: 1;
+  min-height: 0;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.decision-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.model-item, .fusion-row, .decision-item, .node-item, .record-item, .task-column {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.045);
+  border-radius: 20px;
+  padding: 14px;
+}
+
+.mini-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.mini-stat { border: 1px solid var(--line); border-radius: 14px; padding: 8px; background: rgba(255,255,255,.04); }
+.mini-stat label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+.mini-stat b { color: var(--text); }
+
+.model-item label, .metric-card label {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.model-item strong, .metric-card strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 25px;
+}
+
+.fusion-row {
+  display: grid;
+  grid-template-columns: 150px 1fr 56px;
+  gap: 12px;
+  align-items: center;
+}
+
+.track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+}
+
+.bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  box-shadow: 0 0 18px rgba(95,216,255,.35);
+}
+
+.topology-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.topology-canvas {
+  min-height: 720px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 18% 50%, rgba(95,216,255,.18), transparent 24%),
+    radial-gradient(circle at 70% 45%, rgba(111,241,178,.10), transparent 30%),
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.015));
+  border: 1px solid var(--line);
+  overflow: hidden;
+  padding: 18px;
+}
+
+.topology-canvas svg { width: 100%; height: 100%; min-height: 720px; display: block; }
+.node-ring { filter: drop-shadow(0 0 14px rgba(95,216,255,.45)); }
+.path-line { stroke-dasharray: 8 10; animation: dash 18s linear infinite; }
+.selected-path { stroke-dasharray: 12 10; animation: dash 9s linear infinite; filter: drop-shadow(0 0 12px rgba(95,216,255,.68)); }
+.topology-label { fill: #8aa4b8; font-size: 12px; letter-spacing: .06em; }
+.topology-node-label { fill: #eef8ff; font-size: 11px; font-weight: 800; }
+.topology-node-sub { fill: #8aa4b8; font-size: 10px; }
+@keyframes dash { to { stroke-dashoffset: -260; } }
+
+.selected-path.dispatch-link {
+  stroke-dasharray: 13 12;
+  animation: dispatchDash 2.8s linear infinite, dispatchBreath 1.8s ease-in-out infinite;
+}
+
+.dispatch-packet {
+  fill: #eef8ff;
+  filter: drop-shadow(0 0 10px rgba(95,216,255,.95)) drop-shadow(0 0 18px rgba(111,241,178,.35));
+}
+
+.dispatch-packet-core {
+  fill: #6ff1b2;
+}
+
+.dispatch-packet-halo {
+  fill: rgba(95,216,255,.28);
+  animation: packetHalo 1.35s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.dispatch-seq {
+  fill: #06131f;
+  stroke: #5fd8ff;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 8px rgba(95,216,255,.62));
+}
+
+.dispatch-seq-text {
+  fill: #eef8ff;
+  font-size: 10px;
+  font-weight: 900;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+@keyframes dispatchDash {
+  to { stroke-dashoffset: -100; }
+}
+
+@keyframes dispatchBreath {
+  0%, 100% { opacity: .78; }
+  50% { opacity: 1; }
+}
+
+@keyframes packetHalo {
+  0%, 100% { opacity: .35; transform: scale(.82); }
+  50% { opacity: .95; transform: scale(1.26); }
+}
+
+.topology-console { display: grid; gap: 16px; }
+.topology-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgba(132,205,255,.16);
+  border-radius: 22px;
+  padding: 14px 16px;
+  background: rgba(4,12,20,.42);
+}
+.topology-toolbar b { display: block; font-size: 18px; }
+.topology-toolbar span { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.topology-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.topology-back, .topology-mode {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 9px 13px;
+  color: var(--text);
+  background: rgba(255,255,255,.06);
+}
+.topology-mode { color: var(--cyan); pointer-events: none; }
+.topology-workbench {
+  display: block;
+  min-height: 520px;
+}
+.flow-rail, .aggregation-panel, .node-detail-panel {
+  position: relative;
+  border: 1px solid rgba(132,205,255,.18);
+  border-radius: 26px;
+  background: linear-gradient(145deg, rgba(4,13,22,.72), rgba(14,34,52,.55));
+  overflow: hidden;
+}
+.flow-rail { padding: 18px; }
+.topology-workbench > .flow-rail { display: none; }
+.flow-rail::before, .aggregation-panel::before, .node-detail-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 22% 12%, rgba(95,216,255,.14), transparent 32%),
+    linear-gradient(90deg, rgba(132,205,255,.035) 1px, transparent 1px),
+    linear-gradient(rgba(132,205,255,.035) 1px, transparent 1px);
+  background-size: auto, 30px 30px, 30px 30px;
+}
+.flow-layers { position: relative; z-index: 1; display: grid; gap: 12px; }
+.flow-card {
+  border: 1px solid rgba(132,205,255,.22);
+  border-radius: 22px;
+  padding: 14px;
+  background: rgba(7,19,29,.78);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
+}
+.flow-card.active { border-color: rgba(95,216,255,.88); box-shadow: 0 0 34px rgba(95,216,255,.12); }
+.flow-card label, .panel-kicker { color: var(--muted); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.flow-card strong { display: block; margin-top: 6px; font-size: 18px; }
+.flow-card p { color: var(--muted); margin-top: 5px; font-size: 13px; line-height: 1.55; }
+.path-summary {
+  position: relative;
+  z-index: 1;
+  margin-top: 16px;
+  border: 1px solid rgba(95,216,255,.26);
+  border-radius: 22px;
+  padding: 15px;
+  background: rgba(4,12,20,.62);
+}
+.path-summary h3, .aggregation-panel h3, .node-detail-panel h3 { margin: 0; color: var(--cyan); font-size: 17px; }
+.path-summary dl { display: grid; grid-template-columns: 94px 1fr; gap: 7px 12px; margin: 12px 0 0; }
+.path-summary dt { color: var(--muted); }
+.path-summary dd { margin: 0; font-weight: 800; color: var(--text); }
+.aggregation-panel, .node-detail-panel { padding: 18px; }
+.panel-head { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.panel-head p { color: var(--muted); margin-top: 5px; line-height: 1.6; font-size: 13px; }
+.region-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.region-card, .drill-node-card {
+  border: 1px solid rgba(132,205,255,.2);
+  border-radius: 24px;
+  padding: 15px;
+  background: rgba(7,19,29,.76);
+  cursor: zoom-in;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.region-card:hover, .drill-node-card:hover { transform: translateY(-2px); border-color: rgba(95,216,255,.78); box-shadow: 0 18px 44px rgba(95,216,255,.09); }
+.region-card.selected, .drill-node-card.selected {
+  border-color: rgba(95,216,255,.92);
+  background: linear-gradient(145deg, rgba(95,216,255,.16), rgba(7,19,29,.78));
+  box-shadow: 0 0 0 1px rgba(95,216,255,.24), 0 22px 62px rgba(95,216,255,.13);
+}
+.region-card h4, .drill-node-card h4 { margin: 0; font-size: 19px; }
+.region-card p, .drill-node-card p { color: var(--muted); margin-top: 7px; line-height: 1.55; font-size: 13px; }
+.region-stats, .node-stats-row, .resource-grid, .path-grid { display: grid; gap: 10px; }
+.region-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 14px; }
+.stat-tile {
+  border: 1px solid rgba(132,205,255,.16);
+  border-radius: 16px;
+  padding: 10px;
+  background: rgba(255,255,255,.04);
+}
+.stat-tile span { display: block; color: var(--muted); font-size: 12px; }
+.stat-tile b { display: block; margin-top: 5px; font-size: 17px; }
+.region-hint { margin-top: 12px; color: var(--cyan); font-size: 12px; }
+.drill-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-height: 520px; overflow: auto; padding-right: 4px; }
+.node-stats-row { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+.resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 13px; }
+.resource-chip {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(132,205,255,.16);
+  border-radius: 16px;
+  padding: 10px;
+  background: rgba(255,255,255,.04);
+}
+.resource-chip i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  box-shadow: 0 0 16px rgba(95,216,255,.4);
+}
+.resource-chip span { color: var(--muted); font-size: 12px; }
+.resource-chip b { display: block; margin-top: 5px; font-size: 15px; }
+.resource-chip small { display: block; color: var(--muted); margin-top: 3px; }
+.resource-chip.empty { opacity: .7; }
+.node-detail-panel { position: relative; z-index: 1; }
+.node-detail-grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 14px; }
+.detail-block {
+  border: 1px solid rgba(132,205,255,.18);
+  border-radius: 22px;
+  padding: 15px;
+  background: rgba(7,19,29,.72);
+}
+.detail-block h4 { margin: 0 0 10px; color: var(--cyan); }
+.path-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.path-row { border: 1px solid rgba(132,205,255,.16); border-radius: 16px; padding: 10px; background: rgba(255,255,255,.04); }
+.path-row b { display: block; }
+.path-row span { display: block; color: var(--muted); margin-top: 4px; font-size: 12px; }
+.topology-note { position: relative; z-index: 1; color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 12px; }
+.visual-topology {
+  position: relative;
+  z-index: 1;
+  min-height: 492px;
+  border: 1px solid rgba(132,205,255,.16);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 38% 44%, rgba(95,216,255,.16), transparent 27%),
+    radial-gradient(circle at 78% 24%, rgba(111,241,178,.10), transparent 24%),
+    rgba(4,12,20,.34);
+  overflow: hidden;
+}
+.visual-topology svg { display: block; width: 100%; height: 492px; }
+.topo-hotspot { cursor: zoom-in; }
+.topo-hotspot:hover .topo-shell { stroke: rgba(95,216,255,.98); filter: drop-shadow(0 0 18px rgba(95,216,255,.42)); }
+.topo-node-dot { filter: drop-shadow(0 0 9px rgba(95,216,255,.38)); }
+.topo-caption {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+.topo-caption b { color: var(--cyan); }
+.topo-legend {
+  position: absolute;
+  right: 18px;
+  top: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  color: var(--muted);
+  font-size: 12px;
+}
+.topo-legend span {
+  border: 1px solid rgba(132,205,255,.16);
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: rgba(7,19,29,.72);
+}
+.region-metrics-strip {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.visual-topology.no-overlap { min-height: 640px; }
+.visual-topology.no-overlap svg { height: 640px; }
+.visual-topology.no-overlap .topo-caption { display: none; }
+.aggregation-panel .region-metrics-strip.compact { display: none; }
+.visual-topology.scroll-safe {
+  height: 640px;
+  min-height: 640px;
+  max-height: 640px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+.visual-topology.scroll-safe svg { height: auto; min-height: 640px; }
+.visual-topology.scroll-safe::-webkit-scrollbar { width: 10px; }
+.visual-topology.scroll-safe::-webkit-scrollbar-thumb { background: rgba(95,216,255,.35); border-radius: 999px; }
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.metric-card { padding: 17px; min-height: 112px; }
+.metric-card strong { font-size: 28px; }
+.metric-card p { color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+.bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.nodes-card { display: none; }
+.tasks-card, .records-card { min-height: 320px; }
+.nodes-list { display: grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap: 12px; max-height: 760px; overflow: auto; padding-right: 4px; }
+
+.node-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.node-item.active {
+  border-color: rgba(95, 216, 255, .85);
+  box-shadow: 0 0 0 1px rgba(95,216,255,.22), 0 18px 42px rgba(95,216,255,.10);
+  background: linear-gradient(135deg, rgba(95,216,255,.16), rgba(255,255,255,.045));
+}
+
+.node-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.badge { color: var(--cyan); border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; font-size: 12px; }
+
+.resource-bars { grid-column: 1 / -1; display: grid; gap: 7px; }
+.resource-line { display: grid; grid-template-columns: 58px 1fr 48px; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+
+.task-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.task-column h3 { margin: 0 0 10px; font-size: 15px; }
+.task-pill { padding: 9px; border-radius: 13px; background: rgba(255,255,255,.055); color: #dceeff; margin-top: 7px; font-size: 13px; overflow-wrap: anywhere; }
+
+.decision-item p, .record-item p { color: var(--muted); line-height: 1.65; margin-top: 6px; font-size: 13px; }
+
+@media (max-width: 1180px) {
+  .hero, .conversation-stage, .topology-section, .bottom-grid { grid-template-columns: 1fr; }
+  .interaction-stack, .insight-stack { height: auto; grid-template-rows: auto; }
+  .hermes-console { height: 620px; min-height: 0; }
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nodes-card { grid-row: auto; }
+  .nodes-list { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .shell { width: min(100vw - 18px, 1580px); padding-top: 16px; }
+  .hermes-console, .model-card, .score-card, .topology-card, .decision-card,
+  .nodes-card, .tasks-card, .records-card { border-radius: 22px; padding: 15px; }
+  .metrics-grid, .task-board { grid-template-columns: 1fr; }
+  .conversation-stage { grid-template-columns: 1fr; }
+}
+
+  </style>
+</head>
+<body>
+  <span hidden>联合调度观测台</span>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Hermes first · GNN topology aware · LSTM latency prediction</p>
+        <h1>天钧引擎</h1>
+      </div>
+      <section class="status-deck" aria-label="系统状态">
+        <div class="status-chip"><span id="statusDot"></span><span id="statusText">连接中</span></div>
+        <div class="status-chip">模型 <strong id="modelStatus">检查中</strong></div>
+        <div class="status-chip">Hermes <strong id="hermesLlmStatus">检查中</strong></div>
+        <div class="status-chip">同步 <strong id="lastSync">--:--:--</strong></div>
+        <button id="refreshButton" class="pill-button">刷新</button>
+      </section>
+    </header>
+
+    <section class="conversation-stage">
+      <div class="interaction-stack">
+        <article class="hermes-console">
+          <div class="section-title">
+            <span>01</span>
+            <div>
+              <h2>智能体交互平台</h2>
+            </div>
+          </div>
+          <div id="chatLog" class="chat-log">
+            <div class="message assistant">
+              <b>Hermes</b>
+              <p>我已接入调度控制面。你可以说“提交一个推理任务，需要 2C4G，上海区域，时延小于 40ms”，也可以问“当前有哪些节点？”、“GNN 是否参与调度？”、“最近为什么选择这个节点？”。</p>
+            </div>
+          </div>
+          <div class="composer">
+            <textarea id="intentInput" rows="4" placeholder="输入自然语言需求，或询问系统状态、模型、节点、最近决策...">提交一个推理任务，需要 2C4G，上海区域，时延小于 40ms，优先稳定路径</textarea>
+            <div class="composer-actions">
+              <button id="askButton" class="primary-button">询问 Hermes</button>
+              <button id="stopHermesButton" class="ghost-button danger-soft" disabled>暂停当前回复</button>
+              <button id="submitButton" class="ghost-button danger-soft">正式下发</button>
+              <button id="endTaskButton" class="ghost-button">结束任务</button>
+            </div>
+          </div>
+          <section id="intentSummaryPanel" class="intent-summary-panel">
+            <div class="summary-head">
+              <span>实时调度结果</span>
+              <strong id="intentSummaryStatus">等待调度需求</strong>
+            </div>
+            <div id="intentSummaryBody" class="summary-grid">
+              <div><label>任务</label><b>--</b></div>
+              <div><label>资源</label><b>--</b></div>
+              <div><label>推荐节点</label><b>--</b></div>
+              <div><label>资源变化</label><b>--</b></div>
+            </div>
+          </section>
+          <div class="prompt-row">
+            <button data-prompt="当前有哪些节点？各节点资源状态如何？">节点状态</button>
+            <button data-prompt="GNN 是否已经参与调度？它输出了什么？">GNN 状态</button>
+            <button data-prompt="最近一次调度为什么选择这个节点？">决策解释</button>
+            <button data-prompt="提交一个训练任务，需要 4C8G 和 1 张 GPU，优先可靠性">训练任务</button>
+          </div>
+        </article>
+        <article class="decision-card">
+          <div class="section-title compact"><span>02</span><h2>最近决策</h2></div>
+          <div id="decisionPanel" class="decision-list"></div>
+        </article>
+      </div>
+
+      <aside class="insight-stack">
+        <article class="model-card">
+          <div class="section-title compact"><span>03</span><h2>模型推理</h2></div>
+          <div id="modelPanel" class="model-grid"></div>
+        </article>
+        <article class="score-card">
+          <div class="section-title compact"><span>04</span><h2>调度综合权重</h2></div>
+          <div id="fusionPanel" class="fusion-list"></div>
+        </article>
+      </aside>
+    </section>
+
+    <section class="topology-section">
+      <article class="topology-card">
+        <div class="section-title">
+          <span>05</span>
+          <div>
+            <h2>GNN 网络拓扑观测</h2>
+          </div>
+        </div>
+        <div id="topologyCanvas" class="topology-canvas"></div>
+      </article>
+    </section>
+
+    <section class="metrics-grid" id="metricCards"></section>
+
+    <section class="bottom-grid">
+      <article class="nodes-card">
+        <div class="section-title compact"><span>06</span><h2>节点信息</h2></div>
+        <div id="nodesPanel" class="nodes-list"></div>
+      </article>
+      <article class="tasks-card">
+        <div class="section-title compact"><span>07</span><h2>任务流转</h2></div>
+        <div id="tasksPanel" class="task-board"></div>
+      </article>
+      <article class="records-card">
+        <div class="section-title compact"><span>08</span><h2>执行回放</h2></div>
+        <div id="recordsPanel" class="record-list"></div>
+      </article>
+    </section>
+  </main>
+  <script>
+
+let latestReport = null;
+let latestHealth = null;
+let pollHandle = null;
+let latestIntentPayload = null;
+let latestIntentMessage = "";
+let interactionDecisions = [];
+let activeHermesController = null;
+let activeHermesSessionId = null;
+let activeHermesPolicyId = null;
+let taskConversationHistory = [];
+const pollIntervalMs = 4000;
+
+function setHermesBusy(isBusy) {
+  const ask = document.getElementById("askButton");
+  const stop = document.getElementById("stopHermesButton");
+  if (ask) ask.disabled = false;
+  if (ask) ask.textContent = isBusy ? "发送下一句" : "询问 Hermes";
+  if (stop) stop.disabled = !isBusy;
+}
+
+function stopHermesStream() {
+  if (activeHermesController) {
+    activeHermesController.abort();
+    activeHermesController = null;
+  }
+  setHermesBusy(false);
+}
+
+function renderInlineMarkdown(text) {
+  return escapeHtml(String(text ?? ""))
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+}
+
+function renderPlainText(text) {
+  const output = [];
+  let listTag = null;
+  const closeList = () => {
+    if (!listTag) return;
+    output.push(`</${listTag}>`);
+    listTag = null;
+  };
+  for (const rawLine of String(text ?? "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      closeList();
+      output.push('<div class="md-gap" aria-hidden="true"></div>');
+      continue;
+    }
+    const heading = line.match(/^###\s+(.+)$/);
+    if (heading) {
+      closeList();
+      output.push(`<h4 class="md-title">${renderInlineMarkdown(heading[1])}</h4>`);
+      continue;
+    }
+    const unordered = line.match(/^[-*]\s+(.+)$/);
+    const ordered = line.match(/^\d+\.\s+(.+)$/);
+    if (unordered || ordered) {
+      const nextTag = unordered ? "ul" : "ol";
+      if (listTag !== nextTag) {
+        closeList();
+        output.push(`<${nextTag}>`);
+        listTag = nextTag;
+      }
+      output.push(`<li>${renderInlineMarkdown((unordered || ordered)[1])}</li>`);
+      continue;
+    }
+    closeList();
+    output.push(`<p>${renderInlineMarkdown(line)}</p>`);
+  }
+  closeList();
+  return output.join("");
+}
+
+function rememberTaskConversation(role, content) {
+  const text = String(content ?? "").trim();
+  if (!text) return;
+  taskConversationHistory.push({
+    role,
+    content: text,
+    at: new Date().toLocaleTimeString("zh-CN", { hour12: false })
+  });
+  taskConversationHistory = taskConversationHistory.slice(-24);
+}
+
+function currentTaskHistory() {
+  return taskConversationHistory.slice(-18).map((entry) => ({
+    role: entry.role,
+    content: entry.content
+  }));
+}
+
+function resetIntentSummary() {
+  latestIntentPayload = null;
+  latestIntentMessage = "";
+  const statusEl = document.getElementById("intentSummaryStatus");
+  const bodyEl = document.getElementById("intentSummaryBody");
+  if (statusEl) {
+    statusEl.textContent = "等待调度需求";
+    statusEl.style.color = "var(--green)";
+  }
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div><label>任务</label><b>--</b></div>
+      <div><label>资源</label><b>--</b></div>
+      <div><label>推荐节点</label><b>--</b></div>
+      <div><label>资源变化</label><b>--</b></div>
+    `;
+  }
+}
+
+function endTaskConversation() {
+  stopHermesStream();
+  activeHermesSessionId = null;
+  activeHermesPolicyId = null;
+  taskConversationHistory = [];
+  resetIntentSummary();
+  addMessage("assistant", `<b>任务上下文已结束</b><p>后续提问将开启新的任务上下文，不再引用本轮历史对话。</p>`);
+}
+
+function syncInteractionPanelHeight() {
+  const stage = document.querySelector(".conversation-stage");
+  if (stage) stage.style.removeProperty("--conversation-height");
+}
+
+const textMap = {
+  performance: "性能",
+  completion: "完成时效",
+  cost: "成本",
+  reliability: "可靠性",
+  balance: "负载均衡",
+  fragmentation: "碎片化",
+  locality: "地域匹配",
+  network: "网络质量",
+  pending: "待调度",
+  running: "运行中",
+  succeeded: "已成功",
+  failed: "已失败",
+  cpu: "CPU",
+  memory: "内存",
+  gpu: "GPU",
+  storage: "存储",
+  latency_history: "LSTM 时延预测",
+  jitter: "时延抖动",
+  node_load: "节点负载",
+  bandwidth_utilization: "带宽可用性",
+  gnn_topology: "拓扑参考"
+};
+
+const regionMap = {
+  shanghai: "上海",
+  beijing: "北京",
+  hangzhou: "杭州",
+  shenzhen: "深圳",
+  guangzhou: "广州"
+};
+
+function escapeHtml(value) {
+  return String(value ?? "-")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function fmt(value, digits = 2) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n.toFixed(digits) : "-";
+}
+
+function pct(value, digits = 1) {
+  return `${fmt(Number(value ?? 0) * 100, digits)}%`;
+}
+
+function gnnDisplayState(snapshot = {}) {
+  const pred = snapshot.model_prediction ?? {};
+  const fallbackScore = snapshot.fusion_features?.gnn_topology;
+  if (pred.gnn_applicable === false) {
+    const fallbackText = fallbackScore !== undefined ? pct(fallbackScore, 1) : "50.0%";
+    return {
+      value: fallbackText,
+      detail: "中性参考值 · 当前模型观测未参与排序",
+      compact: `拓扑参考 ${fallbackText}`,
+    };
+  }
+  if (pred.gnn_stability_score !== undefined && pred.gnn_stability_score !== null) {
+    const value = pct(pred.gnn_stability_score, 1);
+    return { value, detail: "基于有效拓扑观测的稳定性评分", compact: `拓扑评分 ${value}` };
+  }
+  if (fallbackScore !== undefined) {
+    const value = pct(fallbackScore, 1);
+    return { value, detail: "中性参考值 · 等待有效拓扑观测", compact: `拓扑参考 ${value}` };
+  }
+  return { value: "--", detail: "等待首次拓扑评估", compact: "拓扑参考待生成" };
+}
+
+function displayKey(key) {
+  const raw = String(key ?? "");
+  return textMap[raw.toLowerCase()] || raw.replaceAll("_", " ");
+}
+
+function displayRegion(region) {
+  const raw = String(region ?? "-");
+  return regionMap[raw.toLowerCase()] || raw;
+}
+
+function metricLabel(key) {
+  const map = {
+    network: "网络稳定性",
+    performance: "性能",
+    completion: "完成时间",
+    cost: "成本",
+    reliability: "可靠性",
+    balance: "负载均衡",
+    fragmentation: "资源碎片",
+    locality: "区域亲和",
+    latency_history: "LSTM时延",
+    jitter: "时延抖动",
+    node_load: "节点负载",
+    bandwidth_utilization: "带宽可用性",
+    gnn_topology: "拓扑参考"
+  };
+  return map[key] ?? key;
+}
+
+function resourceUtil(node, key) {
+  const total = Number(node.capacity?.[key] ?? 0);
+  const available = Number(node.available?.[key] ?? 0);
+  if (total <= 0) return 0;
+  return Math.max(0, Math.min(1, (total - available) / total));
+}
+
+function latestDecision(report) {
+  const decisions = report?.recent_decisions ?? [];
+  return decisions.length ? decisions[decisions.length - 1] : null;
+}
+
+function activeDecision(report) {
+  return latestIntentPayload?.preview_decision ?? latestDecision(report);
+}
+
+function activeTask() {
+  return latestIntentPayload?.task ?? latestIntentPayload?.submitted_task ?? null;
+}
+
+function nodePrimaryPath(node) {
+  const paths = node.network_paths ?? {};
+  return paths.shanghai ?? paths[node.region] ?? Object.values(paths)[0] ?? {};
+}
+
+function stableLatencyOf(node) {
+  const path = nodePrimaryPath(node);
+  return Number(path.deterministic_latency_ms ?? path.stable_latency_ms ?? path.latency_ms ?? 0);
+}
+
+function rememberIntentPayload(payload, dryRun, message = "") {
+  latestIntentPayload = payload;
+  if (message) latestIntentMessage = message;
+  interactionDecisions.unshift({
+    at: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+    dryRun: Boolean(dryRun),
+    mode: dryRun ? "调度预演" : "正式下发",
+    status: payload.status ?? (dryRun ? "preview" : "submitted"),
+    task: payload.task ?? payload.submitted_task,
+    decision: payload.preview_decision,
+    submittedTask: payload.submitted_task,
+    interpretation: payload.interpretation
+  });
+  interactionDecisions = interactionDecisions.slice(0, 10);
+}
+
+function addMessage(role, html) {
+  const log = document.getElementById("chatLog");
+  const node = document.createElement("div");
+  node.className = `message ${role}`;
+  node.innerHTML = html;
+  log.appendChild(node);
+  log.scrollTop = log.scrollHeight;
+}
+
+function takeInputMessage() {
+  const input = document.getElementById("intentInput");
+  const message = input.value.trim();
+  if (message) input.value = "";
+  return message;
+}
+
+function demandText(demand) {
+  const d = demand ?? {};
+  return `${fmt(d.cpu ?? 0, 0)}C / ${fmt(d.memory ?? 0, 0)}G / GPU ${fmt(d.gpu ?? 0, 0)} / 存储 ${fmt(d.storage ?? 0, 0)}`;
+}
+
+function decisionSummary(decision) {
+  if (!decision) return "暂无候选节点";
+  const snap = decision.network_snapshot ?? {};
+  return `节点 ${decision.node_id}，确定性时延 ${fmt(snap.deterministic_latency_ms ?? snap.stable_latency_ms, 1)} ms，融合评分 ${fmt(snap.feature_fusion_score, 3)}，置信度 ${pct(snap.deterministic_confidence ?? 0)}`;
+}
+
+function decisionMatchScore(decision) {
+  if (!decision) return 0;
+  const snap = decision.network_snapshot ?? {};
+  const score = decision.match_score
+    ?? decision.total_score
+    ?? decision.score
+    ?? snap.match_score
+    ?? snap.feature_fusion_score
+    ?? 0;
+  return Math.max(0, Math.min(1, Number(score) || 0));
+}
+
+function looksLikeSchedulingRequest(message) {
+  const text = String(message ?? "").trim();
+  const strongAction = /(提交|下发|创建|运行|部署|安排|调度一个|启动|分配|派发)/i.test(text);
+  const taskShape = /(推理任务|训练任务|计算任务|任务需要|需要\s*\d|\d+\s*C|\d+\s*G|CPU|GPU|内存|带宽|时延|延迟|SLA|ms|Mbps)/i.test(text);
+  const pureQuestion = /(为什么|解释|有哪些|状态|是否|当前|最近|什么是|多少|怎么)/.test(text);
+  return (strongAction && taskShape) || (taskShape && !pureQuestion);
+}
+
+function isCommitConfirmation(message) {
+  const text = String(message ?? "").trim();
+  return /^(确认|可以|没问题|正式下发|下发|执行|提交|确认正式下发|确认执行|就这个|用这个)/.test(text)
+    && !looksLikeSchedulingRequest(text);
+}
+
+function updateIntentSummary(payload, dryRun) {
+  const statusEl = document.getElementById("intentSummaryStatus");
+  const bodyEl = document.getElementById("intentSummaryBody");
+  if (!statusEl || !bodyEl) return;
+  const decision = payload?.preview_decision;
+  const task = payload?.task ?? payload?.submitted_task ?? {};
+  const demand = task.demand ?? {};
+  const status = payload?.status ?? (dryRun ? "preview" : "leased");
+  statusEl.textContent = decision
+    ? `${dryRun ? "已生成推荐，等待确认下发" : "已真实下发"}：${status}`
+    : `无可用节点：${status}`;
+  statusEl.style.color = decision ? "var(--green)" : "var(--red)";
+  const resourceChange = dryRun || !decision
+    ? "尚未占用资源"
+    : `CPU -${fmt(demand.cpu ?? 0, 0)} / 内存 -${fmt(demand.memory ?? 0, 0)}G / GPU -${fmt(demand.gpu ?? 0, 0)} / 存储 -${fmt(demand.storage ?? 0, 0)}G`;
+  bodyEl.innerHTML = `
+    <div><label>任务</label><b>${escapeHtml(task.task_id ?? "-")}<br>${escapeHtml(displayKey(task.task_type ?? "-"))}</b></div>
+    <div><label>资源</label><b>${escapeHtml(demandText(demand))}</b></div>
+    <div><label>推荐节点</label><b>${escapeHtml(decision?.node_id ?? "暂无候选")}<br>${decision ? `匹配 ${pct(decisionMatchScore(decision))}` : "请调整需求"}</b></div>
+    <div><label>资源变化</label><b>${escapeHtml(resourceChange)}</b></div>
+  `;
+}
+
+async function previewIntentFromMessage(message, signal = undefined) {
+  const res = await fetch("/intent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, dry_run: true, queue_if_no_candidate: false }),
+    signal
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`${res.status} ${res.statusText}${detail ? `：${detail}` : ""}`);
+  }
+  const payload = await res.json();
+  rememberIntentPayload(payload, true, message);
+  updateIntentSummary(payload, true);
+  return payload;
+}
+
+function renderIntentResult(payload, dryRun) {
+  const decision = payload.preview_decision;
+  const task = payload.task ?? payload.submitted_task ?? {};
+  const status = payload.status ?? (dryRun ? "preview" : "submitted");
+  if (!decision) {
+    const missing = (payload.interpretation?.missing_fields ?? []).join("、") || "无";
+    return `
+      <b>${dryRun ? "调度预演结果" : "正式下发结果"}</b>
+      <p>接口状态：${escapeHtml(status)}。当前没有找到满足资源或 SLA 的候选节点。</p>
+      <p>任务：${escapeHtml(task.task_id ?? "-")}；资源：${escapeHtml(demandText(task.demand))}；缺失字段：${escapeHtml(missing)}。</p>
+      <p>建议降低资源需求、放宽时延约束，或查看“节点信息”中是否存在离线、资源不足或链路风险过高的节点。</p>
+    `;
+  }
+  const snap = decision.network_snapshot ?? {};
+  const features = snap.fusion_features ?? {};
+  return `
+    <b>${dryRun ? "调度预演结果" : "正式下发结果"}</b>
+    <p>接口状态：${escapeHtml(status)}；任务：${escapeHtml(task.task_id ?? decision.task_id ?? "-")}；类型：${escapeHtml(task.task_type ?? "-")}；资源：${escapeHtml(demandText(task.demand))}。</p>
+    <p>实际选择：<b>${escapeHtml(decision.node_id)}</b>；${dryRun ? "仅预演，不占用节点资源" : "已创建真实租约，节点可用资源已扣减"}。</p>
+    <p>原始时延 ${fmt(snap.raw_latency_ms, 1)} ms，确定性时延 ${fmt(snap.deterministic_latency_ms ?? snap.stable_latency_ms, 1)} ms，LSTM/GNN 输出置信度 ${pct(snap.deterministic_confidence ?? 0)}。</p>
+    <p>四特征融合：LSTM ${pct(features.latency_history ?? 0)}，抖动 ${pct(features.jitter ?? 0)}，负载 ${pct(features.node_load ?? 0)}，带宽 ${pct(features.bandwidth_utilization ?? 0)}，拓扑参考 ${pct(features.gnn_topology ?? 0)}；综合评分 ${fmt(snap.feature_fusion_score, 3)}。</p>
+    <p>${escapeHtml(decision.explanation ?? "调度器未返回解释文本")}</p>
+  `;
+}
+
+function renderAuthoritativePreviewText(payload) {
+  const decision = payload?.preview_decision;
+  const task = payload?.task ?? payload?.submitted_task ?? {};
+  if (!decision) {
+    const status = payload?.status ?? "no_candidate";
+    return `未找到可推荐节点：${status}。当前没有执行下发，节点资源不会扣减。\n\n建议降低资源需求、放宽时延约束，或检查是否存在离线、资源不足、链路风险过高的节点。`;
+  }
+  const snap = decision.network_snapshot ?? {};
+  const features = snap.fusion_features ?? {};
+  const weights = decision.weights ?? {};
+  const scores = decision.metric_scores ?? {};
+  const selectedNode = (latestReport?.nodes ?? []).find((node) => node.node_id === decision.node_id) ?? null;
+  const available = selectedNode?.available ?? {};
+  const reason = decision.explanation || "该节点在当前候选集中综合评分最高。";
+  const topScores = Object.entries(scores)
+    .sort((a, b) => Number(b[1] ?? 0) - Number(a[1] ?? 0))
+    .slice(0, 3)
+    .map(([key, value]) => `${metricLabel(key)} ${pct(value ?? 0)}`)
+    .join("、");
+  const weightLine = Object.entries(weights)
+    .filter(([, value]) => Number(value) > 0)
+    .sort((a, b) => Number(b[1] ?? 0) - Number(a[1] ?? 0))
+    .slice(0, 5)
+    .map(([key, value]) => `${metricLabel(key)} ${pct(value ?? 0)}`)
+    .join("、");
+  const nodeLine = selectedNode
+    ? `节点状态：${decision.node_id} 位于 ${displayRegion(selectedNode.region)}，在线 ${selectedNode.online ? "是" : "否"}，可靠性 ${pct(selectedNode.reliability_score ?? 0)}，健康度 ${pct(selectedNode.health_score ?? 0)}，剩余资源 CPU ${fmt(available.cpu ?? 0, 0)} 核 / 内存 ${fmt(available.memory ?? 0, 0)} GB / GPU ${fmt(available.gpu ?? 0, 0)} / 存储 ${fmt(available.storage ?? 0, 0)} GB。`
+    : `节点状态：${decision.node_id} 为本轮控制面返回的候选最优节点。`;
+  return [
+    `已生成推荐：任务 ${task.task_id ?? decision.task_id ?? "-"} 推荐下发到 ${decision.node_id}。`,
+    "当前尚未正式下发，节点资源不会扣减；确认无误后请点击“正式下发”。",
+    "",
+    nodeLine,
+    `任务画像：${task.task_type ?? "任务"}，资源需求 ${demandText(task.demand)}；网络敏感度 ${pct(task.network_sensitivity ?? 0)}，最大时延 ${task.max_latency_ms ?? "未限制"} ms，最小带宽 ${task.min_bandwidth_mbps ?? "未限制"} Mbps。`,
+    `推荐依据：${reason}`,
+    `综合评分：${fmt(decision.total_score ?? 0, 3)}；优势维度：${topScores || "暂无维度明细"}；任务自适应权重：${weightLine || "暂无权重明细"}。`,
+    `网络预测：稳定时延 ${fmt(snap.deterministic_latency_ms ?? snap.stable_latency_ms, 1)} ms，原始时延 ${fmt(snap.raw_latency_ms, 1)} ms，保证带宽 ${fmt(snap.guaranteed_bandwidth_mbps, 0)} Mbps，交付概率 ${pct(snap.delivery_probability ?? 0)}，确定性置信度 ${pct(snap.deterministic_confidence ?? 0)}。`,
+    `融合特征：LSTM ${pct(features.latency_history ?? 0)}，抖动 ${pct(features.jitter ?? 0)}，节点负载 ${pct(features.node_load ?? 0)}，带宽 ${pct(features.bandwidth_utilization ?? 0)}，拓扑参考 ${pct(features.gnn_topology ?? 0)}，融合分 ${fmt(snap.feature_fusion_score, 3)}。`
+  ].join("\n");
+}
+
+async function callIntentActual(dryRun) {
+  let message = takeInputMessage();
+  const shouldUseRememberedRecommendation = !dryRun
+    && latestIntentMessage
+    && (!message || isCommitConfirmation(message));
+  if (shouldUseRememberedRecommendation) message = latestIntentMessage;
+  if (!message) return;
+  addMessage("user", `<b>你</b><p>${escapeHtml(shouldUseRememberedRecommendation ? `确认正式下发上一条推荐：${message}` : message)}</p>`);
+  try {
+    const res = await fetch("/intent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, dry_run: dryRun })
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const payload = await res.json();
+    rememberIntentPayload(payload, dryRun, message);
+    updateIntentSummary(payload, dryRun);
+    addMessage("assistant", renderIntentResult(payload, dryRun));
+    await refreshDashboard();
+  } catch (error) {
+    addMessage("assistant", `<b>调度接口失败</b><p>${escapeHtml(error.message)}</p>`);
+  }
+}
+
+async function commitHermesPolicyActual() {
+  if (!activeHermesSessionId || !activeHermesPolicyId) {
+    addMessage("assistant", `<b>尚无可下发策略</b><p>请先通过 Hermes 补充完整任务需求，并在生成推荐节点后再正式下发。</p>`);
+    return;
+  }
+  addMessage("user", `<b>你</b><p>确认正式下发当前 Hermes 推荐策略。</p>`);
+  try {
+    const res = await fetch(`/chat/sessions/${encodeURIComponent(activeHermesSessionId)}/commit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy_id: activeHermesPolicyId })
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`${res.status} ${res.statusText}${detail ? `：${detail}` : ""}`);
+    }
+    const result = await res.json();
+    if (result.dashboard_payload) {
+      rememberIntentPayload(result.dashboard_payload, false);
+      updateIntentSummary(result.dashboard_payload, false);
+    }
+    addMessage("assistant", `<b>Hermes 正式下发</b><div class="md-body">${renderPlainText(result.message || "策略已提交。")}</div>`);
+    activeHermesPolicyId = null;
+    await refreshDashboard();
+  } catch (error) {
+    addMessage("assistant", `<b>策略下发失败</b><p>${escapeHtml(error.message)}</p>`);
+  }
+}
+
+async function askHermesActual() {
+  const message = takeInputMessage();
+  if (!message) return;
+  addMessage("user", `<b>你</b><p>${escapeHtml(message)}</p>`);
+  addMessage("assistant", `<b>Hermes 接口</b><p>正在读取实时控制面、模型状态与最近调度上下文...</p>`);
+  try {
+    const res = await fetch("/hermes/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const payload = await res.json();
+    if (payload.status === "ok" && payload.reply) {
+      addMessage("assistant", `<b>Hermes 实时回复</b><div class="md-body">${renderPlainText(payload.reply)}</div>`);
+      return;
+    }
+    addMessage("assistant", `<b>Hermes 接口返回异常</b><p>状态：${escapeHtml(payload.status || "unknown")}；原因：${escapeHtml(payload.error || "未返回有效内容")}。</p>`);
+  } catch (error) {
+    addMessage("assistant", `<b>Hermes 接口失败</b><p>${escapeHtml(error.message)}</p>`);
+  }
+}
+
+function renderMetrics(report) {
+  const metrics = report.metrics ?? {};
+  const totals = report.totals ?? {};
+  const decision = activeDecision(report);
+  const snap = decision?.network_snapshot ?? {};
+  const active = totals.running_tasks ?? totals.leased_tasks ?? 0;
+  const cards = [
+    ["成功率", pct(metrics.success_rate ?? 0), `SLA ${pct(metrics.sla_rate ?? 0)}`],
+    ["确定性时延", `${fmt(snap.deterministic_latency_ms ?? metrics.average_stable_latency_ms ?? 0, 1)} ms`, decision ? `来自 ${decision.node_id}` : "等待调度决策"],
+    ["融合评分", fmt(snap.feature_fusion_score ?? metrics.average_fusion_score ?? 0, 3), "四特征 + GNN"],
+    ["确定性置信度", pct(snap.deterministic_confidence ?? metrics.average_deterministic_confidence ?? 0), "不确定网络压缩"],
+    ["待调度", String(totals.pending_tasks ?? 0), `${active} 个运行中/租约中`],
+    ["执行记录", String(totals.completed_attempts ?? 0), `${totals.succeeded_attempts ?? 0} 成功`]
+  ];
+  document.getElementById("metricCards").innerHTML = cards.map(([label, value, sub]) => `
+    <article class="metric-card"><label>${escapeHtml(label)}</label><strong>${escapeHtml(value)}</strong><p>${escapeHtml(sub)}</p></article>
+  `).join("");
+}
+
+function renderModel(report) {
+  const runtime = report.model_runtime ?? {};
+  const decision = activeDecision(report);
+  const snap = decision?.network_snapshot ?? {};
+  const pred = snap.model_prediction ?? runtime.latest_prediction ?? {};
+  const task = activeTask();
+  const gnn = gnnDisplayState(snap);
+  document.getElementById("modelStatus").textContent = runtime.status ?? "unknown";
+  const items = [
+    ["运行状态", runtime.status ?? "unknown", runtime.detail ?? "等待模型接口"],
+    ["LSTM 预测", pred.lstm_latency_ms !== undefined ? `${fmt(pred.lstm_latency_ms, 1)} ms` : "等待调度", "预测下一时刻链路时延"],
+    ["拓扑参考", gnn.value, gnn.detail],
+    ["确定性结果", snap.deterministic_latency_ms !== undefined ? `${fmt(snap.deterministic_latency_ms, 1)} ms` : "等待调度", decision ? `选择 ${decision.node_id}` : "未产生节点-路径决策"],
+    ["当前任务", task?.task_id ?? "暂无", task ? `${task.task_type ?? "任务"}，${demandText(task.demand)}` : "预演/下发后显示"]
+  ];
+  document.getElementById("modelPanel").innerHTML = items.map(([label, value, sub]) => `
+    <div class="model-item"><label>${escapeHtml(label)}</label><strong>${escapeHtml(value)}</strong><p class="node-meta">${escapeHtml(sub)}</p></div>
+  `).join("");
+}
+
+function renderFusion(report) {
+  const decision = activeDecision(report);
+  const defaultWeights = {
+    performance: .20,
+    completion: .16,
+    cost: .12,
+    reliability: .16,
+    balance: .14,
+    fragmentation: .07,
+    locality: .06,
+    network: .09
+  };
+  const weights = decision?.weights ?? report.policy_weights ?? defaultWeights;
+  const orderedKeys = ["performance", "completion", "cost", "reliability", "balance", "fragmentation", "locality", "network"];
+  document.getElementById("fusionPanel").innerHTML = orderedKeys.map((key) => {
+    const weight = Number(weights[key] ?? 0);
+    return `<div class="fusion-row"><span>${escapeHtml(metricLabel(key))}</span><div class="track"><div class="bar" style="width:${Math.max(4, weight * 100)}%"></div></div><b>${pct(weight, 0)}</b></div>`;
+  }).join("");
+}
+
+function renderTopology(report) {
+  const nodes = report.nodes ?? [];
+  const decision = activeDecision(report);
+  const selected = decision?.node_id;
+  const snap = decision?.network_snapshot ?? {};
+  if (!nodes.length) {
+    document.getElementById("topologyCanvas").innerHTML = `<div class="decision-item">等待节点注册。</div>`;
+    return;
+  }
+  const width = 920;
+  const height = 420;
+  const cx = 460;
+  const cy = 210;
+  const radius = nodes.length > 10 ? 160 : 145;
+  const nodeSvg = nodes.map((node, index) => {
+    const angle = (-90 + index * (360 / Math.max(1, nodes.length))) * Math.PI / 180;
+    const x = cx + Math.cos(angle) * radius;
+    const y = cy + Math.sin(angle) * radius;
+    const active = node.node_id === selected;
+    const path = nodePrimaryPath(node);
+    const risk = Math.min(1, Number(path.jitter_ms ?? 0) / 25 + Number(path.packet_loss ?? 0) * 5 + Math.max(0, 1 - Number(node.health_score ?? 1)));
+    const color = active ? "#5fd8ff" : risk > .45 ? "#ff6d80" : risk > .22 ? "#ffd36b" : "#6ff1b2";
+    return `
+      <line class="path-line" x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${active ? "#5fd8ff" : "rgba(132,205,255,.26)"}" stroke-width="${active ? 4 : 2}" />
+      <g class="node-ring">
+        <circle cx="${x}" cy="${y}" r="${active ? 38 : 30}" fill="rgba(7,19,29,.92)" stroke="${color}" stroke-width="${active ? 4 : 2}" />
+        <text x="${x}" y="${y - 5}" text-anchor="middle" fill="#eef8ff" font-size="11" font-weight="800">${escapeHtml(node.node_id).slice(0, 10)}</text>
+        <text x="${x}" y="${y + 13}" text-anchor="middle" fill="#8aa4b8" font-size="11">${fmt(stableLatencyOf(node), 1)}ms</text>
+      </g>`;
+  }).join("");
+  document.getElementById("topologyCanvas").innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="GNN 网络拓扑">
+      <defs>
+        <radialGradient id="coreGlow"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".35"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient>
+      </defs>
+      <circle cx="${cx}" cy="${cy}" r="118" fill="url(#coreGlow)" />
+      ${nodeSvg}
+      <circle cx="${cx}" cy="${cy}" r="54" fill="rgba(7,19,29,.95)" stroke="#5fd8ff" stroke-width="3" />
+      <text x="${cx}" y="${cy - 7}" text-anchor="middle" fill="#eef8ff" font-size="16" font-weight="900">Hermes</text>
+      <text x="${cx}" y="${cy + 15}" text-anchor="middle" fill="#8aa4b8" font-size="12">用户意图</text>
+      <text x="26" y="36" fill="#8aa4b8" font-size="13">当前选择：${escapeHtml(selected ?? "等待决策")}</text>
+      <text x="26" y="58" fill="#8aa4b8" font-size="13">确定性时延：${snap.deterministic_latency_ms !== undefined ? `${fmt(snap.deterministic_latency_ms, 1)} ms` : "暂无"}</text>
+      <text x="26" y="80" fill="#8aa4b8" font-size="13">拓扑参考：${pct(snap.fusion_features?.gnn_topology ?? 0)}</text>
+    </svg>`;
+}
+
+function renderDecisions(report) {
+  const backend = (report.recent_decisions ?? []).slice().reverse().slice(0, 12).map((decision) => ({
+    mode: "后端决策",
+    task: { task_id: decision.task_id },
+    decision
+  }));
+  const entries = [...interactionDecisions, ...backend].slice(0, 12);
+  document.getElementById("decisionPanel").innerHTML = entries.length ? entries.map((entry) => {
+    const decision = entry.decision;
+    const snap = decision?.network_snapshot ?? {};
+    const gnn = gnnDisplayState(snap);
+    const taskId = entry.task?.task_id ?? decision?.task_id ?? "-";
+    const nodeText = decision ? ` -> ${decision.node_id}` : " -> 无候选";
+    return `<div class="decision-item">
+      <b>[${escapeHtml(entry.mode ?? "决策")}] ${escapeHtml(taskId)}${escapeHtml(nodeText)}</b>
+      <p>${decision ? `确定性时延 ${fmt(snap.deterministic_latency_ms ?? snap.stable_latency_ms, 1)} ms，原始时延 ${fmt(snap.raw_latency_ms, 1)} ms，融合评分 ${fmt(snap.feature_fusion_score, 3)}，${escapeHtml(gnn.compact)}。` : `状态 ${escapeHtml(entry.status ?? "unknown")}，未产生可执行节点。`}</p>
+    </div>`;
+  }).join("") : `<div class="decision-item">暂无调度决策。请先在 Hermes 区域进行预演或正式下发。</div>`;
+}
+
+function renderNodes(report) {
+  const nodes = report.nodes ?? [];
+  const decision = activeDecision(report);
+  const selected = decision?.node_id;
+  document.getElementById("nodesPanel").innerHTML = nodes.length ? nodes.map((node) => {
+    const path = nodePrimaryPath(node);
+    const active = node.node_id === selected;
+    const bars = ["cpu", "memory", "gpu", "storage"].map((key) => {
+      const used = resourceUtil(node, key);
+      return `<div class="resource-line"><span>${displayKey(key)}</span><div class="track"><div class="bar" style="width:${Math.max(4, used * 100)}%"></div></div><b>${pct(used, 0)}</b></div>`;
+    }).join("");
+    const latency = Number(path.latency_ms ?? 0);
+    const stable = stableLatencyOf(node);
+    return `<div class="node-item ${active ? "active" : ""}">
+      <div><b>${escapeHtml(node.node_id)}</b><div class="node-meta">${displayRegion(node.region)} · 健康 ${pct(node.health_score ?? 0)} · 可靠 ${pct(node.reliability_score ?? 0)}</div></div>
+      <span class="badge">${active ? "已选择" : (node.online ? "在线" : "离线")}</span>
+      <div class="mini-stat-grid" style="grid-column:1/-1">
+        <div class="mini-stat"><label>原始时延</label><b>${fmt(latency, 1)} ms</b></div>
+        <div class="mini-stat"><label>稳定时延</label><b>${fmt(stable, 1)} ms</b></div>
+        <div class="mini-stat"><label>抖动</label><b>${fmt(path.jitter_ms ?? 0, 1)} ms</b></div>
+      </div>
+      <div class="resource-bars">${bars}</div>
+    </div>`;
+  }).join("") : `<div class="node-item">暂无节点。</div>`;
+}
+
+function renderTasks(report) {
+  const statuses = { ...(report.task_statuses ?? {}) };
+  const groups = { pending: [], running: [], succeeded: [], failed: [] };
+  for (const [task, status] of Object.entries(statuses)) {
+    if (groups[status]) groups[status].push(task);
+  }
+  document.getElementById("tasksPanel").innerHTML = Object.entries(groups).map(([status, tasks]) => `
+    <div class="task-column"><h3>${displayKey(status)} · ${tasks.length}</h3>${tasks.slice(0, 6).map((task) => `<div class="task-pill">${escapeHtml(task)}</div>`).join("") || `<div class="task-pill">暂无</div>`}</div>
+  `).join("");
+}
+
+function renderRecords(report) {
+  const records = (report.recent_records ?? []).slice().reverse().slice(0, 6);
+  if (records.length) {
+    document.getElementById("recordsPanel").innerHTML = records.map((record) => `
+      <div class="record-item"><b>${escapeHtml(record.task_id)} @ ${escapeHtml(record.node_id)}</b><p>${record.success ? "执行成功" : "执行失败"} · 时长 ${record.actual_duration} tick · 网络延迟 ${record.network_delay_ticks ?? 0} tick</p></div>
+    `).join("");
+    return;
+  }
+  const submitted = interactionDecisions.find((entry) => !entry.dryRun && entry.decision);
+  if (submitted) {
+    document.getElementById("recordsPanel").innerHTML = `
+      <div class="record-item"><b>${escapeHtml(submitted.task?.task_id ?? "-")} 已下发</b><p>任务已创建真实租约，节点 ${escapeHtml(submitted.decision?.node_id ?? "-")} 的可用资源已扣减。执行回放需要 worker 上报结果后才会生成。</p></div>
+    `;
+    return;
+  }
+  document.getElementById("recordsPanel").innerHTML = `<div class="record-item">暂无真实执行记录。先正式下发任务，再启动 worker/执行器后这里会展示回放。</div>`;
+}
+
+async function refreshDashboard() {
+  try {
+    const [res, healthRes] = await Promise.all([fetch("/report"), fetch("/health")]);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const report = await res.json();
+    latestHealth = healthRes.ok ? await healthRes.json() : null;
+    latestReport = report;
+    renderMetrics(report);
+    renderModel(report);
+    renderFusion(report);
+    renderTopology(report);
+    renderDecisions(report);
+    renderNodes(report);
+    renderTasks(report);
+    renderRecords(report);
+    requestAnimationFrame(syncInteractionPanelHeight);
+    document.getElementById("statusDot").style.background = "var(--green)";
+    document.getElementById("statusText").textContent = "控制面已连接";
+    const llm = latestHealth?.chat_runtime?.llm ?? {};
+    document.getElementById("hermesLlmStatus").textContent = llm.enabled
+      ? `${llm.settings?.model ?? "DeepSeek"} 意图辅助`
+      : "离线回退";
+    document.getElementById("lastSync").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  } catch (error) {
+    document.getElementById("statusDot").style.background = "var(--red)";
+    document.getElementById("statusText").textContent = `连接失败：${error.message}`;
+  }
+}
+
+function schedulePolling() {
+  if (pollHandle) clearTimeout(pollHandle);
+  pollHandle = setTimeout(async () => {
+    await refreshDashboard();
+    schedulePolling();
+  }, pollIntervalMs);
+}
+
+document.getElementById("chatLog").innerHTML = `<div class="message assistant"><b>Hermes</b><p>已连接实时控制面。你可以给出地域、时延、安全或资源约束；若不希望补充画像，我会基于当前在线节点进行综合预演。存在无法满足的约束时，我会先说明原因；确认推荐后再点击“正式下发”。</p></div>`;
+document.getElementById("refreshButton").addEventListener("click", () => void refreshDashboard());
+document.getElementById("intentInput").value = "";
+async function askHermesStreamingActual() {
+  const message = takeInputMessage();
+  if (!message) return;
+  stopHermesStream();
+  rememberTaskConversation("user", message);
+  addMessage("user", `<b>你</b><p>${escapeHtml(message)}</p>`);
+
+  const log = document.getElementById("chatLog");
+  const node = document.createElement("div");
+  node.className = "message assistant";
+  node.innerHTML = `<b>Hermes 流式回复</b><div class="stream-content"><p>正在连接 Hermes...</p></div>`;
+  log.appendChild(node);
+  log.scrollTop = log.scrollHeight;
+  const content = node.querySelector(".stream-content");
+
+  const controller = new AbortController();
+  activeHermesController = controller;
+  setHermesBusy(true);
+  let fullText = "";
+  let shouldRefreshDashboard = false;
+
+  try {
+    const res = await fetch("/hermes/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, session_id: activeHermesSessionId, history: currentTaskHistory() }),
+      signal: controller.signal
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`${res.status} ${res.statusText}${detail ? `：${detail}` : ""}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let streamDone = false;
+    while (!streamDone) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || "";
+      for (const eventText of events) {
+        const line = eventText.split("\n").find((item) => item.startsWith("data:"));
+        if (!line) continue;
+        const payload = JSON.parse(line.slice(5).trim());
+        if (payload.type === "delta") {
+          fullText += payload.text || "";
+          content.innerHTML = renderPlainText(fullText);
+          log.scrollTop = log.scrollHeight;
+        } else if (payload.type === "session") {
+          activeHermesSessionId = payload.session_id || activeHermesSessionId;
+        } else if (payload.type === "result") {
+          activeHermesSessionId = payload.session_id || activeHermesSessionId;
+          activeHermesPolicyId = payload.commit_policy_id || null;
+          if (payload.dashboard_payload) {
+            rememberIntentPayload(payload.dashboard_payload, true, message);
+            updateIntentSummary(payload.dashboard_payload, true);
+            shouldRefreshDashboard = true;
+          }
+        } else if (payload.type === "warning") {
+          content.innerHTML = renderPlainText(fullText || `上下文读取警告：${payload.error}`);
+        } else if (payload.type === "error") {
+          content.innerHTML = renderPlainText(fullText || `Hermes 接口异常：${payload.error}`);
+        } else if (payload.type === "done") {
+          streamDone = true;
+          break;
+        }
+      }
+    }
+    if (!fullText) {
+      content.innerHTML = "Hermes 没有返回有效内容，请检查模型 Key、base_url 或 Hermes 配置。";
+    } else {
+      rememberTaskConversation("assistant", fullText);
+    }
+    if (shouldRefreshDashboard) await refreshDashboard();
+  } catch (error) {
+    if (error.name === "AbortError") {
+      content.innerHTML = renderPlainText(fullText ? `${fullText}\n\n[已暂停当前回复]` : "已暂停当前 Hermes 回复。");
+    } else {
+      content.innerHTML = renderPlainText(`Hermes 接口失败：${error.message}`);
+    }
+  } finally {
+    if (activeHermesController === controller) {
+      activeHermesController = null;
+      setHermesBusy(false);
+    }
+  }
+}
+
+document.getElementById("askButton").addEventListener("click", () => void askHermesStreamingActual());
+document.getElementById("stopHermesButton").addEventListener("click", () => stopHermesStream());
+document.getElementById("submitButton").addEventListener("click", () => void commitHermesPolicyActual());
+document.getElementById("endTaskButton").addEventListener("click", () => endTaskConversation());
+for (const button of document.querySelectorAll(".prompt-row button")) {
+  button.addEventListener("click", () => {
+    document.getElementById("intentInput").value = button.dataset.prompt || "";
+  });
+}
+
+window.addEventListener("resize", () => requestAnimationFrame(syncInteractionPanelHeight));
+void refreshDashboard();
+schedulePolling();
+
+
+function renderTopology(report) {
+  const nodes = report.nodes ?? [];
+  const decision = activeDecision(report);
+  const selected = decision?.node_id;
+  const snap = decision?.network_snapshot ?? {};
+  const canvas = document.getElementById("topologyCanvas");
+  if (!nodes.length) {
+    canvas.innerHTML = `<div class="decision-item">等待节点注册。</div>`;
+    return;
+  }
+
+  const selectedNode = nodes.find((node) => node.node_id === selected) ?? null;
+  const task = activeTask();
+  const inferSourceRegion = () => {
+    const declared = task?.source_region ?? task?.data_region;
+    if (declared) return declared;
+    const paths = selectedNode?.network_paths ?? {};
+    const entries = Object.entries(paths);
+    if (!entries.length) return selectedNode?.region ?? "shanghai";
+    const rawLatency = Number(snap.raw_latency_ms ?? snap.stable_latency_ms ?? snap.deterministic_latency_ms);
+    if (Number.isFinite(rawLatency)) {
+      entries.sort((a, b) => Math.abs(Number(a[1]?.latency_ms ?? 0) - rawLatency) - Math.abs(Number(b[1]?.latency_ms ?? 0) - rawLatency));
+    }
+    return entries[0][0];
+  };
+
+  const sourceRegion = inferSourceRegion();
+  const targetRegion = selectedNode?.region ?? "";
+  const width = 1180;
+  const height = 620;
+  const regionNames = Array.from(new Set(nodes.map((node) => node.region || "unknown"))).sort((a, b) => {
+    if (a === targetRegion) return -1;
+    if (b === targetRegion) return 1;
+    return displayRegion(a).localeCompare(displayRegion(b), "zh-CN");
+  });
+  const maxRows = regionNames.length > 3 ? 4 : 6;
+  const regionGap = regionNames.length > 3 ? 126 : 172;
+  const regionTop = regionNames.length > 3 ? 88 : 108;
+  const regionX = 742;
+  const nodeX = 963;
+  const anchors = {
+    user: { x: 75, y: 220 },
+    hermes: { x: 205, y: 220 },
+    control: { x: 370, y: 220 },
+    backbone: { x: 545, y: 220 }
+  };
+
+  const groupData = regionNames.map((region, index) => {
+    const groupNodes = nodes.filter((node) => (node.region || "unknown") === region);
+    const ordered = groupNodes.slice().sort((a, b) => {
+      if (a.node_id === selected) return -1;
+      if (b.node_id === selected) return 1;
+      if (Boolean(b.online) !== Boolean(a.online)) return Number(Boolean(b.online)) - Number(Boolean(a.online));
+      return stableLatencyOf(a) - stableLatencyOf(b);
+    });
+    const avg = (selector) => groupNodes.reduce((sum, node) => sum + Number(selector(node) ?? 0), 0) / Math.max(1, groupNodes.length);
+    return {
+      region,
+      nodes: ordered,
+      count: groupNodes.length,
+      x: regionX,
+      y: regionTop + index * regionGap,
+      avgLatency: avg((node) => stableLatencyOf(node)),
+      avgHealth: avg((node) => node.health_score),
+      avgReliability: avg((node) => node.reliability_score ?? node.base_reliability),
+    };
+  });
+  const groupByRegion = new Map(groupData.map((group) => [group.region, group]));
+  const selectedGroup = selected ? groupByRegion.get(targetRegion) : null;
+
+  const line = (from, to, active = false) => `
+    <path class="${active ? "selected-path" : "path-line"}"
+      d="M ${from.x} ${from.y} C ${(from.x + to.x) / 2} ${from.y}, ${(from.x + to.x) / 2} ${to.y}, ${to.x} ${to.y}"
+      fill="none" stroke="${active ? "#5fd8ff" : "rgba(132,205,255,.24)"}"
+      stroke-width="${active ? 4 : 1.6}" stroke-linecap="round" />`;
+  const stageNode = (point, title, sub, accent = "#5fd8ff", wide = 124) => `
+    <g class="node-ring">
+      <rect x="${point.x - wide / 2}" y="${point.y - 35}" width="${wide}" height="70" rx="22"
+        fill="rgba(7,19,29,.92)" stroke="${accent}" stroke-width="2.2" />
+      <text x="${point.x}" y="${point.y - 6}" text-anchor="middle" class="topology-node-label">${escapeHtml(title)}</text>
+      <text x="${point.x}" y="${point.y + 15}" text-anchor="middle" class="topology-node-sub">${escapeHtml(sub)}</text>
+    </g>`;
+  const nodeRisk = (node) => {
+    const path = nodePrimaryPath(node);
+    return Math.min(1, Number(path.jitter_ms ?? 0) / 25 + Number(path.packet_loss ?? 0) * 5 + Math.max(0, 1 - Number(node.health_score ?? 1)));
+  };
+  const nodeColor = (node, active = false) => {
+    if (active) return "#5fd8ff";
+    const risk = nodeRisk(node);
+    return risk > .45 ? "#ff6d80" : risk > .22 ? "#ffd36b" : "#6ff1b2";
+  };
+  const regionColor = (group) => {
+    if (group.region === targetRegion) return "#5fd8ff";
+    const confidence = (group.avgHealth * .55) + (group.avgReliability * .45);
+    return confidence > .86 ? "#6ff1b2" : confidence > .72 ? "#ffd36b" : "#ff6d80";
+  };
+
+  const regionSvg = groupData.map((group) => {
+    const activeRegion = group.region === targetRegion;
+    const visibleNodes = group.nodes.slice(0, maxRows);
+    const hidden = Math.max(0, group.count - visibleNodes.length);
+    const nodeStartY = group.y - 46;
+    const nodeRows = visibleNodes.map((node, index) => {
+      const y = nodeStartY + index * 29;
+      const activeNode = node.node_id === selected;
+      const color = nodeColor(node, activeNode);
+      const status = node.online ? `${fmt(stableLatencyOf(node), 1)}ms` : "离线";
+      return `
+        ${line({ x: group.x + 86, y: group.y }, { x: nodeX - 82, y }, activeNode)}
+        <g class="node-ring">
+          <rect x="${nodeX - 80}" y="${y - 13}" width="160" height="26" rx="13"
+            fill="${activeNode ? "rgba(95,216,255,.16)" : "rgba(7,19,29,.86)"}"
+            stroke="${color}" stroke-width="${activeNode ? 2.6 : 1.3}" />
+          <circle cx="${nodeX - 62}" cy="${y}" r="4.2" fill="${color}" />
+          <text x="${nodeX - 50}" y="${y + 4}" class="topology-node-label">${escapeHtml(node.node_id).slice(0, 13)}</text>
+          <text x="${nodeX + 72}" y="${y + 4}" text-anchor="end" class="topology-node-sub">${escapeHtml(status)}</text>
+        </g>`;
+    }).join("");
+    const moreRow = hidden > 0
+      ? `<text x="${nodeX}" y="${nodeStartY + visibleNodes.length * 29 + 9}" text-anchor="middle" class="topology-node-sub">+${hidden} 个节点已聚合，详情见节点信息</text>`
+      : "";
+    return `
+      ${line(anchors.backbone, { x: group.x - 88, y: group.y }, activeRegion)}
+      <g class="node-ring">
+        <rect x="${group.x - 88}" y="${group.y - 45}" width="176" height="90" rx="24"
+          fill="${activeRegion ? "rgba(95,216,255,.13)" : "rgba(7,19,29,.88)"}"
+          stroke="${regionColor(group)}" stroke-width="${activeRegion ? 3 : 1.6}" />
+        <text x="${group.x}" y="${group.y - 14}" text-anchor="middle" class="topology-node-label">${escapeHtml(displayRegion(group.region))}汇聚</text>
+        <text x="${group.x}" y="${group.y + 8}" text-anchor="middle" class="topology-node-sub">${group.count} 节点 / 健康 ${pct(group.avgHealth, 0)}</text>
+        <text x="${group.x}" y="${group.y + 29}" text-anchor="middle" class="topology-node-sub">平均稳定 ${fmt(group.avgLatency, 1)}ms</text>
+      </g>
+      ${nodeRows}
+      ${moreRow}`;
+  }).join("");
+
+  const selectedNodePoint = (() => {
+    if (!selectedGroup) return null;
+    const visible = selectedGroup.nodes.slice(0, maxRows);
+    const index = Math.max(0, visible.findIndex((node) => node.node_id === selected));
+    return { x: nodeX - 82, y: selectedGroup.y - 46 + index * 29 };
+  })();
+  const selectedPath = selectedGroup && selectedNodePoint
+    ? [
+        line(anchors.user, anchors.hermes, true),
+        line(anchors.hermes, anchors.control, true),
+        line(anchors.control, anchors.backbone, true),
+        line(anchors.backbone, { x: selectedGroup.x - 88, y: selectedGroup.y }, true),
+        line({ x: selectedGroup.x + 86, y: selectedGroup.y }, selectedNodePoint, true),
+      ].join("")
+    : "";
+  const detailRows = [
+    ["当前任务", decision?.task_id ?? task?.task_id ?? "等待决策"],
+    ["入口区域", displayRegion(sourceRegion)],
+    ["目标节点", selected ?? "等待选择"],
+    ["目标区域", targetRegion ? displayRegion(targetRegion) : "待定"],
+    ["确定性时延", snap.deterministic_latency_ms !== undefined ? `${fmt(snap.deterministic_latency_ms, 1)} ms` : "暂无"],
+    ["原始时延", snap.raw_latency_ms !== undefined ? `${fmt(snap.raw_latency_ms, 1)} ms` : "暂无"],
+    ["融合评分", snap.feature_fusion_score !== undefined ? fmt(snap.feature_fusion_score, 3) : "暂无"],
+    ["拓扑参考", pct(snap.fusion_features?.gnn_topology ?? snap.model_prediction?.gnn_stability_score ?? 0)],
+  ];
+  const detailSvg = detailRows.map(([label, value], index) => {
+    const y = 430 + index * 19;
+    return `
+      <text x="62" y="${y}" class="topology-node-sub">${escapeHtml(label)}</text>
+      <text x="174" y="${y}" fill="#eef8ff" font-size="12" font-weight="800">${escapeHtml(value)}</text>`;
+  }).join("");
+
+  canvas.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="分层分级 GNN 网络拓扑与调度路径">
+      <defs>
+        <radialGradient id="coreGlow"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".35"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect x="24" y="24" width="1132" height="572" rx="28" fill="rgba(4,12,20,.35)" stroke="rgba(132,205,255,.16)" />
+      <text x="56" y="58" class="topology-label">L0 用户意图</text>
+      <text x="176" y="58" class="topology-label">L1 Hermes解析</text>
+      <text x="330" y="58" class="topology-label">L2 调度控制面</text>
+      <text x="510" y="58" class="topology-label">L3 骨干路径</text>
+      <text x="700" y="58" class="topology-label">L4 区域汇聚</text>
+      <text x="910" y="58" class="topology-label">L5 算力节点池</text>
+      <circle cx="${anchors.backbone.x}" cy="${anchors.backbone.y}" r="104" fill="url(#coreGlow)" />
+      ${line(anchors.user, anchors.hermes)}
+      ${line(anchors.hermes, anchors.control)}
+      ${line(anchors.control, anchors.backbone)}
+      ${regionSvg}
+      ${selectedPath}
+      ${stageNode(anchors.user, "用户", displayRegion(sourceRegion), "#6ff1b2", 104)}
+      ${stageNode(anchors.hermes, "Hermes", "意图解析", "#5fd8ff", 124)}
+      ${stageNode(anchors.control, "天钧控制面", "联合调度", "#5fd8ff", 146)}
+      <g class="node-ring">
+        <circle cx="${anchors.backbone.x}" cy="${anchors.backbone.y}" r="58" fill="rgba(7,19,29,.94)" stroke="#5fd8ff" stroke-width="2.8" />
+        <text x="${anchors.backbone.x}" y="${anchors.backbone.y - 9}" text-anchor="middle" fill="#eef8ff" font-size="15" font-weight="900">骨干网络</text>
+        <text x="${anchors.backbone.x}" y="${anchors.backbone.y + 13}" text-anchor="middle" class="topology-node-sub">GNN 路径嵌入</text>
+      </g>
+      <g>
+        <rect x="46" y="398" width="304" height="176" rx="22" fill="rgba(7,19,29,.78)" stroke="rgba(132,205,255,.22)" />
+        <text x="62" y="421" fill="#5fd8ff" font-size="13" font-weight="900">当前调度路径</text>
+        ${detailSvg}
+      </g>
+      <g>
+        <rect x="386" y="410" width="284" height="132" rx="22" fill="rgba(7,19,29,.66)" stroke="rgba(132,205,255,.16)" />
+        <text x="406" y="437" fill="#5fd8ff" font-size="13" font-weight="900">路径判定逻辑</text>
+        <text x="406" y="464" class="topology-node-sub">1. Hermes 解析资源与 SLA</text>
+        <text x="406" y="487" class="topology-node-sub">2. LSTM 压缩时延波动</text>
+        <text x="406" y="510" class="topology-node-sub">3. GNN 评估拓扑稳定性</text>
+        <text x="406" y="533" class="topology-node-sub">4. 节点 + 路径联合打分</text>
+      </g>
+    </svg>`;
+}
+
+
+function cnRegion(region) {
+  const map = { shanghai: "上海", beijing: "北京", hangzhou: "杭州", shenzhen: "深圳", guangzhou: "广州", unknown: "未知区域" };
+  return map[String(region ?? "unknown").toLowerCase()] || String(region ?? "未知区域");
+}
+
+function cnResource(key) {
+  const map = { cpu: "CPU", memory: "内存", gpu: "GPU", storage: "存储" };
+  return map[String(key ?? "").toLowerCase()] || String(key ?? "-");
+}
+
+function resourceUnit(key) {
+  const map = { cpu: "C", memory: "G", gpu: "张", storage: "G" };
+  return map[String(key ?? "").toLowerCase()] || "";
+}
+
+function topoState() {
+  window.tianjunTopologyState = window.tianjunTopologyState || { mode: "overview", region: null, nodeId: null };
+  return window.tianjunTopologyState;
+}
+
+function setTopoState(next) {
+  window.tianjunTopologyState = { mode: "overview", region: null, nodeId: null, ...next };
+}
+
+function topoNode(report, nodeId) {
+  return (report.nodes ?? []).find((node) => node.node_id === nodeId) ?? null;
+}
+
+function topoResource(node, key) {
+  const total = Number(node.capacity?.[key] ?? 0);
+  const available = Number(node.available?.[key] ?? 0);
+  const used = Math.max(0, total - available);
+  const usedRatio = total <= 0 ? 0 : Math.max(0, Math.min(1, used / total));
+  const availableRatio = total <= 0 ? 0 : Math.max(0, Math.min(1, available / total));
+  return { total, available, used, usedRatio, availableRatio };
+}
+
+function topoLoad(node) {
+  const resources = ["cpu", "memory", "gpu", "storage"].map((key) => topoResource(node, key)).filter((item) => item.total > 0);
+  if (!resources.length) return 0;
+  return resources.reduce((sum, item) => sum + item.usedRatio, 0) / resources.length;
+}
+
+function topoResourceChip(node, key) {
+  const item = topoResource(node, key);
+  const unit = resourceUnit(key);
+  const noCapacity = item.total <= 0;
+  const width = noCapacity ? 0 : Math.max(2, item.availableRatio * 100);
+  return `<div class="resource-chip ${noCapacity ? "empty" : ""}">
+    <i style="width:${width}%"></i>
+    <span>${escapeHtml(cnResource(key))}</span>
+    <b>${noCapacity ? "未配置" : `${fmt(item.available, 1)}${unit} / ${fmt(item.total, 1)}${unit}`}</b>
+    <small>${noCapacity ? "该节点不提供此类资源" : `可用 ${pct(item.availableRatio, 0)} · 占用 ${pct(item.usedRatio, 0)}`}</small>
+  </div>`;
+}
+
+function topoGroups(report, selectedNode) {
+  const nodes = report.nodes ?? [];
+  const regions = Array.from(new Set(nodes.map((node) => node.region || "unknown"))).sort((a, b) => {
+    if (a === selectedNode?.region) return -1;
+    if (b === selectedNode?.region) return 1;
+    return cnRegion(a).localeCompare(cnRegion(b), "zh-CN");
+  });
+  return regions.map((region) => {
+    const groupNodes = nodes.filter((node) => (node.region || "unknown") === region);
+    const avg = (selector) => groupNodes.reduce((sum, node) => sum + Number(selector(node) ?? 0), 0) / Math.max(1, groupNodes.length);
+    const running = groupNodes.reduce((sum, node) => sum + (node.running_tasks?.length ?? 0), 0);
+    return {
+      region,
+      nodes: groupNodes.slice().sort((a, b) => {
+        if (a.node_id === selectedNode?.node_id) return -1;
+        if (b.node_id === selectedNode?.node_id) return 1;
+        if (Boolean(b.online) !== Boolean(a.online)) return Number(Boolean(b.online)) - Number(Boolean(a.online));
+        return stableLatencyOf(a) - stableLatencyOf(b);
+      }),
+      count: groupNodes.length,
+      running,
+      avgLatency: avg((node) => stableLatencyOf(node)),
+      avgHealth: avg((node) => node.health_score),
+      avgReliability: avg((node) => node.reliability_score ?? node.base_reliability),
+      avgLoad: avg((node) => topoLoad(node)),
+    };
+  });
+}
+
+function topoSourceRegion(decision, selectedNode) {
+  const task = activeTask();
+  const declared = task?.source_region ?? task?.data_region;
+  if (declared) return declared;
+  const snap = decision?.network_snapshot ?? {};
+  const entries = Object.entries(selectedNode?.network_paths ?? {});
+  if (!entries.length) return selectedNode?.region ?? "shanghai";
+  const rawLatency = Number(snap.raw_latency_ms ?? snap.stable_latency_ms ?? snap.deterministic_latency_ms);
+  if (Number.isFinite(rawLatency)) {
+    entries.sort((a, b) => Math.abs(Number(a[1]?.latency_ms ?? 0) - rawLatency) - Math.abs(Number(b[1]?.latency_ms ?? 0) - rawLatency));
+  }
+  return entries[0][0];
+}
+
+function topoPathSummary(decision, selectedNode, sourceRegion) {
+  const task = activeTask();
+  const snap = decision?.network_snapshot ?? {};
+  const rows = [
+    ["当前任务", decision?.task_id ?? task?.task_id ?? "等待决策"],
+    ["入口区域", cnRegion(sourceRegion)],
+    ["目标节点", selectedNode?.node_id ?? "等待选择"],
+    ["目标区域", selectedNode?.region ? cnRegion(selectedNode.region) : "待定"],
+    ["确定性时延", snap.deterministic_latency_ms !== undefined ? `${fmt(snap.deterministic_latency_ms, 1)} ms` : "暂无"],
+    ["原始时延", snap.raw_latency_ms !== undefined ? `${fmt(snap.raw_latency_ms, 1)} ms` : "暂无"],
+    ["融合评分", snap.feature_fusion_score !== undefined ? fmt(snap.feature_fusion_score, 3) : "暂无"],
+    ["拓扑参考", pct(snap.fusion_features?.gnn_topology ?? snap.model_prediction?.gnn_stability_score ?? 0)],
+  ];
+  return `<div class="path-summary">
+    <h3>当前调度路径</h3>
+    <dl>${rows.map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl>
+  </div>`;
+}
+
+function topoFlowRail(decision, selectedNode, sourceRegion) {
+  const snap = decision?.network_snapshot ?? {};
+  return `<aside class="flow-rail">
+    <div class="flow-layers">
+      <div class="flow-card"><label>L0 用户意图</label><strong>${escapeHtml(cnRegion(sourceRegion))}</strong><p>任务入口、数据源或用户所在区域。</p></div>
+      <div class="flow-card"><label>L1 Hermes 解析</label><strong>自然语言意图</strong><p>解析任务类型、资源需求、SLA 与时延约束。</p></div>
+      <div class="flow-card active"><label>L2 天钧控制面</label><strong>节点-路径联合调度</strong><p>LSTM 预测时延，GNN 评估拓扑稳定性，四特征融合生成评分。</p></div>
+      <div class="flow-card"><label>L3 骨干路径</label><strong>${snap.guaranteed_bandwidth_mbps !== undefined ? `${fmt(snap.guaranteed_bandwidth_mbps, 1)} Mbps` : "等待链路数据"}</strong><p>关注带宽、丢包、抖动和确定性时延。</p></div>
+      <div class="flow-card ${selectedNode ? "active" : ""}"><label>L4 区域汇聚</label><strong>${selectedNode?.region ? cnRegion(selectedNode.region) : "等待选择"}</strong><p>L5 节点池嵌入在区域汇聚中，双击区域进入节点池。</p></div>
+    </div>
+    ${topoPathSummary(decision, selectedNode, sourceRegion)}
+  </aside>`;
+}
+
+function topoOverview(report, groups, selectedNode) {
+  const cards = groups.map((group) => {
+    const selected = group.region === selectedNode?.region;
+    return `<article class="region-card ${selected ? "selected" : ""}" data-region="${escapeHtml(group.region)}">
+      <h4>${escapeHtml(cnRegion(group.region))}汇聚</h4>
+      <p>${group.count} 个节点，${group.running} 个运行任务。双击进入该区域节点池。</p>
+      <div class="region-stats">
+        <div class="stat-tile"><span>健康度</span><b>${pct(group.avgHealth, 0)}</b></div>
+        <div class="stat-tile"><span>稳定时延</span><b>${fmt(group.avgLatency, 1)}ms</b></div>
+        <div class="stat-tile"><span>资源占用</span><b>${pct(group.avgLoad, 0)}</b></div>
+      </div>
+      <p class="region-hint">双击查看 ${escapeHtml(cnRegion(group.region))} 全部节点</p>
+    </article>`;
+  }).join("");
+  return `<section class="aggregation-panel">
+    <div class="panel-head">
+      <div></div>
+      <span class="topology-mode">总览</span>
+    </div>
+    <div class="region-grid">${cards}</div>
+  </section>`;
+}
+
+function topoRegion(report, group, selectedNode) {
+  if (!group) return topoOverview(report, topoGroups(report, selectedNode), selectedNode);
+  const cards = group.nodes.map((node) => {
+    const selected = node.node_id === selectedNode?.node_id;
+    const path = nodePrimaryPath(node);
+    return `<article class="drill-node-card ${selected ? "selected" : ""}" data-node="${escapeHtml(node.node_id)}">
+      <h4>${escapeHtml(node.node_id)}</h4>
+      <p>${escapeHtml(cnRegion(node.region))} · ${node.online ? "在线" : "离线"} · 心跳 ${fmt(node.last_heartbeat_age ?? 0, 1)}s</p>
+      <div class="node-stats-row">
+        <div class="stat-tile"><span>稳定时延</span><b>${fmt(stableLatencyOf(node), 1)}ms</b></div>
+        <div class="stat-tile"><span>抖动</span><b>${fmt(path.jitter_ms ?? 0, 1)}ms</b></div>
+        <div class="stat-tile"><span>资源占用</span><b>${pct(topoLoad(node), 0)}</b></div>
+      </div>
+      <div class="resource-grid">${["cpu", "memory", "gpu", "storage"].map((key) => topoResourceChip(node, key)).join("")}</div>
+      <p class="region-hint">双击查看节点完整信息</p>
+    </article>`;
+  }).join("");
+  return `<section class="aggregation-panel">
+    <div class="panel-head">
+      <div>
+        <span class="panel-kicker">L4 / ${escapeHtml(cnRegion(group.region))}</span>
+        <h3>${escapeHtml(cnRegion(group.region))}节点池</h3>
+        <p>这里是 ${escapeHtml(cnRegion(group.region))} 汇聚下的全部节点。资源条显示可用比例，文字显示“可用 / 总量”。</p>
+      </div>
+      <span class="topology-mode">区域下钻</span>
+    </div>
+    <div class="drill-grid">${cards}</div>
+  </section>`;
+}
+
+function topoNodeDetail(report, node) {
+  if (!node) return topoOverview(report, topoGroups(report, null), null);
+  const paths = Object.entries(node.network_paths ?? {}).map(([region, path]) => `<div class="path-row">
+    <b>${escapeHtml(cnRegion(region))}</b>
+    <span>时延 ${fmt(path.latency_ms, 1)}ms</span>
+    <span>抖动 ${fmt(path.jitter_ms, 1)}ms</span>
+    <span>带宽 ${fmt(path.bandwidth_mbps, 1)}Mbps</span>
+    <span>丢包 ${pct(path.packet_loss ?? 0, 2)}</span>
+  </div>`).join("");
+  const labels = (node.labels ?? []).map((label) => `<span class="badge">${escapeHtml(label)}</span>`).join(" ");
+  const factors = Object.entries(node.performance_factors ?? {}).map(([key, value]) => `<div class="path-row"><b>${escapeHtml(displayKey(key))}</b><span>${pct(value ?? 0)}</span></div>`).join("");
+  return `<section class="node-detail-panel">
+    <div class="panel-head">
+      <div>
+        <span class="panel-kicker">Node Detail</span>
+        <h3>${escapeHtml(node.node_id)}</h3>
+        <p>${escapeHtml(cnRegion(node.region))} · ${node.online ? "在线" : "离线"} · 健康 ${pct(node.health_score ?? 0)} · 可靠 ${pct(node.reliability_score ?? node.base_reliability ?? 0)}</p>
+      </div>
+      <span class="topology-mode">节点详情</span>
+    </div>
+    <div class="node-detail-grid">
+      <div class="detail-block">
+        <h4>资源动态</h4>
+        <div class="resource-grid">${["cpu", "memory", "gpu", "storage"].map((key) => topoResourceChip(node, key)).join("")}</div>
+        <p class="topology-note">CPU、内存、GPU、存储是调度约束的关键输入。0% 占用表示当前空闲，不代表没有资源；“未配置”才代表该节点无此资源。</p>
+      </div>
+      <div class="detail-block">
+        <h4>链路画像</h4>
+        <div class="path-grid">${paths || `<div class="path-row"><b>暂无链路画像</b><span>等待心跳上报 network_paths</span></div>`}</div>
+      </div>
+      <div class="detail-block">
+        <h4>运行状态</h4>
+        <div class="node-stats-row">
+          <div class="stat-tile"><span>运行任务</span><b>${node.running_tasks?.length ?? 0}</b></div>
+          <div class="stat-tile"><span>心跳年龄</span><b>${fmt(node.last_heartbeat_age ?? 0, 1)}s</b></div>
+          <div class="stat-tile"><span>成本/tick</span><b>${fmt(node.cost_per_tick ?? 0, 2)}</b></div>
+        </div>
+        <p class="topology-note">${labels || "暂无标签"}</p>
+      </div>
+      <div class="detail-block">
+        <h4>性能因子</h4>
+        <div class="path-grid">${factors || `<div class="path-row"><b>暂无</b><span>等待节点上报</span></div>`}</div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function bindTopoDrilldown(report) {
+  document.querySelectorAll("[data-region]").forEach((card) => {
+    card.addEventListener("dblclick", () => {
+      setTopoState({ mode: "region", region: card.dataset.region, nodeId: null });
+      renderTopology(report);
+    });
+  });
+  document.querySelectorAll("[data-node]").forEach((card) => {
+    card.addEventListener("dblclick", () => {
+      const node = topoNode(report, card.dataset.node);
+      setTopoState({ mode: "node", region: node?.region ?? topoState().region, nodeId: card.dataset.node });
+      renderTopology(report);
+    });
+  });
+  const back = document.getElementById("topologyBackButton");
+  if (back) {
+    back.addEventListener("click", () => {
+      const current = topoState();
+      if (current.mode === "node") setTopoState({ mode: "region", region: current.region, nodeId: null });
+      else setTopoState({ mode: "overview", region: null, nodeId: null });
+      renderTopology(report);
+    });
+  }
+}
+
+function renderTopology(report) {
+  const nodes = report.nodes ?? [];
+  const decision = activeDecision(report);
+  const selectedNode = topoNode(report, decision?.node_id);
+  const sourceRegion = topoSourceRegion(decision, selectedNode);
+  const canvas = document.getElementById("topologyCanvas");
+  if (!nodes.length) {
+    canvas.innerHTML = `<div class="decision-item">等待节点注册。</div>`;
+    return;
+  }
+  const groups = topoGroups(report, selectedNode);
+  const current = topoState();
+  if (current.mode === "region" && !groups.some((group) => group.region === current.region)) setTopoState({ mode: "overview", region: null, nodeId: null });
+  if (current.mode === "node" && !topoNode(report, current.nodeId)) setTopoState({ mode: current.region ? "region" : "overview", region: current.region, nodeId: null });
+  const state = topoState();
+  const group = groups.find((item) => item.region === state.region);
+  const activePanel = state.mode === "node"
+    ? topoNodeDetail(report, topoNode(report, state.nodeId))
+    : state.mode === "region"
+      ? topoRegion(report, group, selectedNode)
+      : topoOverview(report, groups, selectedNode);
+  const title = state.mode === "overview" ? "分层拓扑总览" : state.mode === "region" ? `${cnRegion(state.region)}节点池` : `${state.nodeId}节点详情`;
+  const backButton = state.mode === "overview" ? "" : `<button id="topologyBackButton" class="topology-back">返回上一级</button>`;
+  canvas.innerHTML = `<div class="topology-console">
+    <div class="topology-toolbar">
+      <div><b>${escapeHtml(title)}</b></div>
+      <div class="topology-actions">${backButton}<span class="topology-mode">${escapeHtml(state.mode)}</span></div>
+    </div>
+    <div class="topology-workbench">
+      ${topoFlowRail(decision, selectedNode, sourceRegion)}
+      ${activePanel}
+    </div>
+  </div>`;
+  bindTopoDrilldown(report);
+}
+
+
+function topoColor(ok, selected = false) {
+  if (selected) return "#5fd8ff";
+  return ok > .9 ? "#6ff1b2" : ok > .78 ? "#ffd36b" : "#ff6d80";
+}
+
+function topoBezier(from, to, selected = false, width = 2) {
+  const stroke = selected ? "#5fd8ff" : "rgba(132,205,255,.28)";
+  const cls = selected ? "selected-path" : "path-line";
+  return `<path class="${cls}" d="M ${from.x} ${from.y} C ${(from.x + to.x) / 2} ${from.y}, ${(from.x + to.x) / 2} ${to.y}, ${to.x} ${to.y}" fill="none" stroke="${stroke}" stroke-width="${selected ? width + 1.4 : width}" stroke-linecap="round" />`;
+}
+
+function topoStage(x, y, title, sub, active = false) {
+  const stroke = active ? "#5fd8ff" : "rgba(132,205,255,.42)";
+  return `<g>
+    <rect x="${x - 74}" y="${y - 34}" width="148" height="68" rx="22" fill="rgba(7,19,29,.88)" stroke="${stroke}" stroke-width="${active ? 2.8 : 1.5}" />
+    <text x="${x}" y="${y - 5}" text-anchor="middle" fill="#eef8ff" font-size="14" font-weight="900">${escapeHtml(title)}</text>
+    <text x="${x}" y="${y + 16}" text-anchor="middle" fill="#8aa4b8" font-size="11">${escapeHtml(sub)}</text>
+  </g>`;
+}
+
+function topoTinyNodes(group, cx, cy, selectedNode) {
+  const nodes = group.nodes.slice(0, 10);
+  const radius = group.count > 6 ? 48 : 40;
+  return nodes.map((node, index) => {
+    const angle = (-95 + index * (360 / Math.max(1, nodes.length))) * Math.PI / 180;
+    const x = cx + Math.cos(angle) * radius;
+    const y = cy + Math.sin(angle) * radius;
+    const selected = node.node_id === selectedNode?.node_id;
+    const color = topoColor(Number(node.health_score ?? 0), selected);
+    return `<circle class="topo-node-dot" cx="${x}" cy="${y}" r="${selected ? 7 : 4.8}" fill="${color}" stroke="rgba(238,248,255,.55)" stroke-width="${selected ? 2 : .8}" />`;
+  }).join("");
+}
+
+function topoDecisionMetrics(report, selectedNode) {
+  const decision = activeDecision(report);
+  const snap = decision?.network_snapshot ?? {};
+  const path = selectedNode ? nodePrimaryPath(selectedNode) : {};
+  const stable = snap.deterministic_latency_ms ?? snap.stable_latency_ms ?? stableLatencyOf(selectedNode ?? {});
+  return {
+    task: decision?.task_id ?? activeTask()?.task_id ?? "等待决策",
+    node: selectedNode?.node_id ?? "等待选择",
+    stable,
+    raw: snap.raw_latency_ms ?? path.latency_ms,
+    bandwidth: snap.guaranteed_bandwidth_mbps ?? path.bandwidth_mbps,
+    jitter: path.jitter_ms ?? snap.latency_volatility,
+    loss: path.packet_loss,
+    confidence: snap.deterministic_confidence,
+    score: snap.feature_fusion_score,
+  };
+}
+
+function topoMetricBadges(metrics) {
+  return `<g>
+    <rect x="34" y="382" width="752" height="70" rx="20" fill="rgba(7,19,29,.78)" stroke="rgba(132,205,255,.20)" />
+    <text x="54" y="407" fill="#5fd8ff" font-size="13" font-weight="900">调用期稳定指标</text>
+    <text x="54" y="431" fill="#8aa4b8" font-size="11">任务 ${escapeHtml(metrics.task)} · 目标 ${escapeHtml(metrics.node)}</text>
+    <text x="246" y="407" fill="#eef8ff" font-size="13" font-weight="900">稳定目标 ${fmt(metrics.stable, 1)}ms</text>
+    <text x="246" y="431" fill="#8aa4b8" font-size="11">原始 ${metrics.raw !== undefined ? `${fmt(metrics.raw, 1)}ms` : "暂无"}</text>
+    <text x="402" y="407" fill="#eef8ff" font-size="13" font-weight="900">带宽 ${metrics.bandwidth !== undefined ? `${fmt(metrics.bandwidth, 1)}Mbps` : "暂无"}</text>
+    <text x="402" y="431" fill="#8aa4b8" font-size="11">抖动 ${metrics.jitter !== undefined ? `${fmt(metrics.jitter, 1)}ms` : "暂无"}</text>
+    <text x="566" y="407" fill="#eef8ff" font-size="13" font-weight="900">丢包 ${metrics.loss !== undefined ? pct(metrics.loss, 2) : "暂无"}</text>
+    <text x="566" y="431" fill="#8aa4b8" font-size="11">置信 ${metrics.confidence !== undefined ? pct(metrics.confidence, 1) : "暂无"} · 评分 ${metrics.score !== undefined ? fmt(metrics.score, 3) : "暂无"}</text>
+  </g>`;
+}
+
+function topoOverview(report, groups, selectedNode) {
+  const sourceRegion = topoSourceRegion(activeDecision(report), selectedNode);
+  const selectedRegion = selectedNode?.region;
+  const metrics = topoDecisionMetrics(report, selectedNode);
+  const width = 820;
+  const height = 492;
+  const backbone = { x: 342, y: 246 };
+  const stages = [
+    { x: 86, y: 246, title: "用户", sub: cnRegion(sourceRegion) },
+    { x: 206, y: 246, title: "Hermes", sub: "意图解析" },
+  ];
+  const regionPoints = groups.map((group, index) => {
+    const count = groups.length;
+    const y = count === 1 ? 246 : 126 + index * Math.min(150, 260 / Math.max(1, count - 1));
+    return { group, x: 590, y };
+  });
+  const regionSvg = regionPoints.map(({ group, x, y }) => {
+    const selected = group.region === selectedRegion;
+    const confidence = (group.avgHealth * .55) + (group.avgReliability * .45);
+    const color = topoColor(confidence, selected);
+    return `${topoBezier(backbone, { x: x - 90, y }, selected, 2.2)}
+      <g class="topo-hotspot" data-region="${escapeHtml(group.region)}">
+        <rect class="topo-shell" x="${x - 88}" y="${y - 58}" width="176" height="116" rx="30" fill="${selected ? "rgba(95,216,255,.14)" : "rgba(7,19,29,.86)"}" stroke="${color}" stroke-width="${selected ? 3 : 1.8}" />
+        ${topoTinyNodes(group, x, y + 4, selectedNode)}
+        <text x="${x}" y="${y - 22}" text-anchor="middle" fill="#eef8ff" font-size="17" font-weight="900">${escapeHtml(cnRegion(group.region))}汇聚</text>
+        <text x="${x}" y="${y + 34}" text-anchor="middle" fill="#8aa4b8" font-size="11">${group.count}节点 · 健康${pct(group.avgHealth, 0)} · 占用${pct(group.avgLoad, 0)}</text>
+      </g>`;
+  }).join("");
+  return `<section class="aggregation-panel">
+    <div class="panel-head">
+      <div></div>
+      <span class="topology-mode">总览</span>
+    </div>
+    <div class="visual-topology">
+      <div class="topo-legend"><span>亮色链路=当前调度路径</span><span>圆点=区域内节点</span><span>双击区域下钻</span></div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="区域汇聚拓扑">
+        <defs><radialGradient id="visualGlow"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".28"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient></defs>
+        <circle cx="${backbone.x}" cy="${backbone.y}" r="100" fill="url(#visualGlow)" />
+        ${topoBezier(stages[0], stages[1], true, 3)}
+        ${topoBezier(stages[1], backbone, true, 3)}
+        ${topoStage(stages[0].x, stages[0].y, stages[0].title, stages[0].sub, true)}
+        ${topoStage(stages[1].x, stages[1].y, stages[1].title, stages[1].sub, true)}
+        <g>
+          <circle cx="${backbone.x}" cy="${backbone.y}" r="61" fill="rgba(7,19,29,.94)" stroke="#5fd8ff" stroke-width="3" />
+          <text x="${backbone.x}" y="${backbone.y - 8}" text-anchor="middle" fill="#eef8ff" font-size="16" font-weight="900">天钧骨干</text>
+          <text x="${backbone.x}" y="${backbone.y + 15}" text-anchor="middle" fill="#8aa4b8" font-size="11">GNN路径嵌入</text>
+        </g>
+        ${regionSvg}
+        ${topoMetricBadges(metrics)}
+      </svg>
+      <div class="topo-caption"><span><b>确定性时延：</b>表示任务调用周期内被稳定控制的目标时延，不是单次瞬时测量。</span><span>双击任一区域汇聚查看内部节点拓扑</span></div>
+    </div>
+    <div class="region-metrics-strip">
+      ${groups.slice(0, 3).map((group) => `<div class="stat-tile"><span>${escapeHtml(cnRegion(group.region))}</span><b>${group.count} 节点 · ${fmt(group.avgLatency, 1)}ms</b></div>`).join("")}
+    </div>
+  </section>`;
+}
+
+function topoRegion(report, group, selectedNode) {
+  if (!group) return topoOverview(report, topoGroups(report, selectedNode), selectedNode);
+  const metrics = topoDecisionMetrics(report, selectedNode);
+  const width = 820;
+  const height = 492;
+  const center = { x: 250, y: 246 };
+  const nodes = group.nodes;
+  const ringRadius = nodes.length > 8 ? 178 : 150;
+  const nodeSvg = nodes.map((node, index) => {
+    const angle = (-90 + index * (360 / Math.max(1, nodes.length))) * Math.PI / 180;
+    const x = 525 + Math.cos(angle) * ringRadius;
+    const y = 246 + Math.sin(angle) * Math.min(ringRadius, 160);
+    const selected = node.node_id === selectedNode?.node_id;
+    const color = topoColor(Number(node.health_score ?? 0), selected);
+    const path = nodePrimaryPath(node);
+    return `${topoBezier(center, { x: x - 45, y }, selected, 1.8)}
+      <g class="topo-hotspot" data-node="${escapeHtml(node.node_id)}">
+        <rect class="topo-shell" x="${x - 64}" y="${y - 28}" width="128" height="56" rx="18" fill="${selected ? "rgba(95,216,255,.16)" : "rgba(7,19,29,.86)"}" stroke="${color}" stroke-width="${selected ? 2.8 : 1.5}" />
+        <circle cx="${x - 46}" cy="${y}" r="5.2" fill="${color}" />
+        <text x="${x - 34}" y="${y - 4}" fill="#eef8ff" font-size="11" font-weight="900">${escapeHtml(node.node_id).slice(0, 14)}</text>
+        <text x="${x - 34}" y="${y + 13}" fill="#8aa4b8" font-size="10">${fmt(stableLatencyOf(node), 1)}ms · 占用${pct(topoLoad(node), 0)}</text>
+      </g>`;
+  }).join("");
+  return `<section class="aggregation-panel">
+    <div class="panel-head">
+      <div>
+        <span class="panel-kicker">L4 / ${escapeHtml(cnRegion(group.region))}</span>
+        <h3>${escapeHtml(cnRegion(group.region))}节点拓扑</h3>
+        <p>区域汇聚节点连接该区域所有算力节点。双击节点进入资源、链路与心跳详情。</p>
+      </div>
+      <span class="topology-mode">区域下钻</span>
+    </div>
+    <div class="visual-topology">
+      <div class="topo-legend"><span>中心=区域汇聚</span><span>外圈=算力节点</span><span>双击节点详情</span></div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="区域节点拓扑">
+        <defs><radialGradient id="regionGlow"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".28"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient></defs>
+        <circle cx="${center.x}" cy="${center.y}" r="116" fill="url(#regionGlow)" />
+        <g>
+          <circle cx="${center.x}" cy="${center.y}" r="72" fill="rgba(7,19,29,.95)" stroke="#5fd8ff" stroke-width="3" />
+          <text x="${center.x}" y="${center.y - 10}" text-anchor="middle" fill="#eef8ff" font-size="17" font-weight="900">${escapeHtml(cnRegion(group.region))}汇聚</text>
+          <text x="${center.x}" y="${center.y + 14}" text-anchor="middle" fill="#8aa4b8" font-size="11">${group.count}节点 · 健康${pct(group.avgHealth, 0)}</text>
+        </g>
+        ${nodeSvg}
+        ${topoMetricBadges(metrics)}
+      </svg>
+      <div class="topo-caption"><span><b>当前区域：</b>${escapeHtml(cnRegion(group.region))}</span><span>链路指标已在图中显示，双击节点查看完整画像</span></div>
+    </div>
+    <div class="region-metrics-strip">
+      <div class="stat-tile"><span>平均稳定时延</span><b>${fmt(group.avgLatency, 1)}ms</b></div>
+      <div class="stat-tile"><span>平均健康度</span><b>${pct(group.avgHealth, 0)}</b></div>
+      <div class="stat-tile"><span>区域资源占用</span><b>${pct(group.avgLoad, 0)}</b></div>
+    </div>
+  </section>`;
+}
+
+
+function safeLine(from, to, selected = false, width = 2) {
+  const mid = Math.round((from.x + to.x) / 2);
+  return `<path class="${selected ? "selected-path" : "path-line"}" d="M ${from.x} ${from.y} C ${mid} ${from.y}, ${mid} ${to.y}, ${to.x} ${to.y}" fill="none" stroke="${selected ? "#5fd8ff" : "rgba(132,205,255,.24)"}" stroke-width="${selected ? width + 1.4 : width}" stroke-linecap="round" />`;
+}
+
+function safeStage(x, y, title, sub, active = false) {
+  return `<g>
+    <rect x="${x - 62}" y="${y - 30}" width="124" height="60" rx="19" fill="rgba(7,19,29,.92)" stroke="${active ? "#5fd8ff" : "rgba(132,205,255,.38)"}" stroke-width="${active ? 2.6 : 1.4}" />
+    <text x="${x}" y="${y - 6}" text-anchor="middle" fill="#eef8ff" font-size="13" font-weight="900">${escapeHtml(title)}</text>
+    <text x="${x}" y="${y + 14}" text-anchor="middle" fill="#8aa4b8" font-size="10">${escapeHtml(sub)}</text>
+  </g>`;
+}
+
+function safeMetricPanel(metrics) {
+  const items = [
+    ["稳定目标", `${fmt(metrics.stable, 1)}ms`, "调用期稳定"],
+    ["原始时延", metrics.raw !== undefined ? `${fmt(metrics.raw, 1)}ms` : "暂无", "未确定化"],
+    ["带宽", metrics.bandwidth !== undefined ? `${fmt(metrics.bandwidth, 1)}Mbps` : "暂无", "保障值"],
+    ["抖动", metrics.jitter !== undefined ? `${fmt(metrics.jitter, 1)}ms` : "暂无", "链路波动"],
+    ["丢包", metrics.loss !== undefined ? pct(metrics.loss, 2) : "暂无", "路径风险"],
+    ["置信/评分", `${metrics.confidence !== undefined ? pct(metrics.confidence, 0) : "暂无"} / ${metrics.score !== undefined ? fmt(metrics.score, 3) : "暂无"}`, "模型输出"],
+  ];
+  return `<g>
+    <rect x="55" y="505" width="930" height="92" rx="24" fill="rgba(7,19,29,.82)" stroke="rgba(132,205,255,.22)" />
+    <text x="78" y="535" fill="#5fd8ff" font-size="14" font-weight="900">调用期稳定指标</text>
+    <text x="78" y="562" fill="#8aa4b8" font-size="11">任务 ${escapeHtml(metrics.task)} · 目标 ${escapeHtml(metrics.node)} · 确定性时延表示整个调用周期内被稳定控制的目标时延</text>
+    ${items.map(([label, value, sub], index) => {
+      const x = 260 + index * 118;
+      return `<text x="${x}" y="535" fill="#eef8ff" font-size="13" font-weight="900">${escapeHtml(value)}</text>
+        <text x="${x}" y="558" fill="#8aa4b8" font-size="10">${escapeHtml(label)} · ${escapeHtml(sub)}</text>`;
+    }).join("")}
+  </g>`;
+}
+
+function safeNodeDots(group, x, y, selectedNode) {
+  const nodes = group.nodes.slice(0, 12);
+  const cols = 4;
+  const startX = x - 30;
+  const startY = y + 6;
+  return nodes.map((node, index) => {
+    const dx = startX + (index % cols) * 20;
+    const dy = startY + Math.floor(index / cols) * 17;
+    const selected = node.node_id === selectedNode?.node_id;
+    const color = topoColor(Number(node.health_score ?? 0), selected);
+    return `<circle cx="${dx}" cy="${dy}" r="${selected ? 5.8 : 4.2}" fill="${color}" stroke="rgba(238,248,255,.58)" stroke-width="${selected ? 1.8 : .7}" />`;
+  }).join("");
+}
+
+function topoOverview(report, groups, selectedNode) {
+  const sourceRegion = topoSourceRegion(activeDecision(report), selectedNode);
+  const selectedRegion = selectedNode?.region;
+  const metrics = topoDecisionMetrics(report, selectedNode);
+  const width = 1040;
+  const height = 640;
+  const user = { x: 110, y: 292 };
+  const hermes = { x: 258, y: 292 };
+  const control = { x: 418, y: 292 };
+  const backbone = { x: 568, y: 292 };
+  const ys = groups.length <= 1 ? [292] : groups.length === 2 ? [202, 382] : [150, 292, 434, 536].slice(0, groups.length);
+  const regionSvg = groups.map((group, index) => {
+    const x = 805;
+    const y = ys[index] ?? (150 + index * 112);
+    const selected = group.region === selectedRegion;
+    const confidence = (group.avgHealth * .55) + (group.avgReliability * .45);
+    const color = topoColor(confidence, selected);
+    return `${safeLine(backbone, { x: x - 106, y }, selected, 2.2)}
+      <g class="topo-hotspot" data-region="${escapeHtml(group.region)}">
+        <rect class="topo-shell" x="${x - 96}" y="${y - 52}" width="192" height="104" rx="28" fill="${selected ? "rgba(95,216,255,.15)" : "rgba(7,19,29,.88)"}" stroke="${color}" stroke-width="${selected ? 3 : 1.7}" />
+        <text x="${x}" y="${y - 23}" text-anchor="middle" fill="#eef8ff" font-size="16" font-weight="900">${escapeHtml(cnRegion(group.region))}汇聚</text>
+        ${safeNodeDots(group, x, y, selectedNode)}
+        <text x="${x}" y="${y + 42}" text-anchor="middle" fill="#8aa4b8" font-size="10">${group.count}节点 · 健康${pct(group.avgHealth, 0)} · 占用${pct(group.avgLoad, 0)}</text>
+      </g>`;
+  }).join("");
+  return `<section class="aggregation-panel">
+    <div class="panel-head">
+      <div></div>
+      <span class="topology-mode">总览</span>
+    </div>
+    <div class="visual-topology no-overlap">
+      <div class="topo-legend"><span>亮色链路=当前路径</span><span>点阵=区域节点池</span><span>双击区域下钻</span></div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="防重叠区域拓扑">
+        <defs><radialGradient id="safeGlow"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".24"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient></defs>
+        <circle cx="${backbone.x}" cy="${backbone.y}" r="92" fill="url(#safeGlow)" />
+        ${safeLine(user, hermes, true, 3)}
+        ${safeLine(hermes, control, true, 3)}
+        ${safeLine(control, backbone, true, 3)}
+        ${safeStage(user.x, user.y, "用户", cnRegion(sourceRegion), true)}
+        ${safeStage(hermes.x, hermes.y, "Hermes", "意图解析", true)}
+        ${safeStage(control.x, control.y, "控制面", "联合调度", true)}
+        <g>
+          <circle cx="${backbone.x}" cy="${backbone.y}" r="58" fill="rgba(7,19,29,.95)" stroke="#5fd8ff" stroke-width="3" />
+          <text x="${backbone.x}" y="${backbone.y - 8}" text-anchor="middle" fill="#eef8ff" font-size="15" font-weight="900">天钧骨干</text>
+          <text x="${backbone.x}" y="${backbone.y + 15}" text-anchor="middle" fill="#8aa4b8" font-size="10">GNN路径嵌入</text>
+        </g>
+        ${regionSvg}
+        ${safeMetricPanel(metrics)}
+      </svg>
+    </div>
+  </section>`;
+}
+
+function topoRegion(report, group, selectedNode) {
+  if (!group) return topoOverview(report, topoGroups(report, selectedNode), selectedNode);
+  const metrics = topoDecisionMetrics(report, selectedNode);
+  const width = 1040;
+  const height = 640;
+  const center = { x: 220, y: 292 };
+  const columns = 3;
+  const startX = 470;
+  const startY = 128;
+  const xGap = 180;
+  const yGap = 122;
+  const nodeSvg = group.nodes.map((node, index) => {
+    const x = startX + (index % columns) * xGap;
+    const y = startY + Math.floor(index / columns) * yGap;
+    const selected = node.node_id === selectedNode?.node_id;
+    const color = topoColor(Number(node.health_score ?? 0), selected);
+    const path = nodePrimaryPath(node);
+    return `${safeLine(center, { x: x - 74, y }, selected, 1.6)}
+      <g class="topo-hotspot" data-node="${escapeHtml(node.node_id)}">
+        <rect class="topo-shell" x="${x - 72}" y="${y - 34}" width="144" height="68" rx="20" fill="${selected ? "rgba(95,216,255,.16)" : "rgba(7,19,29,.88)"}" stroke="${color}" stroke-width="${selected ? 2.8 : 1.5}" />
+        <circle cx="${x - 51}" cy="${y - 7}" r="5.2" fill="${color}" />
+        <text x="${x - 39}" y="${y - 3}" fill="#eef8ff" font-size="11" font-weight="900">${escapeHtml(node.node_id).slice(0, 14)}</text>
+        <text x="${x - 51}" y="${y + 16}" fill="#8aa4b8" font-size="10">${fmt(stableLatencyOf(node), 1)}ms · 抖动${fmt(path.jitter_ms ?? 0, 1)}ms</text>
+      </g>`;
+  }).join("");
+  return `<section class="aggregation-panel">
+    <div class="panel-head">
+      <div>
+        <span class="panel-kicker">L4 / ${escapeHtml(cnRegion(group.region))}</span>
+        <h3>${escapeHtml(cnRegion(group.region))}节点拓扑</h3>
+        <p>区域节点采用网格化安全布局，避免外圈节点因数量变化产生重叠。双击节点查看完整资源与链路画像。</p>
+      </div>
+      <span class="topology-mode">区域下钻</span>
+    </div>
+    <div class="visual-topology no-overlap">
+      <div class="topo-legend"><span>中心=区域汇聚</span><span>网格=算力节点</span><span>双击节点详情</span></div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="防重叠区域节点拓扑">
+        <defs><radialGradient id="safeRegionGlow"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".24"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient></defs>
+        <circle cx="${center.x}" cy="${center.y}" r="104" fill="url(#safeRegionGlow)" />
+        <g>
+          <circle cx="${center.x}" cy="${center.y}" r="70" fill="rgba(7,19,29,.95)" stroke="#5fd8ff" stroke-width="3" />
+          <text x="${center.x}" y="${center.y - 10}" text-anchor="middle" fill="#eef8ff" font-size="16" font-weight="900">${escapeHtml(cnRegion(group.region))}汇聚</text>
+          <text x="${center.x}" y="${center.y + 14}" text-anchor="middle" fill="#8aa4b8" font-size="10">${group.count}节点 · 健康${pct(group.avgHealth, 0)}</text>
+        </g>
+        ${nodeSvg}
+        ${safeMetricPanel(metrics)}
+      </svg>
+    </div>
+  </section>`;
+}
+
+
+function compactText(value, max = 18) {
+  const text = String(value ?? "-");
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function safeMetricPanel(metrics, y = 512) {
+  const items = [
+    ["稳定目标", `${fmt(metrics.stable, 1)}ms`],
+    ["原始时延", metrics.raw !== undefined ? `${fmt(metrics.raw, 1)}ms` : "暂无"],
+    ["带宽", metrics.bandwidth !== undefined ? `${fmt(metrics.bandwidth, 1)}Mbps` : "暂无"],
+    ["抖动", metrics.jitter !== undefined ? `${fmt(metrics.jitter, 1)}ms` : "暂无"],
+    ["丢包", metrics.loss !== undefined ? pct(metrics.loss, 2) : "暂无"],
+    ["置信/评分", `${metrics.confidence !== undefined ? pct(metrics.confidence, 0) : "暂无"} / ${metrics.score !== undefined ? fmt(metrics.score, 3) : "暂无"}`],
+  ];
+  return `<g>
+    <rect x="48" y="${y}" width="944" height="106" rx="24" fill="rgba(7,19,29,.86)" stroke="rgba(132,205,255,.22)" />
+    <text x="72" y="${y + 28}" fill="#5fd8ff" font-size="14" font-weight="900">调用期稳定指标</text>
+    <text x="72" y="${y + 52}" fill="#8aa4b8" font-size="10">任务 ${escapeHtml(compactText(metrics.task, 22))}</text>
+    <text x="72" y="${y + 72}" fill="#8aa4b8" font-size="10">目标 ${escapeHtml(compactText(metrics.node, 22))}</text>
+    ${items.map(([label, value], index) => {
+      const x = 230 + index * 122;
+      return `<rect x="${x - 10}" y="${y + 20}" width="106" height="58" rx="14" fill="rgba(255,255,255,.035)" stroke="rgba(132,205,255,.12)" />
+        <text x="${x}" y="${y + 43}" fill="#eef8ff" font-size="12" font-weight="900">${escapeHtml(value)}</text>
+        <text x="${x}" y="${y + 64}" fill="#8aa4b8" font-size="10">${escapeHtml(label)}</text>`;
+    }).join("")}
+    <text x="72" y="${y + 92}" fill="#6adfff" font-size="10">确定性时延=整个任务调用周期内稳定控制的目标时延，而非单次瞬时测量</text>
+  </g>`;
+}
+
+function topoOverview(report, groups, selectedNode) {
+  const sourceRegion = topoSourceRegion(activeDecision(report), selectedNode);
+  const selectedRegion = selectedNode?.region;
+  const metrics = topoDecisionMetrics(report, selectedNode);
+  const width = 1040;
+  const user = { x: 110, y: 286 };
+  const hermes = { x: 258, y: 286 };
+  const control = { x: 418, y: 286 };
+  const backbone = { x: 568, y: 286 };
+  const top = groups.length >= 3 ? 122 : 188;
+  const gap = groups.length >= 3 ? 128 : 188;
+  const lastRegionY = top + Math.max(0, groups.length - 1) * gap;
+  const metricY = Math.max(660, lastRegionY + 96);
+  const height = metricY + 128;
+  const regionSvg = groups.map((group, index) => {
+    const x = 812;
+    const y = top + index * gap;
+    const selected = group.region === selectedRegion;
+    const confidence = (group.avgHealth * .55) + (group.avgReliability * .45);
+    const color = topoColor(confidence, selected);
+    return `${safeLine(backbone, { x: x - 108, y }, selected, 2.1)}
+      <g class="topo-hotspot" data-region="${escapeHtml(group.region)}">
+        <rect class="topo-shell" x="${x - 92}" y="${y - 48}" width="184" height="96" rx="26" fill="${selected ? "rgba(95,216,255,.15)" : "rgba(7,19,29,.88)"}" stroke="${color}" stroke-width="${selected ? 3 : 1.7}" />
+        <text x="${x}" y="${y - 21}" text-anchor="middle" fill="#eef8ff" font-size="15" font-weight="900">${escapeHtml(cnRegion(group.region))}汇聚</text>
+        ${safeNodeDots(group, x, y - 1, selectedNode)}
+        <text x="${x}" y="${y + 38}" text-anchor="middle" fill="#8aa4b8" font-size="9.5">${group.count}节点 · 健康${pct(group.avgHealth, 0)} · 占用${pct(group.avgLoad, 0)}</text>
+      </g>`;
+  }).join("");
+  return `<section class="aggregation-panel">
+    <div class="panel-head">
+      <div></div>
+      <span class="topology-mode">总览</span>
+    </div>
+    <div class="visual-topology no-overlap scroll-safe">
+      <div class="topo-legend"><span>亮色链路=当前路径</span><span>点阵=区域节点池</span><span>上下滚动查看完整拓扑</span></div>
+      <svg viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img" aria-label="可滚动防重叠区域拓扑">
+        <defs><radialGradient id="safeGlow2"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".24"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient></defs>
+        <circle cx="${backbone.x}" cy="${backbone.y}" r="88" fill="url(#safeGlow2)" />
+        ${safeLine(user, hermes, true, 3)}
+        ${safeLine(hermes, control, true, 3)}
+        ${safeLine(control, backbone, true, 3)}
+        ${safeStage(user.x, user.y, "用户", cnRegion(sourceRegion), true)}
+        ${safeStage(hermes.x, hermes.y, "Hermes", "意图解析", true)}
+        ${safeStage(control.x, control.y, "控制面", "联合调度", true)}
+        <g>
+          <circle cx="${backbone.x}" cy="${backbone.y}" r="56" fill="rgba(7,19,29,.95)" stroke="#5fd8ff" stroke-width="3" />
+          <text x="${backbone.x}" y="${backbone.y - 8}" text-anchor="middle" fill="#eef8ff" font-size="15" font-weight="900">天钧骨干</text>
+          <text x="${backbone.x}" y="${backbone.y + 15}" text-anchor="middle" fill="#8aa4b8" font-size="10">GNN路径嵌入</text>
+        </g>
+        ${regionSvg}
+        ${safeMetricPanel(metrics, metricY)}
+      </svg>
+    </div>
+  </section>`;
+}
+
+function topoRegion(report, group, selectedNode) {
+  if (!group) return topoOverview(report, topoGroups(report, selectedNode), selectedNode);
+  const metrics = topoDecisionMetrics(report, selectedNode);
+  const width = 1040;
+  const columns = 3;
+  const rows = Math.ceil(group.nodes.length / columns);
+  const nodeTop = 120;
+  const yGap = 122;
+  const metricY = Math.max(520, nodeTop + rows * yGap + 24);
+  const height = metricY + 128;
+  const center = { x: 210, y: Math.min(315, nodeTop + Math.max(1, rows) * yGap / 2 - 10) };
+  const startX = 455;
+  const xGap = 185;
+  const nodeSvg = group.nodes.map((node, index) => {
+    const x = startX + (index % columns) * xGap;
+    const y = nodeTop + Math.floor(index / columns) * yGap;
+    const selected = node.node_id === selectedNode?.node_id;
+    const color = topoColor(Number(node.health_score ?? 0), selected);
+    const path = nodePrimaryPath(node);
+    return `${safeLine(center, { x: x - 76, y }, selected, 1.5)}
+      <g class="topo-hotspot" data-node="${escapeHtml(node.node_id)}">
+        <rect class="topo-shell" x="${x - 74}" y="${y - 34}" width="148" height="68" rx="20" fill="${selected ? "rgba(95,216,255,.16)" : "rgba(7,19,29,.88)"}" stroke="${color}" stroke-width="${selected ? 2.8 : 1.5}" />
+        <circle cx="${x - 53}" cy="${y - 7}" r="5.2" fill="${color}" />
+        <text x="${x - 41}" y="${y - 3}" fill="#eef8ff" font-size="11" font-weight="900">${escapeHtml(compactText(node.node_id, 15))}</text>
+        <text x="${x - 53}" y="${y + 16}" fill="#8aa4b8" font-size="10">${fmt(stableLatencyOf(node), 1)}ms · 抖动${fmt(path.jitter_ms ?? 0, 1)}ms</text>
+      </g>`;
+  }).join("");
+  return `<section class="aggregation-panel">
+    <div class="panel-head">
+      <div>
+        <span class="panel-kicker">L4 / ${escapeHtml(cnRegion(group.region))}</span>
+        <h3>${escapeHtml(cnRegion(group.region))}节点拓扑</h3>
+        <p>节点过多时画布会自动增高，可向下滚动查看全部节点与底部指标。</p>
+      </div>
+      <span class="topology-mode">区域下钻</span>
+    </div>
+    <div class="visual-topology no-overlap scroll-safe">
+      <div class="topo-legend"><span>中心=区域汇聚</span><span>网格=算力节点</span><span>可向下滚动</span></div>
+      <svg viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img" aria-label="可滚动区域节点拓扑">
+        <defs><radialGradient id="safeRegionGlow2"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".24"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient></defs>
+        <circle cx="${center.x}" cy="${center.y}" r="100" fill="url(#safeRegionGlow2)" />
+        <g>
+          <circle cx="${center.x}" cy="${center.y}" r="68" fill="rgba(7,19,29,.95)" stroke="#5fd8ff" stroke-width="3" />
+          <text x="${center.x}" y="${center.y - 10}" text-anchor="middle" fill="#eef8ff" font-size="16" font-weight="900">${escapeHtml(cnRegion(group.region))}汇聚</text>
+          <text x="${center.x}" y="${center.y + 14}" text-anchor="middle" fill="#8aa4b8" font-size="10">${group.count}节点 · 健康${pct(group.avgHealth, 0)}</text>
+        </g>
+        ${nodeSvg}
+        ${safeMetricPanel(metrics, metricY)}
+      </svg>
+    </div>
+  </section>`;
+}
+
+function dispatchAnimatedPath(d, selected, width, stroke) {
+  const cls = selected ? "selected-path dispatch-link" : "path-line";
+  const base = `<path class="${cls}" d="${d}" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round" />`;
+  if (!selected) return base;
+  return `${base}
+    <circle class="dispatch-packet-halo" r="9">
+      <animateMotion dur="2.7s" repeatCount="indefinite" path="${d}" rotate="auto" />
+    </circle>
+    <circle class="dispatch-packet dispatch-packet-core" r="3.6">
+      <animateMotion dur="2.7s" repeatCount="indefinite" path="${d}" rotate="auto" />
+    </circle>
+    <circle class="dispatch-packet" r="2.2">
+      <animateMotion dur="2.7s" begin=".38s" repeatCount="indefinite" path="${d}" rotate="auto" />
+    </circle>`;
+}
+
+safeLine = function(from, to, selected = false, width = 2) {
+  const mid = Math.round((from.x + to.x) / 2);
+  const d = `M ${from.x} ${from.y} C ${mid} ${from.y}, ${mid} ${to.y}, ${to.x} ${to.y}`;
+  const stroke = selected ? "#5fd8ff" : "rgba(132,205,255,.24)";
+  return dispatchAnimatedPath(d, selected, selected ? width + 1.4 : width, stroke);
+};
+
+topoBezier = function(from, to, selected = false, width = 2) {
+  const d = `M ${from.x} ${from.y} C ${(from.x + to.x) / 2} ${from.y}, ${(from.x + to.x) / 2} ${to.y}, ${to.x} ${to.y}`;
+  const stroke = selected ? "#5fd8ff" : "rgba(132,205,255,.28)";
+  return dispatchAnimatedPath(d, selected, selected ? width + 1.4 : width, stroke);
+};
+
+  </script>
+</body>
+</html>

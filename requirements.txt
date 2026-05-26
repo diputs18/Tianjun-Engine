@@ -1,0 +1,6 @@
+# Minimal runtime on Python 3.11+ uses only the standard library.
+# Optional verification:
+pytest>=8.0
+
+# Optional model runtime:
+# torch>=2.1,<3

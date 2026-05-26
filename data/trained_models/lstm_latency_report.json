@@ -1,0 +1,82 @@
+{
+  "dataset": "Alibaba cluster-trace-microservices-v2022",
+  "model": "PyTorch LSTM latency predictor with resource features",
+  "device": "cuda",
+  "cuda_device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "samples": 10107,
+  "services_total": 26031,
+  "services_with_samples": 10107,
+  "window": 8,
+  "requested_window": 16,
+  "fallback_window": 8,
+  "attempted_windows": [
+    16,
+    8
+  ],
+  "epochs": 5,
+  "batch_size": 512,
+  "hidden_size": 64,
+  "feature_names": [
+    "log_rt",
+    "log_mcr",
+    "cpu_utilization",
+    "memory_utilization"
+  ],
+  "loss_curve": [
+    1.6683579822049586,
+    1.2828591242570824,
+    0.46896824185024016,
+    0.16218773279207757,
+    0.12531755964237742
+  ],
+  "metrics": {
+    "mae_rt": 11.619394302368164,
+    "rmse_rt": 41.2708740234375,
+    "p95_abs_error_rt": 49.136322021484375
+  },
+  "model_path": "data\\trained_models\\lstm_latency_model.pt",
+  "data_status": {
+    "rt_rows_read": 25000000,
+    "rt_archives": [
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_0.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_1.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_2.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_3.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_4.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_5.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_6.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_7.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_8.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_9.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_10.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_11.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_12.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_13.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_14.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_15.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_16.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_17.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_18.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_19.tar.gz",
+      "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_20.tar.gz"
+    ],
+    "services_total": 26031,
+    "rt_clip_percentile": 99.0,
+    "rt_clip_value": 426.376953125,
+    "transform": "clip_then_log1p",
+    "group_key": "service",
+    "resource_features": {
+      "rows_read": 1000000,
+      "points": 282905,
+      "archives": [
+        "data\\alibaba_microservices_v2022\\MSMetrics\\MSMetrics_0.tar.gz"
+      ],
+      "status": "used"
+    }
+  },
+  "memory_strategy": {
+    "stream_tar_gz": true,
+    "no_full_extract": true,
+    "group_rows_hint": 250000
+  }
+}
