@@ -130,7 +130,7 @@ button:hover { transform: translateY(-1px); border-color: var(--cyan); }
 
 .conversation-stage {
   display: grid;
-  grid-template-columns: minmax(560px, 1.18fr) minmax(360px, .82fr);
+  grid-template-columns: 1fr;
   gap: 18px;
   margin-bottom: 18px;
   align-items: start;
@@ -147,21 +147,158 @@ button:hover { transform: translateY(-1px); border-color: var(--cyan); }
 
 .interaction-stack {
   display: grid;
-  grid-template-rows: minmax(0, 940px) minmax(0, 390px);
+  grid-template-rows: auto;
   gap: 18px;
   min-height: 0;
-  height: 1348px;
+  height: auto;
 }
-.hermes-console { padding: 22px; height: 940px; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.hermes-console { padding: 22px; min-height: 820px; height: auto; overflow: hidden; display: flex; flex-direction: column; }
+.agent-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.42fr) minmax(360px, .58fr);
+  grid-template-rows: auto minmax(470px, 1fr) auto;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+.agent-topbar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.agent-status-card, .agent-workspace, .tool-trace-panel {
+  border: 1px solid rgba(132,205,255,.18);
+  border-radius: 8px;
+  background: rgba(5, 16, 27, .58);
+}
+.agent-status-card {
+  padding: 9px 12px;
+  min-height: 58px;
+}
+.agent-status-card label,
+.workspace-field label {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+.agent-status-card b,
+.workspace-field b {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.agent-status-card p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agent-chat-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.agent-workspace {
+  min-height: 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.workspace-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.workspace-head h3 { margin: 0; font-size: 16px; }
+.workspace-head p { color: var(--muted); margin-top: 4px; line-height: 1.55; font-size: 12px; }
+.workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.workspace-field {
+  border: 1px solid rgba(132,205,255,.14);
+  border-radius: 8px;
+  padding: 10px;
+  min-height: 72px;
+  background: rgba(255,255,255,.04);
+  overflow: hidden;
+}
+.workspace-risk {
+  margin-top: 10px;
+  border: 1px solid rgba(255,211,107,.22);
+  border-radius: 8px;
+  padding: 10px;
+  color: #ffe5a6;
+  background: rgba(255,211,107,.06);
+  line-height: 1.55;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.tool-trace-panel {
+  grid-column: 1 / -1;
+  padding: 12px;
+}
+.tool-trace-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.tool-trace-head b { color: var(--cyan); font-size: 13px; }
+.tool-trace-head span { color: var(--muted); font-size: 12px; }
+.tool-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.tool-step {
+  border: 1px solid rgba(132,205,255,.14);
+  border-radius: 8px;
+  padding: 9px;
+  min-height: 54px;
+  background: rgba(255,255,255,.035);
+  color: var(--muted);
+}
+.tool-step b {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.tool-step span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tool-step.running { border-color: rgba(95,216,255,.55); background: rgba(95,216,255,.08); }
+.tool-step.done { border-color: rgba(111,241,178,.42); background: rgba(111,241,178,.07); }
+.tool-step.error { border-color: rgba(255,109,128,.45); background: rgba(255,109,128,.08); }
 .insight-stack {
   display: grid;
-  grid-template-rows: minmax(0, 680px) minmax(0, 650px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
   min-height: 0;
-  height: 1348px;
+  height: auto;
 }
 .model-card, .score-card, .decision-card, .nodes-card, .tasks-card, .records-card { padding: 20px; }
-.model-card, .score-card, .decision-card { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.model-card, .score-card, .decision-card { min-height: 320px; overflow: hidden; display: flex; flex-direction: column; }
 .topology-card { padding: 22px; min-height: 520px; }
 
 .section-title {
@@ -211,8 +348,9 @@ button:hover { transform: translateY(-1px); border-color: var(--cyan); }
 }
 
 .message b { display: block; color: var(--cyan); margin-bottom: 5px; }
-.message.user { width: min(78%, 640px); align-self: flex-end; background: rgba(95,216,255,.12); }
+.message.user { width: min(86%, 640px); align-self: flex-end; background: rgba(95,216,255,.12); }
 .message.assistant { width: 100%; align-self: stretch; }
+.message.tool { display: none; }
 .message .md-body,
 .message .stream-content { color: #dceeff; }
 .message .md-body p,
@@ -251,7 +389,7 @@ button:hover { transform: translateY(-1px); border-color: var(--cyan); }
 
 .composer {
   border: 1px solid var(--line-strong);
-  border-radius: 24px;
+  border-radius: 8px;
   padding: 12px;
   background: rgba(4, 12, 20, .58);
 }
@@ -748,7 +886,10 @@ textarea {
 @media (max-width: 1180px) {
   .hero, .conversation-stage, .topology-section, .bottom-grid { grid-template-columns: 1fr; }
   .interaction-stack, .insight-stack { height: auto; grid-template-rows: auto; }
-  .hermes-console { height: 620px; min-height: 0; }
+  .hermes-console { height: auto; min-height: 760px; }
+  .agent-shell { grid-template-columns: 1fr; }
+  .agent-topbar, .tool-steps, .insight-stack { grid-template-columns: 1fr; }
+  .agent-workspace, .tool-trace-panel { grid-column: 1; }
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nodes-card { grid-row: auto; }
   .nodes-list { grid-template-columns: 1fr; }
@@ -788,40 +929,58 @@ textarea {
             <span>01</span>
             <div>
               <h2>智能体交互平台</h2>
+              <p>LLM 辅助需求理解，天钧智能体编排受控工具链完成库存核验、策略生成、仿真和下发保护。</p>
             </div>
           </div>
-          <div id="chatLog" class="chat-log">
-            <div class="message assistant">
-              <b>Hermes</b>
-              <p>我已接入调度控制面。你可以说“提交一个推理任务，需要 2C4G，上海区域，时延小于 40ms”，也可以问“当前有哪些节点？”、“GNN 是否参与调度？”、“最近为什么选择这个节点？”。</p>
+          <div class="agent-shell">
+            <div class="agent-topbar" aria-label="智能体运行状态">
+              <div class="agent-status-card"><label>意图理解</label><b id="agentLlmMode">检查中</b><p>LLM 辅助，失败时回退本地规则</p></div>
+              <div class="agent-status-card"><label>编排器</label><b id="agentRuntimeMode">ChatRuntime</b><p>多轮状态与工具边界</p></div>
+              <div class="agent-status-card"><label>工具链</label><b id="agentToolMode">控制面工具</b><p>查询、策略、仿真、提交</p></div>
             </div>
-          </div>
-          <div class="composer">
-            <textarea id="intentInput" rows="4" placeholder="输入自然语言需求，或询问系统状态、模型、节点、最近决策...">提交一个推理任务，需要 2C4G，上海区域，时延小于 40ms，优先稳定路径</textarea>
-            <div class="composer-actions">
-              <button id="askButton" class="primary-button">询问 Hermes</button>
-              <button id="stopHermesButton" class="ghost-button danger-soft" disabled>暂停当前回复</button>
-              <button id="submitButton" class="ghost-button danger-soft">正式下发</button>
-              <button id="endTaskButton" class="ghost-button">结束任务</button>
+            <div class="agent-chat-pane">
+              <div id="chatLog" class="chat-log">
+                <div class="message assistant">
+                  <b>天钧智能体</b>
+                  <p>请直接描述业务目标、地域、资源、时延、预算或安全要求。我会先核验节点库存，再给出可审计的策略和仿真结果。</p>
+                </div>
+              </div>
+              <div class="composer">
+                <textarea id="intentInput" rows="4" placeholder="输入业务需求、约束或优化反馈。正式下发请使用按钮。"></textarea>
+                <div class="composer-actions">
+                  <button id="askButton" class="primary-button">发送</button>
+                  <button id="stopHermesButton" class="ghost-button danger-soft" disabled>暂停回复</button>
+                  <button id="submitButton" class="ghost-button danger-soft" disabled>正式下发</button>
+                  <button id="endTaskButton" class="ghost-button">新会话</button>
+                </div>
+              </div>
             </div>
-          </div>
-          <section id="intentSummaryPanel" class="intent-summary-panel">
-            <div class="summary-head">
-              <span>实时调度结果</span>
-              <strong id="intentSummaryStatus">等待调度需求</strong>
-            </div>
-            <div id="intentSummaryBody" class="summary-grid">
-              <div><label>任务</label><b>--</b></div>
-              <div><label>资源</label><b>--</b></div>
-              <div><label>推荐节点</label><b>--</b></div>
-              <div><label>资源变化</label><b>--</b></div>
-            </div>
-          </section>
-          <div class="prompt-row">
-            <button data-prompt="当前有哪些节点？各节点资源状态如何？">节点状态</button>
-            <button data-prompt="GNN 是否已经参与调度？它输出了什么？">GNN 状态</button>
-            <button data-prompt="最近一次调度为什么选择这个节点？">决策解释</button>
-            <button data-prompt="提交一个训练任务，需要 4C8G 和 1 张 GPU，优先可靠性">训练任务</button>
+            <aside class="agent-workspace" aria-label="当前策略工作区">
+              <div class="workspace-head">
+                <div>
+                  <h3>策略工作区</h3>
+                  <p>只展示当前会话的可操作结果；聊天确认不会直接下发。</p>
+                </div>
+                <span id="intentSummaryStatus" class="badge">等待需求</span>
+              </div>
+              <div id="intentSummaryBody" class="workspace-grid">
+                <div class="workspace-field"><label>任务</label><b>--</b></div>
+                <div class="workspace-field"><label>资源与目标</label><b>--</b></div>
+                <div class="workspace-field"><label>推荐节点</label><b>--</b></div>
+                <div class="workspace-field"><label>仿真建议</label><b>--</b></div>
+              </div>
+              <div id="workspaceRisk" class="workspace-risk">等待策略生成后显示风险、确认要求和下发保护状态。</div>
+            </aside>
+            <section class="tool-trace-panel" aria-label="工具调用轨迹">
+              <div class="tool-trace-head"><b>工具调用轨迹</b><span id="toolTraceStatus">等待输入</span></div>
+              <div id="toolTraceSteps" class="tool-steps">
+                <div class="tool-step"><b>需求理解</b><span>等待</span></div>
+                <div class="tool-step"><b>库存核验</b><span>等待</span></div>
+                <div class="tool-step"><b>策略生成</b><span>等待</span></div>
+                <div class="tool-step"><b>仿真评估</b><span>等待</span></div>
+                <div class="tool-step"><b>确认下发</b><span>按钮保护</span></div>
+              </div>
+            </section>
           </div>
         </article>
         <article class="decision-card">
@@ -889,7 +1048,7 @@ function setHermesBusy(isBusy) {
   const ask = document.getElementById("askButton");
   const stop = document.getElementById("stopHermesButton");
   if (ask) ask.disabled = false;
-  if (ask) ask.textContent = isBusy ? "发送下一句" : "询问 Hermes";
+  if (ask) ask.textContent = isBusy ? "处理中" : "发送";
   if (stop) stop.disabled = !isBusy;
 }
 
@@ -968,6 +1127,7 @@ function currentTaskHistory() {
 function resetIntentSummary() {
   latestIntentPayload = null;
   latestIntentMessage = "";
+  activeHermesPolicyId = null;
   const statusEl = document.getElementById("intentSummaryStatus");
   const bodyEl = document.getElementById("intentSummaryBody");
   if (statusEl) {
@@ -976,12 +1136,16 @@ function resetIntentSummary() {
   }
   if (bodyEl) {
     bodyEl.innerHTML = `
-      <div><label>任务</label><b>--</b></div>
-      <div><label>资源</label><b>--</b></div>
-      <div><label>推荐节点</label><b>--</b></div>
-      <div><label>资源变化</label><b>--</b></div>
+      <div class="workspace-field"><label>任务</label><b>--</b></div>
+      <div class="workspace-field"><label>资源与目标</label><b>--</b></div>
+      <div class="workspace-field"><label>推荐节点</label><b>--</b></div>
+      <div class="workspace-field"><label>仿真建议</label><b>--</b></div>
     `;
   }
+  const riskEl = document.getElementById("workspaceRisk");
+  if (riskEl) riskEl.textContent = "等待策略生成后显示风险、确认要求和下发保护状态。";
+  resetToolTrace();
+  updateSubmitButton();
 }
 
 function endTaskConversation() {
@@ -1152,6 +1316,89 @@ function addMessage(role, html) {
   node.innerHTML = html;
   log.appendChild(node);
   log.scrollTop = log.scrollHeight;
+  return node;
+}
+
+function toolStageForName(name) {
+  const map = {
+    analyze_user_intent: "需求理解",
+    start_requirement_dialogue: "需求理解",
+    continue_requirement_dialogue: "需求理解",
+    get_cluster_state: "库存核验",
+    draft_compute_network_policy: "策略生成",
+    simulate_policy: "仿真评估",
+    optimize_policy_from_feedback: "策略生成",
+    commit_policy: "确认下发",
+    schedule_pending_task: "确认下发"
+  };
+  return map[name] || String(name || "工具调用");
+}
+
+function resetToolTrace() {
+  const host = document.getElementById("toolTraceSteps");
+  const status = document.getElementById("toolTraceStatus");
+  if (status) status.textContent = "等待输入";
+  if (!host) return;
+  host.innerHTML = ["需求理解", "库存核验", "策略生成", "仿真评估", "确认下发"].map((label, index) => (
+    `<div class="tool-step"><b>${label}</b><span>${index === 4 ? "按钮保护" : "等待"}</span></div>`
+  )).join("");
+}
+
+function updateToolTrace(event) {
+  const host = document.getElementById("toolTraceSteps");
+  const status = document.getElementById("toolTraceStatus");
+  if (!host) return;
+  const stage = toolStageForName(event.tool);
+  const running = event.type === "tool_start";
+  const done = event.type === "tool_done" || event.type === "tool_result";
+  const cards = Array.from(host.querySelectorAll(".tool-step"));
+  let card = cards.find((item) => item.querySelector("b")?.textContent === stage);
+  if (!card) {
+    card = document.createElement("div");
+    card.className = "tool-step";
+    card.innerHTML = `<b>${escapeHtml(stage)}</b><span>等待</span>`;
+    host.appendChild(card);
+  }
+  card.classList.toggle("running", running);
+  card.classList.toggle("done", done);
+  const detail = compactToolSummary(event.summary || event.label || event.tool || "");
+  card.querySelector("span").textContent = running ? "运行中" : (detail ? `完成 · ${detail}` : "完成");
+  if (status) status.textContent = running ? `${stage}中` : `${stage}完成`;
+}
+
+function compactToolSummary(value) {
+  const text = String(value || "").trim();
+  const cluster = text.match(/cluster nodes=(\d+)\s+online=(\d+)/);
+  if (cluster) return `节点 ${cluster[1]}，在线 ${cluster[2]}`;
+  const session = text.match(/requirement_session=.*?status=([^\s]+)/);
+  if (session) return `需求 ${session[1]}`;
+  const policy = text.match(/policy=([^\s]+).*?status=([^\s]+)/);
+  if (policy) return `策略 ${policy[2]}`;
+  const simulation = text.match(/simulation feasible=([^\s]+).*?status=([^\s]+)/);
+  if (simulation) return `可行 ${simulation[1]} · ${simulation[2]}`;
+  const commit = text.match(/commit status=([^\s]+)/);
+  if (commit) return `提交 ${commit[1]}`;
+  return text.length > 42 ? `${text.slice(0, 42)}...` : text;
+}
+
+function updateSubmitButton() {
+  const button = document.getElementById("submitButton");
+  if (!button) return;
+  const canSubmit = Boolean(activeHermesSessionId && activeHermesPolicyId);
+  button.disabled = !canSubmit;
+  button.textContent = canSubmit ? "正式下发" : "等待策略";
+}
+
+function updateAgentRuntimeStatus() {
+  const llm = latestHealth?.chat_runtime?.llm ?? {};
+  const model = llm.settings?.model || "本地规则";
+  const llmEl = document.getElementById("agentLlmMode");
+  const runtimeEl = document.getElementById("agentRuntimeMode");
+  const toolEl = document.getElementById("agentToolMode");
+  if (llmEl) llmEl.textContent = llm.enabled ? "已启用" : "本地规则";
+  if (runtimeEl) runtimeEl.textContent = activeHermesSessionId ? "会话进行中" : "待会话";
+  if (toolEl) toolEl.textContent = latestHealth?.status === "ok" ? "可用" : "等待控制面";
+  updateSubmitButton();
 }
 
 function takeInputMessage() {
@@ -1184,6 +1431,15 @@ function decisionMatchScore(decision) {
   return Math.max(0, Math.min(1, Number(score) || 0));
 }
 
+function displayCommitRecommendation(value) {
+  const labels = {
+    safe_to_commit: "可正式下发",
+    review_before_commit: "建议复核后下发",
+    do_not_commit: "暂不可下发"
+  };
+  return labels[String(value || "")] || "等待仿真结论";
+}
+
 function looksLikeSchedulingRequest(message) {
   const text = String(message ?? "").trim();
   const strongAction = /(提交|下发|创建|运行|部署|安排|调度一个|启动|分配|派发)/i.test(text);
@@ -1214,11 +1470,42 @@ function updateIntentSummary(payload, dryRun) {
     ? "尚未占用资源"
     : `CPU -${fmt(demand.cpu ?? 0, 0)} / 内存 -${fmt(demand.memory ?? 0, 0)}G / GPU -${fmt(demand.gpu ?? 0, 0)} / 存储 -${fmt(demand.storage ?? 0, 0)}G`;
   bodyEl.innerHTML = `
-    <div><label>任务</label><b>${escapeHtml(task.task_id ?? "-")}<br>${escapeHtml(displayKey(task.task_type ?? "-"))}</b></div>
-    <div><label>资源</label><b>${escapeHtml(demandText(demand))}</b></div>
-    <div><label>推荐节点</label><b>${escapeHtml(decision?.node_id ?? "暂无候选")}<br>${decision ? `匹配 ${pct(decisionMatchScore(decision))}` : "请调整需求"}</b></div>
-    <div><label>资源变化</label><b>${escapeHtml(resourceChange)}</b></div>
+    <div class="workspace-field"><label>任务</label><b>${escapeHtml(task.task_id ?? "-")}<br>${escapeHtml(displayKey(task.task_type ?? "-"))}</b></div>
+    <div class="workspace-field"><label>资源与目标</label><b>${escapeHtml(demandText(demand))}</b></div>
+    <div class="workspace-field"><label>推荐节点</label><b>${escapeHtml(decision?.node_id ?? "暂无候选")}<br>${decision ? `匹配 ${pct(decisionMatchScore(decision))}` : "请调整需求"}</b></div>
+    <div class="workspace-field"><label>仿真建议</label><b>${escapeHtml(resourceChange)}</b></div>
   `;
+  const riskEl = document.getElementById("workspaceRisk");
+  if (riskEl) riskEl.textContent = decision
+    ? "当前为预演推荐；正式下发必须点击按钮，聊天文本不会直接提交。"
+    : "当前没有可下发候选，请调整资源、地域、时延或安全约束。";
+}
+
+function updateWorkspaceFromPolicy(policy, simulation = null) {
+  const statusEl = document.getElementById("intentSummaryStatus");
+  const bodyEl = document.getElementById("intentSummaryBody");
+  const riskEl = document.getElementById("workspaceRisk");
+  if (!statusEl || !bodyEl || !policy) return;
+  const req = policy.requirement || {};
+  const res = policy.resource_config || {};
+  const compute = policy.selected_compute || {};
+  const effect = policy.expected_effect || {};
+  const latency = effect.latency || {};
+  const cost = effect.cost || {};
+  const diagnostics = simulation?.diagnostics || {};
+  const feasible = Boolean(simulation?.feasible && compute.node_id);
+  statusEl.textContent = feasible ? "已生成推荐，等待确认" : (policy.status || "预演完成");
+  statusEl.style.color = feasible ? "var(--green)" : "var(--red)";
+  bodyEl.innerHTML = `
+    <div class="workspace-field"><label>任务</label><b>${escapeHtml(req.workload_type || policy.policy_id || "--")}</b></div>
+    <div class="workspace-field"><label>资源与目标</label><b>CPU ${fmt(res.cpu_cores ?? 0, 0)} / 内存 ${fmt(res.memory_gb ?? 0, 0)}G / GPU ${fmt(res.gpu_count ?? 0, 0)}<br>目标 ${latency.target_ms !== undefined ? `${fmt(latency.target_ms, 0)} ms` : "--"}</b></div>
+    <div class="workspace-field"><label>推荐节点</label><b>${escapeHtml(compute.node_id || "暂无候选")}<br>${escapeHtml(displayRegion(compute.region || "--"))}</b></div>
+    <div class="workspace-field"><label>仿真建议</label><b>${escapeHtml(displayCommitRecommendation(diagnostics.commit_recommendation))}<br>成本 ${fmt(cost.expected_cost ?? 0, 2)}</b></div>
+  `;
+  const risks = simulation?.risks || policy.explanation?.risks || [];
+  if (riskEl) riskEl.textContent = risks.length
+    ? `风险核验：${risks.join("；")}`
+    : "未识别到阻断风险；正式下发仍需点击按钮确认。";
 }
 
 async function previewIntentFromMessage(message, signal = undefined) {
@@ -1331,11 +1618,12 @@ async function callIntentActual(dryRun) {
 
 async function commitHermesPolicyActual() {
   if (!activeHermesSessionId || !activeHermesPolicyId) {
-    addMessage("assistant", `<b>尚无可下发策略</b><p>请先通过 Hermes 补充完整任务需求，并在生成推荐节点后再正式下发。</p>`);
+    addMessage("assistant", `<b>尚无可下发策略</b><p>请先补充完整任务需求，并在生成推荐节点后再正式下发。</p>`);
     return;
   }
   addMessage("user", `<b>你</b><p>确认正式下发当前 Hermes 推荐策略。</p>`);
   try {
+    updateToolTrace({ type: "tool_start", tool: "commit_policy", label: "正式下发" });
     const res = await fetch(`/chat/sessions/${encodeURIComponent(activeHermesSessionId)}/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1350,11 +1638,15 @@ async function commitHermesPolicyActual() {
       rememberIntentPayload(result.dashboard_payload, false);
       updateIntentSummary(result.dashboard_payload, false);
     }
-    addMessage("assistant", `<b>Hermes 正式下发</b><div class="md-body">${renderPlainText(result.message || "策略已提交。")}</div>`);
+    updateToolTrace({ type: "tool_done", tool: "commit_policy", label: "正式下发", summary: "任务已提交" });
+    addMessage("assistant", `<b>正式下发结果</b><div class="md-body">${renderPlainText(result.message || "策略已提交。")}</div>`);
     activeHermesPolicyId = null;
+    updateSubmitButton();
     await refreshDashboard();
   } catch (error) {
+    updateToolTrace({ type: "tool_done", tool: "commit_policy", label: "正式下发", summary: "提交失败" });
     addMessage("assistant", `<b>策略下发失败</b><p>${escapeHtml(error.message)}</p>`);
+    updateSubmitButton();
   }
 }
 
@@ -1583,6 +1875,8 @@ async function refreshDashboard() {
     document.getElementById("hermesLlmStatus").textContent = llm.enabled
       ? `${llm.settings?.model ?? "DeepSeek"} 意图辅助`
       : "离线回退";
+    updateAgentRuntimeStatus();
+    updateSubmitButton();
     document.getElementById("lastSync").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
   } catch (error) {
     document.getElementById("statusDot").style.background = "var(--red)";
@@ -1598,20 +1892,21 @@ function schedulePolling() {
   }, pollIntervalMs);
 }
 
-document.getElementById("chatLog").innerHTML = `<div class="message assistant"><b>Hermes</b><p>已连接实时控制面。你可以给出地域、时延、安全或资源约束；若不希望补充画像，我会基于当前在线节点进行综合预演。存在无法满足的约束时，我会先说明原因；确认推荐后再点击“正式下发”。</p></div>`;
+document.getElementById("chatLog").innerHTML = `<div class="message assistant"><b>天钧智能体</b><p>已连接实时控制面。请给出业务目标、地域、时延、安全或资源约束；我会通过工具链生成策略和仿真结论，确认推荐后再点击“正式下发”。</p></div>`;
 document.getElementById("refreshButton").addEventListener("click", () => void refreshDashboard());
 document.getElementById("intentInput").value = "";
 async function askHermesStreamingActual() {
   const message = takeInputMessage();
   if (!message) return;
   stopHermesStream();
+  resetToolTrace();
   rememberTaskConversation("user", message);
   addMessage("user", `<b>你</b><p>${escapeHtml(message)}</p>`);
 
   const log = document.getElementById("chatLog");
   const node = document.createElement("div");
   node.className = "message assistant";
-  node.innerHTML = `<b>Hermes 流式回复</b><div class="stream-content"><p>正在连接 Hermes...</p></div>`;
+  node.innerHTML = `<b>天钧智能体</b><div class="stream-content"><p>正在连接智能体事件流...</p></div>`;
   log.appendChild(node);
   log.scrollTop = log.scrollHeight;
   const content = node.querySelector(".stream-content");
@@ -1623,10 +1918,13 @@ async function askHermesStreamingActual() {
   let shouldRefreshDashboard = false;
 
   try {
-    const res = await fetch("/hermes/chat/stream", {
+    const endpoint = activeHermesSessionId
+      ? `/chat/sessions/${encodeURIComponent(activeHermesSessionId)}/messages/stream`
+      : "/chat/sessions/stream";
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, session_id: activeHermesSessionId, history: currentTaskHistory() }),
+      body: JSON.stringify({ message }),
       signal: controller.signal
     });
     if (!res.ok) {
@@ -1647,32 +1945,58 @@ async function askHermesStreamingActual() {
         const line = eventText.split("\n").find((item) => item.startsWith("data:"));
         if (!line) continue;
         const payload = JSON.parse(line.slice(5).trim());
-        if (payload.type === "delta") {
-          fullText += payload.text || "";
+        if (payload.type === "assistant_delta") {
+          fullText += payload.delta || "";
           content.innerHTML = renderPlainText(fullText);
           log.scrollTop = log.scrollHeight;
         } else if (payload.type === "session") {
-          activeHermesSessionId = payload.session_id || activeHermesSessionId;
-        } else if (payload.type === "result") {
-          activeHermesSessionId = payload.session_id || activeHermesSessionId;
-          activeHermesPolicyId = payload.commit_policy_id || null;
-          if (payload.dashboard_payload) {
-            rememberIntentPayload(payload.dashboard_payload, true, message);
-            updateIntentSummary(payload.dashboard_payload, true);
+          activeHermesSessionId = payload.session?.session_id || activeHermesSessionId;
+          updateAgentRuntimeStatus();
+          updateSubmitButton();
+        } else if (payload.type === "llm_start") {
+          const status = document.getElementById("toolTraceStatus");
+          if (status) status.textContent = "LLM 正在辅助理解需求";
+        } else if (payload.type === "llm_done") {
+          const status = document.getElementById("toolTraceStatus");
+          if (status) status.textContent = "LLM 槽位理解完成";
+        } else if (payload.type === "llm_fallback") {
+          const status = document.getElementById("toolTraceStatus");
+          if (status) status.textContent = "LLM 降级为本地规则";
+        } else if (payload.type === "tool_start" || payload.type === "tool_done" || payload.type === "tool_result") {
+          updateToolTrace(payload);
+        } else if (payload.type === "artifacts") {
+          const artifacts = payload.artifacts || {};
+          if (artifacts.policy) {
+            updateWorkspaceFromPolicy(artifacts.policy, artifacts.simulation || null);
             shouldRefreshDashboard = true;
           }
-        } else if (payload.type === "warning") {
-          content.innerHTML = renderPlainText(fullText || `上下文读取警告：${payload.error}`);
-        } else if (payload.type === "error") {
-          content.innerHTML = renderPlainText(fullText || `Hermes 接口异常：${payload.error}`);
+          if (artifacts.optimization?.policy) {
+            updateWorkspaceFromPolicy(artifacts.optimization.policy, artifacts.simulation || null);
+            shouldRefreshDashboard = true;
+          }
         } else if (payload.type === "done") {
+          const result = payload.result || null;
+          if (result) {
+            activeHermesSessionId = result.session?.session_id || activeHermesSessionId;
+            activeHermesPolicyId = result.commit_policy_id || null;
+            updateSubmitButton();
+            if (!fullText && result.message) {
+              fullText = result.message;
+              content.innerHTML = renderPlainText(fullText);
+            }
+            if (result.artifacts?.policy) updateWorkspaceFromPolicy(result.artifacts.policy, result.artifacts.simulation || null);
+            if (result.artifacts?.optimization?.policy) updateWorkspaceFromPolicy(result.artifacts.optimization.policy, result.artifacts.simulation || null);
+          }
           streamDone = true;
           break;
+        } else if (payload.type === "error") {
+          fullText = fullText || `智能体接口异常：${payload.message || payload.error}`;
+          content.innerHTML = renderPlainText(fullText);
         }
       }
     }
     if (!fullText) {
-      content.innerHTML = "Hermes 没有返回有效内容，请检查模型 Key、base_url 或 Hermes 配置。";
+      content.innerHTML = "智能体没有返回有效内容，请检查模型 Key、base_url 或控制面配置。";
     } else {
       rememberTaskConversation("assistant", fullText);
     }
