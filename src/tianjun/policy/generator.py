@@ -27,56 +27,51 @@ from ..scheduling.engine import ClosedLoopAdaptiveScheduler
 
 
 REGION_ALIASES = {
-    "华东": "shanghai",
-    "上海": "shanghai",
-    "杭州": "hangzhou",
-    "华北": "beijing",
-    "北京": "beijing",
-    "华南": "shenzhen",
-    "深圳": "shenzhen",
-    "广州": "guangzhou",
-    "东莞": "dongguan",
-    "惠州": "huizhou",
-    "珠海": "zhuhai",
-    "佛山": "foshan",
-    "中山": "zhongshan",
-    "成都": "chengdu",
+    "东部区域": "east",
+    "东部": "east",
+    "华东": "east",
+    "华北": "east",
+    "上海": "east",
+    "杭州": "east",
+    "北京": "east",
+    "西部区域": "west",
+    "西部": "west",
+    "西南": "west",
+    "成都": "west",
+    "重庆": "west",
+    "华南区域": "south",
+    "华南": "south",
+    "深圳": "south",
+    "广州": "south",
+    "东莞": "south",
+    "惠州": "south",
+    "珠海": "south",
+    "佛山": "south",
+    "中山": "south",
     "武汉": "wuhan",
-    "西南": "chengdu",
     "华中": "wuhan",
-    "华东": "shanghai",
-    "上海": "shanghai",
-    "杭州": "hangzhou",
-    "华北": "beijing",
-    "北京": "beijing",
-    "华南": "shenzhen",
-    "深圳": "shenzhen",
-    "广州": "guangzhou",
-    "东莞": "dongguan",
-    "惠州": "huizhou",
-    "珠海": "zhuhai",
-    "佛山": "foshan",
-    "中山": "zhongshan",
-    "成都": "chengdu",
-    "武汉": "wuhan",
-    "西南": "chengdu",
-    "华中": "wuhan",
-    "east china": "shanghai",
-    "shanghai": "shanghai",
-    "hangzhou": "hangzhou",
-    "beijing": "beijing",
-    "shenzhen": "shenzhen",
-    "guangzhou": "guangzhou",
-    "dongguan": "dongguan",
-    "huizhou": "huizhou",
-    "zhuhai": "zhuhai",
-    "foshan": "foshan",
-    "zhongshan": "zhongshan",
-    "chengdu": "chengdu",
+    "east": "east",
+    "east china": "east",
+    "shanghai": "east",
+    "hangzhou": "east",
+    "beijing": "east",
+    "west": "west",
+    "chengdu": "west",
+    "chongqing": "west",
+    "south": "south",
+    "south china": "south",
+    "shenzhen": "south",
+    "guangzhou": "south",
+    "dongguan": "south",
+    "huizhou": "south",
+    "zhuhai": "south",
+    "foshan": "south",
+    "zhongshan": "south",
     "wuhan": "wuhan",
 }
 
-GUANGDONG_REGIONS = ["shenzhen", "guangzhou", "dongguan", "huizhou", "zhuhai", "foshan", "zhongshan"]
+SERVICE_REGION_CODES = {"east", "west", "south"}
+GUANGDONG_REGIONS = ["south"]
 
 
 class ComputeNetworkPolicyGenerator:
@@ -428,6 +423,7 @@ class ComputeNetworkPolicyGenerator:
         }[requirement.priority]
         task_type = "batch_cpu" if requirement.workload_type == "batch" else requirement.workload_type
         regions = list(requirement.region_preference)
+        network_regions = [region for region in regions if region not in SERVICE_REGION_CODES]
         isolation_level = self._isolation_level(requirement.security_level)
         if execution is None:
             execution = TaskExecutionSpec(
@@ -444,8 +440,8 @@ class ComputeNetworkPolicyGenerator:
             priority=priority,
             budget=requirement.budget_limit,
             deadline=None,
-            data_region=regions[0] if regions else None,
-            source_region=regions[0] if regions else None,
+            data_region=network_regions[0] if network_regions else None,
+            source_region=network_regions[0] if network_regions else None,
             input_size_gb=defaults["input_size_gb"],
             max_latency_ms=requirement.latency_target_ms,
             min_bandwidth_mbps=requirement.bandwidth_mbps,
@@ -589,7 +585,7 @@ class ComputeNetworkPolicyGenerator:
         risks = self._risks(requirement, effects)
         questions = self._questions(requirement, effects)
         explanation = PolicyExplanation(
-            summary=f"Select {node.node_id} in {node.region} for {requirement.workload_type}.",
+            summary=f"Select {node.node_id} in {node.service_region or node.location or node.region} for {requirement.workload_type}.",
             factors=self._factors(decision),
             risks=risks,
             questions=questions,
@@ -599,7 +595,7 @@ class ComputeNetworkPolicyGenerator:
             requirement=requirement,
             selected_compute=ComputeSelection(
                 node_id=node.node_id,
-                region=node.region,
+                region=node.service_region or node.location or node.region,
                 labels=sorted(node.labels),
                 score=float(decision.total_score),
                 reason=decision.explanation,
@@ -770,7 +766,7 @@ class ComputeNetworkPolicyGenerator:
             risks.append("当前控制面没有在线可调度节点；请启动 sim-backend 或真实 Agent。")
             return risks
         allowed = set(requirement.region_preference)
-        if allowed and not any(node.region in allowed for node in nodes):
+        if allowed and not any(any(node.matches_deployment_region(region) for region in allowed) for node in nodes):
             risks.append(f"地域缺口：当前在线节点不在允许地域 {sorted(allowed)}。")
         online_nodes = [node for node in nodes if node.online]
         if not online_nodes:

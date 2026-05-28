@@ -36,6 +36,12 @@ _FEEDBACK_WORDS = (
     "反馈",
 )
 _REGION_LABELS = {
+    "east": "东部区域",
+    "west": "西部区域",
+    "south": "华南区域",
+    "dc1": "DC1",
+    "dc2": "DC2",
+    "dc3": "DC3",
     "shanghai": "上海",
     "beijing": "北京",
     "hangzhou": "杭州",
@@ -43,6 +49,7 @@ _REGION_LABELS = {
     "guangzhou": "广州",
     "dongguan": "东莞",
     "chengdu": "成都",
+    "chongqing": "重庆",
     "wuhan": "武汉",
     "huizhou": "惠州",
     "zhuhai": "珠海",
@@ -478,7 +485,7 @@ class ChatRuntime:
         try:
             report = self.control_plane.build_report()
             for node in report.get("nodes", []) or []:
-                region = node.get("region")
+                region = node.get("service_region") or node.get("location") or node.get("region")
                 if region:
                     regions.add(str(region))
         except Exception:  # noqa: BLE001
@@ -490,9 +497,9 @@ class ChatRuntime:
             report = self.control_plane.build_report()
             return sorted(
                 {
-                    str(node.get("region"))
+                    str(node.get("service_region") or node.get("location") or node.get("region"))
                     for node in report.get("nodes", []) or []
-                    if node.get("region") and node.get("online", True)
+                    if (node.get("service_region") or node.get("location") or node.get("region")) and node.get("online", True)
                 }
             )
         except Exception:  # noqa: BLE001
@@ -708,7 +715,7 @@ def _cluster_inventory_response(text: str, report: dict[str, Any]) -> tuple[str,
     nodes = list(report.get("nodes") or [])
     regions: dict[str, dict[str, int]] = {}
     for node in nodes:
-        region = str(node.get("region") or "unknown")
+        region = str(node.get("service_region") or node.get("location") or node.get("region") or "unknown")
         summary = regions.setdefault(region, {"registered": 0, "online": 0})
         summary["registered"] += 1
         if bool(node.get("online")):
@@ -995,7 +1002,13 @@ def _tool_label(name: str) -> str:
 
 def _short_result(result: dict[str, Any]) -> str:
     if "nodes" in result and "totals" in result:
-        regions = sorted({str(node.get("region")) for node in result.get("nodes", []) if node.get("region")})
+        regions = sorted(
+            {
+                str(node.get("service_region") or node.get("location") or node.get("region"))
+                for node in result.get("nodes", [])
+                if node.get("service_region") or node.get("location") or node.get("region")
+            }
+        )
         online = sum(1 for node in result.get("nodes", []) if node.get("online"))
         return f"cluster nodes={len(result.get('nodes', []))} online={online} regions={','.join(regions) or '--'}"
     if "policy_id" in result:

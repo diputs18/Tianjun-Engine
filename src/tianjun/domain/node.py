@@ -11,11 +11,29 @@ from .resource import ResourceVector
 from .task import RunningTask, Task
 
 
+SERVICE_REGION_BY_LOCATION = {
+    "beijing": "east",
+    "hangzhou": "east",
+    "shanghai": "east",
+    "chengdu": "west",
+    "chongqing": "west",
+    "guangzhou": "south",
+    "shenzhen": "south",
+    "dongguan": "south",
+    "huizhou": "south",
+    "zhuhai": "south",
+    "foshan": "south",
+    "zhongshan": "south",
+}
+
+
 @dataclass(slots=True)
 class Node:
     node_id: str
     capacity: ResourceVector
     region: str
+    location: str | None = None
+    service_region: str | None = None
     labels: set[str] = field(default_factory=set)
     cost_per_tick: float = 1.0
     base_reliability: float = 0.98
@@ -28,6 +46,12 @@ class Node:
     network_paths: dict[str, NetworkPathProfile] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        self.location = self.location or self.region
+        self.service_region = (
+            self.service_region
+            or SERVICE_REGION_BY_LOCATION.get(str(self.location).lower())
+            or self.location
+        )
         self.reliability_score = clamp(
             self.base_reliability if self.reliability_score is None else self.reliability_score,
             0.35,
@@ -58,7 +82,7 @@ class Node:
             return False
         if self.node_id in task.forbidden_nodes:
             return False
-        if task.allowed_regions and self.region not in task.allowed_regions:
+        if task.allowed_regions and not any(self.matches_deployment_region(region) for region in task.allowed_regions):
             return False
         if task.preferred_labels and not task.preferred_labels.issubset(self.labels):
             return False
@@ -92,17 +116,22 @@ class Node:
     def locality_score(self, task: Task) -> float:
         score = 0.75
         if task.data_region is not None:
-            score = 1.0 if task.data_region == self.region else 0.2
+            score = 1.0 if self.matches_deployment_region(task.data_region) else 0.2
         if task.preferred_labels:
             matched = len(task.preferred_labels.intersection(self.labels)) / len(task.preferred_labels)
             score = (score + matched) / 2.0
         return clamp(score)
+
+    def matches_deployment_region(self, region: str) -> bool:
+        return region in {self.service_region, self.location, self.region}
 
     def path_profile_for(self, source_region: str | None) -> NetworkPathProfile:
         if source_region and source_region in self.network_paths:
             return self.network_paths[source_region]
         if source_region is not None and source_region == self.region:
             return NetworkPathProfile()
+        if source_region is None and self.network_paths:
+            return min(self.network_paths.values(), key=lambda profile: profile.robust_latency_ms())
         return NetworkPathProfile(
             latency_ms=42.0,
             jitter_ms=10.0,
@@ -131,6 +160,8 @@ class Node:
         return {
             "node_id": self.node_id,
             "region": self.region,
+            "location": self.location,
+            "service_region": self.service_region,
             "labels": sorted(self.labels),
             "capacity": self.capacity.to_dict(),
             "available": self.available().to_dict(),

@@ -90,6 +90,8 @@ def _node_from_inventory_item(data: dict[str, Any]) -> Node:
     node = Node(
         node_id=str(data["node_id"]),
         region=str(data.get("region", "default")),
+        location=str(data.get("location", data.get("region", "default"))),
+        service_region=data.get("service_region"),
         labels=labels,
         capacity=ResourceVector(
             cpu=float(capacity.get("cpu", capacity.get("cpu_cores", 0.0))),

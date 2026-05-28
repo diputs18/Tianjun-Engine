@@ -23,6 +23,8 @@ def node_from_dict(data: dict[str, Any]) -> Node:
     return Node(
         node_id=data["node_id"],
         region=data.get("region", "default"),
+        location=data.get("location", data.get("region", "default")),
+        service_region=data.get("service_region"),
         labels=set(data.get("labels", [])),
         capacity=ResourceVector(**data.get("capacity", {})),
         cost_per_tick=float(data.get("cost_per_tick", 1.0)),

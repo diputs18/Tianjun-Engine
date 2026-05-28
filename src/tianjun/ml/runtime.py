@@ -75,6 +75,9 @@ class ModelPrediction:
     gnn_applicable: bool | None = None
     gnn_diagnostic: str | None = None
     gnn_feature_shift: dict[str, Any] | None = None
+    gnn_neighbor_mode: str | None = None
+    gnn_neighbor_count: int = 0
+    topology_id: str | None = None
     status: str = "not_loaded"
     detail: str = ""
 
@@ -88,6 +91,9 @@ class ModelPrediction:
             "gnn_applicable": self.gnn_applicable,
             "gnn_diagnostic": self.gnn_diagnostic,
             "gnn_feature_shift": self.gnn_feature_shift,
+            "gnn_neighbor_mode": self.gnn_neighbor_mode,
+            "gnn_neighbor_count": self.gnn_neighbor_count,
+            "topology_id": self.topology_id,
             "status": self.status,
             "detail": self.detail,
         }
@@ -355,6 +361,8 @@ class TrainedModelRuntime:
         latency_history_ms: list[float],
         node_load: float,
         bandwidth_utilization: float,
+        neighbor_observations: list[tuple[Node, NetworkPathProfile, float]] | None = None,
+        topology_id: str | None = None,
     ) -> ModelPrediction:
         if not self.enabled:
             return ModelPrediction(enabled=False, status=self.status, detail=self.detail)
@@ -378,9 +386,15 @@ class TrainedModelRuntime:
         gnn_applicable = None
         gnn_diagnostic = None
         gnn_feature_shift = None
+        gnn_neighbor_mode = None
+        gnn_neighbor_count = 0
         if self.gnn is not None:
             features = self._graph_features(node, task, profile, latency_history_ms, pressure_history)
-            neighbor_features = self._neighbor_features(features)
+            neighbor_features, gnn_neighbor_mode, gnn_neighbor_count = self._neighbor_features(
+                features,
+                task,
+                neighbor_observations or [],
+            )
             target = task.max_latency_ms or max(35.0, mean(latency_history_ms) * 1.5)
             raw_gnn = self.gnn.predict(features, neighbor_features)
             gnn_raw_output = raw_gnn
@@ -409,6 +423,9 @@ class TrainedModelRuntime:
             gnn_applicable=gnn_applicable,
             gnn_diagnostic=gnn_diagnostic,
             gnn_feature_shift=gnn_feature_shift,
+            gnn_neighbor_mode=gnn_neighbor_mode,
+            gnn_neighbor_count=gnn_neighbor_count,
+            topology_id=topology_id,
             status=self.status,
             detail=self.detail,
         )
@@ -441,7 +458,9 @@ class TrainedModelRuntime:
         rt_values = [math.log1p(max(0.0, value)) for value in latency_history_ms]
         mcr_values = [math.log1p(max(0.0, value)) for value in pressure_history]
         in_degree = float(len(node.network_paths))
-        out_degree = float(len(node.labels) + (1 if task.data_region else 0))
+        # Match the DCI dataset graph definition. Labels and dialogue slots are
+        # metadata, not graph edges, and must not shift topology degree features.
+        out_degree = 5.0
         total_degree = max(0.0, in_degree + out_degree)
         return [
             rt_values[-1],
@@ -462,10 +481,35 @@ class TrainedModelRuntime:
             math.log1p(max(0.0, profile.robust_latency_ms())),
         ]
 
-    def _neighbor_features(self, features: list[float]) -> list[float]:
-        # Runtime topology telemetry is not available yet; use the candidate path embedding
-        # as a conservative self-neighbor until live service-call neighbors are connected.
-        return list(features)
+    def _neighbor_features(
+        self,
+        features: list[float],
+        task: Task,
+        neighbor_observations: list[tuple[Node, NetworkPathProfile, float]],
+    ) -> tuple[list[float], str, int]:
+        if not neighbor_observations:
+            return list(features), "self_fallback_no_topology_neighbors", 0
+
+        neighbor_vectors = []
+        weights = []
+        for neighbor, profile, distance_ms in neighbor_observations:
+            latency_history = profile.synthesized_latency_history_ms()
+            pressure_history = self._pressure_history(
+                task,
+                neighbor.dominant_utilization(),
+                profile.bandwidth_utilization_estimate(),
+                profile,
+            )
+            neighbor_vectors.append(
+                self._graph_features(neighbor, task, profile, latency_history, pressure_history)
+            )
+            weights.append(1.0 / max(0.1, distance_ms))
+        weight_sum = sum(weights)
+        aggregated = [
+            sum(vector[index] * weights[position] for position, vector in enumerate(neighbor_vectors)) / weight_sum
+            for index in range(len(features))
+        ]
+        return aggregated, "physical_topology_distance_weighted_neighbors", len(neighbor_vectors)
 
 
 _DEFAULT_RUNTIME: TrainedModelRuntime | None = None

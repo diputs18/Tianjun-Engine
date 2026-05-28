@@ -1,0 +1,33 @@
+{
+  "dataset": "huawei_public_case_reference_dci_cloudsimplus",
+  "samples": 27000,
+  "feature_names": [
+    "last_log_rt",
+    "mean_log_rt",
+    "std_log_rt",
+    "trend_log_rt",
+    "last_log_link_pressure",
+    "mean_log_link_pressure",
+    "std_log_link_pressure",
+    "trend_log_link_pressure",
+    "last_cpu_utilization",
+    "mean_cpu_utilization",
+    "last_memory_utilization",
+    "mean_memory_utilization",
+    "log_in_degree",
+    "log_out_degree",
+    "log_total_degree",
+    "log_robust_path_latency"
+  ],
+  "target": "future_qos_stability_score_0_to_1",
+  "label_definition": "Mean future-window score composed from observed latency, jitter, bandwidth, packet loss and path reliability.",
+  "future_window_snapshots": 3,
+  "provenance_boundary": {
+    "topology_structure": "public_case_abstraction",
+    "numeric_values": "calibrated_simulation_assumptions_not_vendor_telemetry",
+    "compute_nodes": "cloudsimplus_vm_resources_not_physical_inventory",
+    "named_locations": "simulation_placement_labels_not_vendor_disclosed_sites",
+    "service_regions": "three_simulated_deployment_zones_each_bound_to_one_simulated_access_point",
+    "simulated_access_points": "east_to_dc1_west_to_dc2_south_to_dc3"
+  }
+}

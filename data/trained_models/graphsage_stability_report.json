@@ -1,104 +1,25 @@
 {
-  "dataset": "Alibaba cluster-trace-microservices-v2022",
-  "model": "Pure PyTorch GraphSAGE-style path stability regressor",
-  "device": "cuda",
-  "cuda_device": "NVIDIA GeForce RTX 4060 Laptop GPU",
-  "samples": 22828,
-  "services_with_time_features": 22828,
-  "services_with_edges": 2132,
-  "epochs": 6,
-  "batch_size": 512,
-  "hidden_size": 64,
-  "feature_names": [
-    "last_log_rt",
-    "mean_log_rt",
-    "std_log_rt",
-    "trend_log_rt",
-    "last_log_mcr",
-    "mean_log_mcr",
-    "std_log_mcr",
-    "trend_log_mcr",
-    "last_cpu_utilization",
-    "mean_cpu_utilization",
-    "last_memory_utilization",
-    "mean_memory_utilization",
-    "log_in_degree",
-    "log_out_degree",
-    "log_total_degree",
-    "log_avg_edge_rt"
-  ],
-  "loss_curve": [
-    0.004826988890319744,
-    0.0005648572254635942,
-    0.00028722889740339286,
-    0.00019484967910151973,
-    0.0001462249138811825,
-    0.00012174874206206483
-  ],
+  "dataset": "huawei_public_case_reference_dci_cloudsimplus",
+  "model": "GraphSAGE-style topology-neighbor stability regressor",
+  "samples": 27000,
+  "train_samples": 20160,
+  "test_samples": 6840,
+  "split": "experiment_run_id_group_split",
+  "target": "future_qos_stability_score_0_to_1",
   "metrics": {
-    "mae_stability": 0.004490781109780073,
-    "rmse_stability": 0.007867829874157906,
-    "p95_abs_error_stability": 0.014486312866210938,
-    "stable_class_accuracy": 0.9949627682873412,
-    "pred_mean": 0.6825908422470093,
-    "target_mean": 0.6831084489822388
+    "mae_stability": 0.0320645309984684,
+    "rmse_stability": 0.06223947927355766,
+    "pred_mean": 0.8542801737785339,
+    "target_mean": 0.8552137613296509
   },
-  "model_path": "data\\trained_models\\graphsage_stability_model.pt",
-  "role_in_scheduler": "GNN outputs a 0-1 topology/path stability score for candidate node-path scoring.",
-  "data_status": {
-    "time_features": {
-      "rt_rows_read": 12000000,
-      "rt_archives": [
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_0.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_1.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_2.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_3.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_4.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_5.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_6.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_7.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_8.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_9.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_10.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_11.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_12.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_13.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_14.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_15.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_16.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_17.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_18.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_19.tar.gz",
-        "data\\alibaba_microservices_v2022\\MSRTMCR\\MSRTMCR_20.tar.gz"
-      ],
-      "services_total": 25952,
-      "services_with_features": 22828,
-      "rt_clip_percentile": 99.0,
-      "rt_clip_value": 426.376953125,
-      "target": "path_stability_score_0_to_1",
-      "transform": "clip_then_log1p_for_rt_features",
-      "resource_features": {
-        "rows_read": 1000000,
-        "points": 282905,
-        "archives": [
-          "data\\alibaba_microservices_v2022\\MSMetrics\\MSMetrics_0.tar.gz"
-        ],
-        "status": "used"
-      }
-    },
-    "graph": {
-      "rows_read": 3000000,
-      "edges_kept": 234164,
-      "archives": [
-        "data\\alibaba_microservices_v2022\\CallGraph\\CallGraph_0.tar.gz",
-        "data\\alibaba_microservices_v2022\\CallGraph\\CallGraph_1.tar.gz",
-        "data\\alibaba_microservices_v2022\\CallGraph\\CallGraph_2.tar.gz",
-        "data\\alibaba_microservices_v2022\\CallGraph\\CallGraph_3.tar.gz"
-      ]
-    },
-    "memory_strategy": {
-      "stream_tar_gz": true,
-      "no_full_extract": true
-    }
+  "loss_final": 0.004141051787883043,
+  "model_path": "data\\trained_models\\dci_reference\\graphsage_stability_model.pt",
+  "provenance_boundary": {
+    "topology_structure": "public_case_abstraction",
+    "numeric_values": "calibrated_simulation_assumptions_not_vendor_telemetry",
+    "compute_nodes": "cloudsimplus_vm_resources_not_physical_inventory",
+    "named_locations": "simulation_placement_labels_not_vendor_disclosed_sites",
+    "service_regions": "three_simulated_deployment_zones_each_bound_to_one_simulated_access_point",
+    "simulated_access_points": "east_to_dc1_west_to_dc2_south_to_dc3"
   }
 }

@@ -1,0 +1,25 @@
+{
+  "dataset": "huawei_public_case_reference_dci_cloudsimplus",
+  "model": "GraphSAGE-style topology-neighbor stability regressor",
+  "samples": 27000,
+  "train_samples": 20160,
+  "test_samples": 6840,
+  "split": "experiment_run_id_group_split",
+  "target": "future_qos_stability_score_0_to_1",
+  "metrics": {
+    "mae_stability": 0.0320645309984684,
+    "rmse_stability": 0.06223947927355766,
+    "pred_mean": 0.8542801737785339,
+    "target_mean": 0.8552137613296509
+  },
+  "loss_final": 0.004141051787883043,
+  "model_path": "data\\trained_models\\dci_reference\\graphsage_stability_model.pt",
+  "provenance_boundary": {
+    "topology_structure": "public_case_abstraction",
+    "numeric_values": "calibrated_simulation_assumptions_not_vendor_telemetry",
+    "compute_nodes": "cloudsimplus_vm_resources_not_physical_inventory",
+    "named_locations": "simulation_placement_labels_not_vendor_disclosed_sites",
+    "service_regions": "three_simulated_deployment_zones_each_bound_to_one_simulated_access_point",
+    "simulated_access_points": "east_to_dc1_west_to_dc2_south_to_dc3"
+  }
+}

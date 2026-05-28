@@ -76,6 +76,9 @@ def build_http_server(
             path = urlparse(self.path).path
             try:
                 payload = self._read_json()
+                if path == "/topology/register":
+                    self._write_json(200, control_plane.register_topology(payload))
+                    return
                 if path == "/nodes/register":
                     self._write_json(200, control_plane.register_node(node_from_dict(payload)))
                     return
@@ -87,6 +90,8 @@ def build_http_server(
                         reliability_score=payload.get("reliability_score"),
                         cost_per_tick=payload.get("cost_per_tick"),
                         region=payload.get("region"),
+                        location=payload.get("location"),
+                        service_region=payload.get("service_region"),
                         labels=None if "labels" not in payload else set(payload.get("labels", [])),
                         performance_factors=payload.get("performance_factors"),
                         network_paths=payload.get("network_paths"),

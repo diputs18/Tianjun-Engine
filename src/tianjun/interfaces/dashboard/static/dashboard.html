@@ -1195,15 +1195,23 @@ const textMap = {
   jitter: "时延抖动",
   node_load: "节点负载",
   bandwidth_utilization: "带宽可用性",
-  gnn_topology: "拓扑参考"
+  gnn_topology: "GNN 稳定性"
 };
 
 const regionMap = {
+  east: "东部区域",
+  west: "西部区域",
+  south: "华南区域",
   shanghai: "上海",
   beijing: "北京",
   hangzhou: "杭州",
+  chengdu: "成都",
   shenzhen: "深圳",
-  guangzhou: "广州"
+  guangzhou: "广州",
+  chongqing: "重庆",
+  dc1: "DC1",
+  dc2: "DC2",
+  dc3: "DC3"
 };
 
 function escapeHtml(value) {
@@ -1224,26 +1232,35 @@ function pct(value, digits = 1) {
   return `${fmt(Number(value ?? 0) * 100, digits)}%`;
 }
 
-function gnnDisplayState(snapshot = {}) {
+function gnnDisplayState(snapshot = {}, decision = null, report = {}) {
   const pred = snapshot.model_prediction ?? {};
-  const fallbackScore = snapshot.fusion_features?.gnn_topology;
+  const topology = snapshot.physical_topology ?? {};
+  const selectedNode = (report.nodes ?? []).find((node) => node.node_id === decision?.node_id);
+  const location = topology.selected_node_location ?? selectedNode?.location ?? selectedNode?.region;
+  const locationText = location ? displayRegion(location) : "位置待上报";
+  const aggregateNeighborCount = pred.gnn_neighbor_count ?? topology.topology_reachable_neighbor_count ?? (topology.compute_neighbor_ids ?? []).length;
+  const directNeighborCount = topology.direct_compute_neighbor_count ?? (topology.direct_compute_neighbor_ids ?? []).length;
+  const neighborEvidence = pred.gnn_neighbor_mode === "physical_topology_distance_weighted_neighbors"
+    ? `同接入点直接邻居 ${directNeighborCount} 个 · GNN聚合可达邻居 ${aggregateNeighborCount} 个 · 所在地 ${locationText}`
+    : `所在地 ${locationText}`;
+  const evidence = pred.gnn_neighbor_mode === "physical_topology_distance_weighted_neighbors"
+    ? neighborEvidence
+    : `所在地 ${locationText}`;
   if (pred.gnn_applicable === false) {
-    const fallbackText = fallbackScore !== undefined ? pct(fallbackScore, 1) : "50.0%";
     return {
-      value: fallbackText,
-      detail: "中性参考值 · 当前模型观测未参与排序",
-      compact: `拓扑参考 ${fallbackText}`,
+      value: "未参与评分",
+      detail: `特征分布外已降级 · ${evidence}`,
+      compact: "GNN 未参与评分",
     };
   }
   if (pred.gnn_stability_score !== undefined && pred.gnn_stability_score !== null) {
     const value = pct(pred.gnn_stability_score, 1);
-    return { value, detail: "基于有效拓扑观测的稳定性评分", compact: `拓扑评分 ${value}` };
+    return { value, detail: `物理拓扑稳定性评分 · ${evidence}`, compact: `GNN ${value}` };
   }
-  if (fallbackScore !== undefined) {
-    const value = pct(fallbackScore, 1);
-    return { value, detail: "中性参考值 · 等待有效拓扑观测", compact: `拓扑参考 ${value}` };
+  if (snapshot.fusion_features?.gnn_topology !== undefined) {
+    return { value: "待启用", detail: `当前使用中性兜底 · ${evidence}`, compact: "GNN 待启用" };
   }
-  return { value: "--", detail: "等待首次拓扑评估", compact: "拓扑参考待生成" };
+  return { value: "--", detail: `等待首次 GNN 评估 · ${evidence}`, compact: "GNN 待生成" };
 }
 
 function displayKey(key) {
@@ -1270,7 +1287,7 @@ function metricLabel(key) {
     jitter: "时延抖动",
     node_load: "节点负载",
     bandwidth_utilization: "带宽可用性",
-    gnn_topology: "拓扑参考"
+    gnn_topology: "GNN 稳定性"
   };
   return map[key] ?? key;
 }
@@ -1608,7 +1625,7 @@ function renderIntentResult(payload, dryRun) {
     <p>接口状态：${escapeHtml(status)}；任务：${escapeHtml(task.task_id ?? decision.task_id ?? "-")}；类型：${escapeHtml(task.task_type ?? "-")}；资源：${escapeHtml(demandText(task.demand))}。</p>
     <p>实际选择：<b>${escapeHtml(decision.node_id)}</b>；${dryRun ? "仅预演，不占用节点资源" : "已创建真实租约，节点可用资源已扣减"}。</p>
     <p>原始时延 ${fmt(snap.raw_latency_ms, 1)} ms，确定性时延 ${fmt(snap.deterministic_latency_ms ?? snap.stable_latency_ms, 1)} ms，LSTM/GNN 输出置信度 ${pct(snap.deterministic_confidence ?? 0)}。</p>
-    <p>四特征融合：LSTM ${pct(features.latency_history ?? 0)}，抖动 ${pct(features.jitter ?? 0)}，负载 ${pct(features.node_load ?? 0)}，带宽 ${pct(features.bandwidth_utilization ?? 0)}，拓扑参考 ${pct(features.gnn_topology ?? 0)}；综合评分 ${fmt(snap.feature_fusion_score, 3)}。</p>
+    <p>四特征融合：LSTM ${pct(features.latency_history ?? 0)}，抖动 ${pct(features.jitter ?? 0)}，负载 ${pct(features.node_load ?? 0)}，带宽 ${pct(features.bandwidth_utilization ?? 0)}，GNN 稳定性 ${gnnDisplayState(snap, decision, latestReport ?? {}).value}；综合评分 ${fmt(snap.feature_fusion_score, 3)}。</p>
     <p>${escapeHtml(decision.explanation ?? "调度器未返回解释文本")}</p>
   `;
 }
@@ -1639,7 +1656,7 @@ function renderAuthoritativePreviewText(payload) {
     .map(([key, value]) => `${metricLabel(key)} ${pct(value ?? 0)}`)
     .join("、");
   const nodeLine = selectedNode
-    ? `节点状态：${decision.node_id} 位于 ${displayRegion(selectedNode.region)}，在线 ${selectedNode.online ? "是" : "否"}，可靠性 ${pct(selectedNode.reliability_score ?? 0)}，健康度 ${pct(selectedNode.health_score ?? 0)}，剩余资源 CPU ${fmt(available.cpu ?? 0, 0)} 核 / 内存 ${fmt(available.memory ?? 0, 0)} GB / GPU ${fmt(available.gpu ?? 0, 0)} / 存储 ${fmt(available.storage ?? 0, 0)} GB。`
+    ? `节点状态：${decision.node_id} 位于 ${displayRegion(selectedNode.service_region ?? selectedNode.location ?? selectedNode.region)}，所在地 ${displayRegion(selectedNode.location ?? selectedNode.region)}，物理接入 ${displayRegion(selectedNode.region)}，在线 ${selectedNode.online ? "是" : "否"}，可靠性 ${pct(selectedNode.reliability_score ?? 0)}，健康度 ${pct(selectedNode.health_score ?? 0)}，剩余资源 CPU ${fmt(available.cpu ?? 0, 0)} 核 / 内存 ${fmt(available.memory ?? 0, 0)} GB / GPU ${fmt(available.gpu ?? 0, 0)} / 存储 ${fmt(available.storage ?? 0, 0)} GB。`
     : `节点状态：${decision.node_id} 为本轮控制面返回的候选最优节点。`;
   return [
     `已生成推荐：任务 ${task.task_id ?? decision.task_id ?? "-"} 推荐下发到 ${decision.node_id}。`,
@@ -1650,7 +1667,7 @@ function renderAuthoritativePreviewText(payload) {
     `推荐依据：${reason}`,
     `综合评分：${fmt(decision.total_score ?? 0, 3)}；优势维度：${topScores || "暂无维度明细"}；任务自适应权重：${weightLine || "暂无权重明细"}。`,
     `网络预测：稳定时延 ${fmt(snap.deterministic_latency_ms ?? snap.stable_latency_ms, 1)} ms，原始时延 ${fmt(snap.raw_latency_ms, 1)} ms，保证带宽 ${fmt(snap.guaranteed_bandwidth_mbps, 0)} Mbps，交付概率 ${pct(snap.delivery_probability ?? 0)}，确定性置信度 ${pct(snap.deterministic_confidence ?? 0)}。`,
-    `融合特征：LSTM ${pct(features.latency_history ?? 0)}，抖动 ${pct(features.jitter ?? 0)}，节点负载 ${pct(features.node_load ?? 0)}，带宽 ${pct(features.bandwidth_utilization ?? 0)}，拓扑参考 ${pct(features.gnn_topology ?? 0)}，融合分 ${fmt(snap.feature_fusion_score, 3)}。`
+    `融合特征：LSTM ${pct(features.latency_history ?? 0)}，抖动 ${pct(features.jitter ?? 0)}，节点负载 ${pct(features.node_load ?? 0)}，带宽 ${pct(features.bandwidth_utilization ?? 0)}，GNN 稳定性 ${gnnDisplayState(snap, decision, latestReport ?? {}).value}，融合分 ${fmt(snap.feature_fusion_score, 3)}。`
   ].join("\n");
 }
 
@@ -1761,12 +1778,12 @@ function renderModel(report) {
   const snap = decision?.network_snapshot ?? {};
   const pred = snap.model_prediction ?? runtime.latest_prediction ?? {};
   const task = activeTask();
-  const gnn = gnnDisplayState(snap);
+  const gnn = gnnDisplayState(snap, decision, report);
   document.getElementById("modelStatus").textContent = runtime.status ?? "unknown";
   const items = [
     ["运行状态", runtime.status ?? "unknown", runtime.detail ?? "等待模型接口"],
     ["LSTM 预测", pred.lstm_latency_ms !== undefined ? `${fmt(pred.lstm_latency_ms, 1)} ms` : "等待调度", "预测下一时刻链路时延"],
-    ["拓扑参考", gnn.value, gnn.detail],
+    ["GNN 拓扑稳定性", gnn.value, gnn.detail],
     ["确定性结果", snap.deterministic_latency_ms !== undefined ? `${fmt(snap.deterministic_latency_ms, 1)} ms` : "等待调度", decision ? `选择 ${decision.node_id}` : "未产生节点-路径决策"],
     ["当前任务", task?.task_id ?? "暂无", task ? `${task.task_type ?? "任务"}，${demandText(task.demand)}` : "预演/下发后显示"]
   ];
@@ -1837,7 +1854,7 @@ function renderTopology(report) {
       <text x="${cx}" y="${cy + 15}" text-anchor="middle" fill="#8aa4b8" font-size="12">用户意图</text>
       <text x="26" y="36" fill="#8aa4b8" font-size="13">当前选择：${escapeHtml(selected ?? "等待决策")}</text>
       <text x="26" y="58" fill="#8aa4b8" font-size="13">确定性时延：${snap.deterministic_latency_ms !== undefined ? `${fmt(snap.deterministic_latency_ms, 1)} ms` : "暂无"}</text>
-      <text x="26" y="80" fill="#8aa4b8" font-size="13">拓扑参考：${pct(snap.fusion_features?.gnn_topology ?? 0)}</text>
+      <text x="26" y="80" fill="#8aa4b8" font-size="13">GNN 稳定性：${escapeHtml(gnnDisplayState(snap, decision, report).value)}</text>
     </svg>`;
 }
 
@@ -1851,7 +1868,7 @@ function renderDecisions(report) {
   document.getElementById("decisionPanel").innerHTML = entries.length ? entries.map((entry) => {
     const decision = entry.decision;
     const snap = decision?.network_snapshot ?? {};
-    const gnn = gnnDisplayState(snap);
+    const gnn = gnnDisplayState(snap, decision, report);
     const taskId = entry.task?.task_id ?? decision?.task_id ?? "-";
     const nodeText = decision ? ` -> ${decision.node_id}` : " -> 无候选";
     return `<div class="decision-item">
@@ -1875,7 +1892,7 @@ function renderNodes(report) {
     const latency = Number(path.latency_ms ?? 0);
     const stable = stableLatencyOf(node);
     return `<div class="node-item ${active ? "active" : ""}">
-      <div><b>${escapeHtml(node.node_id)}</b><div class="node-meta">${displayRegion(node.region)} · 健康 ${pct(node.health_score ?? 0)} · 可靠 ${pct(node.reliability_score ?? 0)}</div></div>
+      <div><b>${escapeHtml(node.node_id)}</b><div class="node-meta">${displayRegion(node.service_region ?? node.location ?? node.region)} · 所在地 ${displayRegion(node.location ?? node.region)} · 接入 ${displayRegion(node.region)} · 健康 ${pct(node.health_score ?? 0)} · 可靠 ${pct(node.reliability_score ?? 0)}</div></div>
       <span class="badge">${active ? "已选择" : (node.online ? "在线" : "离线")}</span>
       <div class="mini-stat-grid" style="grid-column:1/-1">
         <div class="mini-stat"><label>原始时延</label><b>${fmt(latency, 1)} ms</b></div>
@@ -2265,7 +2282,7 @@ function renderTopology(report) {
     ["确定性时延", snap.deterministic_latency_ms !== undefined ? `${fmt(snap.deterministic_latency_ms, 1)} ms` : "暂无"],
     ["原始时延", snap.raw_latency_ms !== undefined ? `${fmt(snap.raw_latency_ms, 1)} ms` : "暂无"],
     ["融合评分", snap.feature_fusion_score !== undefined ? fmt(snap.feature_fusion_score, 3) : "暂无"],
-    ["拓扑参考", pct(snap.fusion_features?.gnn_topology ?? snap.model_prediction?.gnn_stability_score ?? 0)],
+    ["GNN 拓扑稳定性", gnnDisplayState(snap, decision, report).value],
   ];
   const detailSvg = detailRows.map(([label, value], index) => {
     const y = 430 + index * 19;
@@ -2318,8 +2335,20 @@ function renderTopology(report) {
 
 
 function cnRegion(region) {
-  const map = { shanghai: "上海", beijing: "北京", hangzhou: "杭州", shenzhen: "深圳", guangzhou: "广州", unknown: "未知区域" };
+  const map = { east: "东部区域", west: "西部区域", south: "华南区域", shanghai: "上海", beijing: "北京", hangzhou: "杭州", chengdu: "成都", shenzhen: "深圳", guangzhou: "广州", chongqing: "重庆", dc1: "DC1", dc2: "DC2", dc3: "DC3", unknown: "未知区域" };
   return map[String(region ?? "unknown").toLowerCase()] || String(region ?? "未知区域");
+}
+
+function topoLocation(node) {
+  return node?.location ?? node?.region ?? "unknown";
+}
+
+function topoServiceRegion(node) {
+  return node?.service_region ?? topoLocation(node);
+}
+
+function topoAttachments(group) {
+  return (group?.attachments ?? [group?.site ?? "unknown"]).map(cnRegion).join("/");
 }
 
 function cnResource(key) {
@@ -2375,17 +2404,20 @@ function topoResourceChip(node, key) {
 
 function topoGroups(report, selectedNode) {
   const nodes = report.nodes ?? [];
-  const regions = Array.from(new Set(nodes.map((node) => node.region || "unknown"))).sort((a, b) => {
-    if (a === selectedNode?.region) return -1;
-    if (b === selectedNode?.region) return 1;
+  const regions = Array.from(new Set(nodes.map((node) => topoServiceRegion(node)))).sort((a, b) => {
+    if (a === topoServiceRegion(selectedNode)) return -1;
+    if (b === topoServiceRegion(selectedNode)) return 1;
     return cnRegion(a).localeCompare(cnRegion(b), "zh-CN");
   });
   return regions.map((region) => {
-    const groupNodes = nodes.filter((node) => (node.region || "unknown") === region);
+    const groupNodes = nodes.filter((node) => topoServiceRegion(node) === region);
     const avg = (selector) => groupNodes.reduce((sum, node) => sum + Number(selector(node) ?? 0), 0) / Math.max(1, groupNodes.length);
     const running = groupNodes.reduce((sum, node) => sum + (node.running_tasks?.length ?? 0), 0);
     return {
       region,
+      site: groupNodes[0]?.region ?? "unknown",
+      attachments: Array.from(new Set(groupNodes.map((node) => node.region ?? "unknown"))),
+      locations: Array.from(new Set(groupNodes.map((node) => topoLocation(node)))),
       nodes: groupNodes.slice().sort((a, b) => {
         if (a.node_id === selectedNode?.node_id) return -1;
         if (b.node_id === selectedNode?.node_id) return 1;
@@ -2416,18 +2448,21 @@ function topoSourceRegion(decision, selectedNode) {
   return entries[0][0];
 }
 
-function topoPathSummary(decision, selectedNode, sourceRegion) {
+function topoPathSummary(decision, selectedNode, sourceRegion, report = {}) {
   const task = activeTask();
   const snap = decision?.network_snapshot ?? {};
+  const gnn = gnnDisplayState(snap, decision, report);
   const rows = [
     ["当前任务", decision?.task_id ?? task?.task_id ?? "等待决策"],
-    ["入口区域", cnRegion(sourceRegion)],
+    ["数据源接入点", cnRegion(sourceRegion)],
     ["目标节点", selectedNode?.node_id ?? "等待选择"],
-    ["目标区域", selectedNode?.region ? cnRegion(selectedNode.region) : "待定"],
+    ["目标部署大区", selectedNode ? cnRegion(topoServiceRegion(selectedNode)) : "待定"],
+    ["目标节点所在地", selectedNode ? cnRegion(topoLocation(selectedNode)) : "待定"],
+    ["物理接入点", selectedNode?.region ? cnRegion(selectedNode.region) : "待定"],
     ["确定性时延", snap.deterministic_latency_ms !== undefined ? `${fmt(snap.deterministic_latency_ms, 1)} ms` : "暂无"],
     ["原始时延", snap.raw_latency_ms !== undefined ? `${fmt(snap.raw_latency_ms, 1)} ms` : "暂无"],
     ["融合评分", snap.feature_fusion_score !== undefined ? fmt(snap.feature_fusion_score, 3) : "暂无"],
-    ["拓扑参考", pct(snap.fusion_features?.gnn_topology ?? snap.model_prediction?.gnn_stability_score ?? 0)],
+    ["GNN 拓扑稳定性", gnn.value],
   ];
   return `<div class="path-summary">
     <h3>当前调度路径</h3>
@@ -2435,23 +2470,23 @@ function topoPathSummary(decision, selectedNode, sourceRegion) {
   </div>`;
 }
 
-function topoFlowRail(decision, selectedNode, sourceRegion) {
+function topoFlowRail(decision, selectedNode, sourceRegion, report) {
   const snap = decision?.network_snapshot ?? {};
   return `<aside class="flow-rail">
     <div class="flow-layers">
-      <div class="flow-card"><label>L0 用户意图</label><strong>${escapeHtml(cnRegion(sourceRegion))}</strong><p>任务入口、数据源或用户所在区域。</p></div>
+      <div class="flow-card"><label>L0 用户意图</label><strong>${escapeHtml(cnRegion(sourceRegion))}</strong><p>任务入口的数据源物理接入点。</p></div>
       <div class="flow-card"><label>L1 Hermes 解析</label><strong>自然语言意图</strong><p>解析任务类型、资源需求、SLA 与时延约束。</p></div>
       <div class="flow-card active"><label>L2 天钧控制面</label><strong>节点-路径联合调度</strong><p>LSTM 预测时延，GNN 评估拓扑稳定性，四特征融合生成评分。</p></div>
       <div class="flow-card"><label>L3 骨干路径</label><strong>${snap.guaranteed_bandwidth_mbps !== undefined ? `${fmt(snap.guaranteed_bandwidth_mbps, 1)} Mbps` : "等待链路数据"}</strong><p>关注带宽、丢包、抖动和确定性时延。</p></div>
-      <div class="flow-card ${selectedNode ? "active" : ""}"><label>L4 区域汇聚</label><strong>${selectedNode?.region ? cnRegion(selectedNode.region) : "等待选择"}</strong><p>L5 节点池嵌入在区域汇聚中，双击区域进入节点池。</p></div>
+      <div class="flow-card ${selectedNode ? "active" : ""}"><label>L4 目标部署大区</label><strong>${selectedNode ? cnRegion(topoServiceRegion(selectedNode)) : "等待选择"}</strong><p>${selectedNode ? `城市 ${cnRegion(topoLocation(selectedNode))}；物理接入 ${cnRegion(selectedNode.region)}；` : ""}双击大区进入节点池。</p></div>
     </div>
-    ${topoPathSummary(decision, selectedNode, sourceRegion)}
+    ${topoPathSummary(decision, selectedNode, sourceRegion, report)}
   </aside>`;
 }
 
 function topoOverview(report, groups, selectedNode) {
   const cards = groups.map((group) => {
-    const selected = group.region === selectedNode?.region;
+    const selected = group.region === topoServiceRegion(selectedNode);
     return `<article class="region-card ${selected ? "selected" : ""}" data-region="${escapeHtml(group.region)}">
       <h4>${escapeHtml(cnRegion(group.region))}汇聚</h4>
       <p>${group.count} 个节点，${group.running} 个运行任务。双击进入该区域节点池。</p>
@@ -2479,7 +2514,7 @@ function topoRegion(report, group, selectedNode) {
     const path = nodePrimaryPath(node);
     return `<article class="drill-node-card ${selected ? "selected" : ""}" data-node="${escapeHtml(node.node_id)}">
       <h4>${escapeHtml(node.node_id)}</h4>
-      <p>${escapeHtml(cnRegion(node.region))} · ${node.online ? "在线" : "离线"} · 心跳 ${fmt(node.last_heartbeat_age ?? 0, 1)}s</p>
+      <p>大区：${escapeHtml(cnRegion(topoServiceRegion(node)))} · 所在地：${escapeHtml(cnRegion(topoLocation(node)))} · 接入 ${escapeHtml(cnRegion(node.region))} · ${node.online ? "在线" : "离线"} · 心跳 ${fmt(node.last_heartbeat_age ?? 0, 1)}s</p>
       <div class="node-stats-row">
         <div class="stat-tile"><span>稳定时延</span><b>${fmt(stableLatencyOf(node), 1)}ms</b></div>
         <div class="stat-tile"><span>抖动</span><b>${fmt(path.jitter_ms ?? 0, 1)}ms</b></div>
@@ -2518,7 +2553,7 @@ function topoNodeDetail(report, node) {
       <div>
         <span class="panel-kicker">Node Detail</span>
         <h3>${escapeHtml(node.node_id)}</h3>
-        <p>${escapeHtml(cnRegion(node.region))} · ${node.online ? "在线" : "离线"} · 健康 ${pct(node.health_score ?? 0)} · 可靠 ${pct(node.reliability_score ?? node.base_reliability ?? 0)}</p>
+        <p>部署大区：${escapeHtml(cnRegion(topoServiceRegion(node)))} · 所在地：${escapeHtml(cnRegion(topoLocation(node)))} · 物理接入 ${escapeHtml(cnRegion(node.region))} · ${node.online ? "在线" : "离线"} · 健康 ${pct(node.health_score ?? 0)} · 可靠 ${pct(node.reliability_score ?? node.base_reliability ?? 0)}</p>
       </div>
       <span class="topology-mode">节点详情</span>
     </div>
@@ -2603,7 +2638,7 @@ function renderTopology(report) {
       <div class="topology-actions">${backButton}<span class="topology-mode">${escapeHtml(state.mode)}</span></div>
     </div>
     <div class="topology-workbench">
-      ${topoFlowRail(decision, selectedNode, sourceRegion)}
+      ${topoFlowRail(decision, selectedNode, sourceRegion, report)}
       ${activePanel}
     </div>
   </div>`;
@@ -2678,7 +2713,7 @@ function topoMetricBadges(metrics) {
 
 function topoOverview(report, groups, selectedNode) {
   const sourceRegion = topoSourceRegion(activeDecision(report), selectedNode);
-  const selectedRegion = selectedNode?.region;
+  const selectedRegion = topoServiceRegion(selectedNode);
   const metrics = topoDecisionMetrics(report, selectedNode);
   const width = 820;
   const height = 492;
@@ -2840,7 +2875,7 @@ function safeNodeDots(group, x, y, selectedNode) {
 
 function topoOverview(report, groups, selectedNode) {
   const sourceRegion = topoSourceRegion(activeDecision(report), selectedNode);
-  const selectedRegion = selectedNode?.region;
+  const selectedRegion = topoServiceRegion(selectedNode);
   const metrics = topoDecisionMetrics(report, selectedNode);
   const width = 1040;
   const height = 640;
@@ -2974,7 +3009,7 @@ function safeMetricPanel(metrics, y = 512) {
 
 function topoOverview(report, groups, selectedNode) {
   const sourceRegion = topoSourceRegion(activeDecision(report), selectedNode);
-  const selectedRegion = selectedNode?.region;
+  const selectedRegion = topoServiceRegion(selectedNode);
   const metrics = topoDecisionMetrics(report, selectedNode);
   const width = 1040;
   const user = { x: 110, y: 286 };
@@ -2997,7 +3032,7 @@ function topoOverview(report, groups, selectedNode) {
         <rect class="topo-shell" x="${x - 92}" y="${y - 48}" width="184" height="96" rx="26" fill="${selected ? "rgba(95,216,255,.15)" : "rgba(7,19,29,.88)"}" stroke="${color}" stroke-width="${selected ? 3 : 1.7}" />
         <text x="${x}" y="${y - 21}" text-anchor="middle" fill="#eef8ff" font-size="15" font-weight="900">${escapeHtml(cnRegion(group.region))}汇聚</text>
         ${safeNodeDots(group, x, y - 1, selectedNode)}
-        <text x="${x}" y="${y + 38}" text-anchor="middle" fill="#8aa4b8" font-size="9.5">${group.count}节点 · 健康${pct(group.avgHealth, 0)} · 占用${pct(group.avgLoad, 0)}</text>
+        <text x="${x}" y="${y + 38}" text-anchor="middle" fill="#8aa4b8" font-size="9.5">${group.count}节点 · 接入${escapeHtml(topoAttachments(group))} · 健康${pct(group.avgHealth, 0)}</text>
       </g>`;
   }).join("");
   return `<section class="aggregation-panel">
@@ -3006,7 +3041,7 @@ function topoOverview(report, groups, selectedNode) {
       <span class="topology-mode">总览</span>
     </div>
     <div class="visual-topology no-overlap scroll-safe">
-      <div class="topo-legend"><span>亮色链路=当前路径</span><span>点阵=区域节点池</span><span>上下滚动查看完整拓扑</span></div>
+      <div class="topo-legend"><span>亮色链路=当前路径</span><span>大区=Hermes 可选部署区域</span><span>城市=仿真部署标签</span><span>DC1/DC2/DC3=物理接入点</span></div>
       <svg viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img" aria-label="可滚动防重叠区域拓扑">
         <defs><radialGradient id="safeGlow2"><stop offset="0%" stop-color="#5fd8ff" stop-opacity=".24"/><stop offset="100%" stop-color="#5fd8ff" stop-opacity="0"/></radialGradient></defs>
         <circle cx="${backbone.x}" cy="${backbone.y}" r="88" fill="url(#safeGlow2)" />
@@ -3052,7 +3087,7 @@ function topoRegion(report, group, selectedNode) {
         <rect class="topo-shell" x="${x - 74}" y="${y - 34}" width="148" height="68" rx="20" fill="${selected ? "rgba(95,216,255,.16)" : "rgba(7,19,29,.88)"}" stroke="${color}" stroke-width="${selected ? 2.8 : 1.5}" />
         <circle cx="${x - 53}" cy="${y - 7}" r="5.2" fill="${color}" />
         <text x="${x - 41}" y="${y - 3}" fill="#eef8ff" font-size="11" font-weight="900">${escapeHtml(compactText(node.node_id, 15))}</text>
-        <text x="${x - 53}" y="${y + 16}" fill="#8aa4b8" font-size="10">${fmt(stableLatencyOf(node), 1)}ms · 抖动${fmt(path.jitter_ms ?? 0, 1)}ms</text>
+        <text x="${x - 53}" y="${y + 16}" fill="#8aa4b8" font-size="10">${escapeHtml(cnRegion(topoLocation(node)))} · 接入${escapeHtml(cnRegion(node.region))} · ${fmt(stableLatencyOf(node), 1)}ms</text>
       </g>`;
   }).join("");
   return `<section class="aggregation-panel">
@@ -3060,7 +3095,7 @@ function topoRegion(report, group, selectedNode) {
       <div>
         <span class="panel-kicker">L4 / ${escapeHtml(cnRegion(group.region))}</span>
         <h3>${escapeHtml(cnRegion(group.region))}节点拓扑</h3>
-        <p>节点过多时画布会自动增高，可向下滚动查看全部节点与底部指标。</p>
+        <p>该大区包含城市标签 ${escapeHtml(group.locations.map(cnRegion).join("、"))}，物理接入 ${escapeHtml(topoAttachments(group))}；可向下滚动查看全部节点与底部指标。</p>
       </div>
       <span class="topology-mode">区域下钻</span>
     </div>
@@ -3072,7 +3107,7 @@ function topoRegion(report, group, selectedNode) {
         <g>
           <circle cx="${center.x}" cy="${center.y}" r="68" fill="rgba(7,19,29,.95)" stroke="#5fd8ff" stroke-width="3" />
           <text x="${center.x}" y="${center.y - 10}" text-anchor="middle" fill="#eef8ff" font-size="16" font-weight="900">${escapeHtml(cnRegion(group.region))}汇聚</text>
-          <text x="${center.x}" y="${center.y + 14}" text-anchor="middle" fill="#8aa4b8" font-size="10">${group.count}节点 · 健康${pct(group.avgHealth, 0)}</text>
+          <text x="${center.x}" y="${center.y + 14}" text-anchor="middle" fill="#8aa4b8" font-size="10">${group.count}节点 · 接入${escapeHtml(topoAttachments(group))}</text>
         </g>
         ${nodeSvg}
         ${safeMetricPanel(metrics, metricY)}
