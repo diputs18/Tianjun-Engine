@@ -152,7 +152,7 @@ button:hover { transform: translateY(-1px); border-color: var(--cyan); }
   min-height: 0;
   height: auto;
 }
-.hermes-console { padding: 22px; min-height: 820px; height: auto; overflow: hidden; display: flex; flex-direction: column; }
+.hermes-console { padding: 22px; min-height: 820px; max-height: calc(100vh - 80px); height: auto; overflow: hidden; display: flex; flex-direction: column; }
 .agent-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.42fr) minmax(360px, .58fr);
@@ -290,6 +290,19 @@ button:hover { transform: translateY(-1px); border-color: var(--cyan); }
 .tool-step.running { border-color: rgba(95,216,255,.55); background: rgba(95,216,255,.08); }
 .tool-step.done { border-color: rgba(111,241,178,.42); background: rgba(111,241,178,.07); }
 .tool-step.error { border-color: rgba(255,109,128,.45); background: rgba(255,109,128,.08); }
+.stream-steps { display: grid; gap: 5px; padding: 2px 0 6px; }
+.stream-step { display: grid; grid-template-columns: 20px 1fr; gap: 9px; align-items: center; padding: 6px 10px; border-radius: 10px; border: 1px solid transparent; transition: background .2s, border-color .2s; }
+.stream-step.pending { color: var(--faint); }
+.stream-step.running { border-color: rgba(95,216,255,.35); background: rgba(95,216,255,.06); color: var(--text); }
+.stream-step.done { border-color: rgba(111,241,178,.3); background: rgba(111,241,178,.05); color: var(--text); }
+.stream-step .step-icon { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; font-size: 9px; font-weight: 900; }
+.stream-step.pending .step-icon { border: 1.5px solid var(--faint); }
+.stream-step.running .step-icon { border: 1.5px solid var(--cyan); animation: stepPulse 1.4s ease-in-out infinite; color: var(--cyan); }
+.stream-step.done .step-icon { background: var(--green); color: #06121e; border: 1.5px solid var(--green); }
+.stream-step .step-body { display: flex; flex-direction: column; gap: 0; line-height: 1.35; }
+.stream-step .step-label { font-size: 12px; font-weight: 700; }
+.stream-step .step-desc { font-size: 11px; color: var(--muted); }
+@keyframes stepPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(95,216,255,.35); } 50% { box-shadow: 0 0 0 4px rgba(95,216,255,.08); } }
 .insight-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -334,7 +347,6 @@ button:hover { transform: translateY(-1px); border-color: var(--cyan); }
   flex-direction: column;
   gap: 12px;
   min-height: 0;
-  max-height: none;
   scrollbar-gutter: stable;
 }
 
@@ -1319,6 +1331,57 @@ function addMessage(role, html) {
   return node;
 }
 
+const STREAM_STEPS = [
+  { id: "understand", label: "需求理解", desc: "解析业务目标与约束" },
+  { id: "inventory", label: "库存核验", desc: "查询集群节点与资源状态" },
+  { id: "generate", label: "策略生成", desc: "生成算网调度策略" },
+  { id: "simulate", label: "仿真评估", desc: "验证策略可行性" },
+  { id: "reply", label: "生成回复", desc: "组装结论并输出" },
+];
+
+function renderStreamSteps() {
+  const rows = STREAM_STEPS.map(s => `
+    <div class="stream-step pending" data-step="${s.id}">
+      <div class="step-icon"></div>
+      <div class="step-body">
+        <span class="step-label">${escapeHtml(s.label)}</span>
+        <span class="step-desc">${escapeHtml(s.desc)}</span>
+      </div>
+    </div>
+  `).join("");
+  return `<details class="stream-steps-wrap" open><summary style="cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:4px;">智能体处理流程</summary><div class="stream-steps">${rows}</div></details>`;
+}
+
+function stepIdFromEvent(event) {
+  const type = event.type || "";
+  const tool = event.tool || "";
+  if (type === "llm_start" || type === "llm_done" || type === "llm_fallback") return "understand";
+  if (type === "tool_start" || type === "tool_done" || type === "tool_result") {
+    if (tool === "get_cluster_state") return "inventory";
+    if (tool.includes("requirement_dialogue")) return "understand";
+    if (tool === "draft_compute_network_policy" || tool === "optimize_policy_from_feedback") return "generate";
+    if (tool === "simulate_policy") return "simulate";
+  }
+  if (type === "assistant_delta") return "reply";
+  return null;
+}
+
+function updateStreamStep(container, stepId, status, detail) {
+  const step = container.querySelector(`[data-step="${stepId}"]`);
+  if (!step) return;
+  step.className = `stream-step ${status}`;
+  const icon = step.querySelector(".step-icon");
+  const desc = step.querySelector(".step-desc");
+  if (status === "done") icon.innerHTML = "&#10003;";
+  else if (status === "running") icon.textContent = "&#9679;";
+  else icon.textContent = "";
+  if (detail) desc.textContent = detail;
+}
+
+function finishAllStreamSteps(container) {
+  STREAM_STEPS.forEach(s => updateStreamStep(container, s.id, "done", null));
+}
+
 function toolStageForName(name) {
   const map = {
     analyze_user_intent: "需求理解",
@@ -1906,7 +1969,7 @@ async function askHermesStreamingActual() {
   const log = document.getElementById("chatLog");
   const node = document.createElement("div");
   node.className = "message assistant";
-  node.innerHTML = `<b>天钧智能体</b><div class="stream-content"><p>正在连接智能体事件流...</p></div>`;
+  node.innerHTML = `<b>天钧智能体</b><div class="stream-content">${renderStreamSteps()}</div>`;
   log.appendChild(node);
   log.scrollTop = log.scrollHeight;
   const content = node.querySelector(".stream-content");
@@ -1946,6 +2009,10 @@ async function askHermesStreamingActual() {
         if (!line) continue;
         const payload = JSON.parse(line.slice(5).trim());
         if (payload.type === "assistant_delta") {
+          if (!fullText) {
+            ["understand", "inventory", "generate", "simulate"].forEach(id => updateStreamStep(content, id, "done", null));
+            updateStreamStep(content, "reply", "running", null);
+          }
           fullText += payload.delta || "";
           content.innerHTML = renderPlainText(fullText);
           log.scrollTop = log.scrollHeight;
@@ -1956,14 +2023,23 @@ async function askHermesStreamingActual() {
         } else if (payload.type === "llm_start") {
           const status = document.getElementById("toolTraceStatus");
           if (status) status.textContent = "LLM 正在辅助理解需求";
+          updateStreamStep(content, "understand", "running", "LLM 辅助解析中");
         } else if (payload.type === "llm_done") {
           const status = document.getElementById("toolTraceStatus");
           if (status) status.textContent = "LLM 槽位理解完成";
+          updateStreamStep(content, "understand", "done", "槽位理解完成");
         } else if (payload.type === "llm_fallback") {
           const status = document.getElementById("toolTraceStatus");
           if (status) status.textContent = "LLM 降级为本地规则";
+          updateStreamStep(content, "understand", "done", "已降级为本地规则");
         } else if (payload.type === "tool_start" || payload.type === "tool_done" || payload.type === "tool_result") {
           updateToolTrace(payload);
+          const sid = stepIdFromEvent(payload);
+          if (sid) {
+            const isStart = payload.type === "tool_start";
+            const detail = !isStart ? compactToolSummary(payload.summary || payload.label || "") : null;
+            updateStreamStep(content, sid, isStart ? "running" : "done", detail);
+          }
         } else if (payload.type === "artifacts") {
           const artifacts = payload.artifacts || {};
           if (artifacts.policy) {
@@ -1987,6 +2063,7 @@ async function askHermesStreamingActual() {
             if (result.artifacts?.policy) updateWorkspaceFromPolicy(result.artifacts.policy, result.artifacts.simulation || null);
             if (result.artifacts?.optimization?.policy) updateWorkspaceFromPolicy(result.artifacts.optimization.policy, result.artifacts.simulation || null);
           }
+          finishAllStreamSteps(content);
           streamDone = true;
           break;
         } else if (payload.type === "error") {

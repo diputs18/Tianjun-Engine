@@ -90,7 +90,6 @@ tianjun-optimize/
 │  ├─ tianjun.example.toml         # 服务、LLM、MCP、执行安全配置模板
 │  └─ sim_cluster.example.json     # 模拟节点、链路与工作负载画像
 ├─ data/trained_models/            # 已训练模型、manifest 和训练报告
-├─ html_dashboard/dashboard.html   # 保留的静态 Dashboard 页面版本
 └─ src/tianjun/
    ├─ application/                 # 中央控制面和应用组装
    ├─ chat/                        # Hermes 对话运行时与 SSE 工具轨迹
@@ -101,7 +100,8 @@ tianjun-optimize/
    ├─ ml/                          # 模型加载、预测与分布漂移保护
    ├─ tools/                       # Dashboard/Hermes/MCP 共用工具契约
    ├─ integrations/                # MCP 服务适配层
-   ├─ interfaces/                  # HTTP 服务与当前运行时 Dashboard 页面
+   ├─ interfaces/                  # HTTP 服务与 Dashboard 页面
+   │  └─ dashboard/static/         # Dashboard 静态页面唯一源
    ├─ simulation/                  # 配置驱动模拟节点运行时
    ├─ node_agent/                  # 轻量 Agent 与真实节点探测 Agent
    ├─ execution/                   # 执行器注册表和运行后端
@@ -111,7 +111,7 @@ tianjun-optimize/
    └─ config/                      # 配置、路径、dotenv 与本地密钥读取
 ```
 
-服务实际返回的 Dashboard 页面来自 `src/tianjun/interfaces/dashboard/page.py`；`html_dashboard/dashboard.html` 是项目中保留的静态页面资产，二者修改时应注意保持功能一致。
+Dashboard 静态页面唯一源文件位于 `src/tianjun/interfaces/dashboard/static/dashboard.html`，由 `page.py` 直接读取返回。不存在内嵌回退版本，修改时只需编辑该文件。
 
 ## 快速开始
 
