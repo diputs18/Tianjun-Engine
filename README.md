@@ -84,13 +84,12 @@ tianjun-optimize/
 ├─ main.py                         # 无需安装即可运行的 CLI 入口
 ├─ pyproject.toml                  # 包元数据、可选依赖和 console scripts
 ├─ requirements.txt                # 最小开发/验证依赖
-├─ start_tianjun.bat               # Windows 启动服务并打开 Dashboard
-├─ restart_tianjun.bat             # Windows 安全重启本项目监听的服务
+├─ start_tianjun.bat               # Windows 启动完整演示闭环并打开 Dashboard
+├─ restart_tianjun.bat             # Windows 安全重启控制面与模拟节点后端
 ├─ configs/
 │  ├─ tianjun.example.toml         # 服务、LLM、MCP、执行安全配置模板
 │  └─ sim_cluster.example.json     # 模拟节点、链路与工作负载画像
 ├─ data/trained_models/            # 已训练模型、manifest 和训练报告
-├─ html_dashboard/dashboard.html   # 保留的静态 Dashboard 页面版本
 └─ src/tianjun/
    ├─ application/                 # 中央控制面和应用组装
    ├─ chat/                        # Hermes 对话运行时与 SSE 工具轨迹
@@ -101,7 +100,8 @@ tianjun-optimize/
    ├─ ml/                          # 模型加载、预测与分布漂移保护
    ├─ tools/                       # Dashboard/Hermes/MCP 共用工具契约
    ├─ integrations/                # MCP 服务适配层
-   ├─ interfaces/                  # HTTP 服务与当前运行时 Dashboard 页面
+   ├─ interfaces/                  # HTTP 服务与 Dashboard 页面
+   │  └─ dashboard/static/         # Dashboard 静态页面唯一源
    ├─ simulation/                  # 配置驱动模拟节点运行时
    ├─ node_agent/                  # 轻量 Agent 与真实节点探测 Agent
    ├─ execution/                   # 执行器注册表和运行后端
@@ -111,7 +111,7 @@ tianjun-optimize/
    └─ config/                      # 配置、路径、dotenv 与本地密钥读取
 ```
 
-服务实际返回的 Dashboard 页面来自 `src/tianjun/interfaces/dashboard/page.py`；`html_dashboard/dashboard.html` 是项目中保留的静态页面资产，二者修改时应注意保持功能一致。
+Dashboard 静态页面唯一源文件位于 `src/tianjun/interfaces/dashboard/static/dashboard.html`，由 `page.py` 直接读取返回。不存在内嵌回退版本，修改时只需编辑该文件。
 
 ## 快速开始
 
@@ -122,38 +122,41 @@ tianjun-optimize/
 - 仅运行控制面和确定性调度时不要求安装 PyTorch 或 FastMCP。
 - 使用 DeepSeek/Hermes LLM 辅助时需要自行准备 API key，且禁止将 key 提交到 GitHub。
 
-### 安装
+### 安装完整运行依赖
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install -e ".[ml-runtime,mcp]"
 ```
 
-按需安装可选能力：
+如果只需要最小控制面，也可以安装基础包；开发验证再额外安装 `dev`：
 
 ```powershell
-# MCP 服务
-python -m pip install -e ".[mcp]"
-
-# LSTM / GraphSAGE 推理
-python -m pip install -e ".[ml-runtime]"
+# 最小运行，不包含 PyTorch 模型增强和 MCP
+python -m pip install -e .
 
 # 开发验证
 python -m pip install -e ".[dev]"
 ```
 
-### 方式一：离线启动控制面与仿真节点
+### 完整启动：Hermes + 模型增强 + Dashboard + 模拟节点
 
-该方式不调用 LLM，最适合第一次验证 Dashboard 与调度闭环。第一个终端启动控制面：
+示例配置默认连接 OpenAI-compatible 的 DeepSeek 接口。推荐使用内置密钥命令写入用户配置目录；`${TIANJUN_CONFIG_DIR}` 默认解析到用户配置目录（Windows 通常为 `%APPDATA%\Tianjun`），不会落入仓库：
+
+```powershell
+python -B main.py secrets --config configs\tianjun.example.toml set deepseek --api-key "your_api_key_here"
+python -B main.py llm-check --config configs\tianjun.example.toml
+```
+
+第一个终端启动控制面。完整模式不要加 `--offline`：
 
 ```powershell
 python -B main.py serve `
   --config configs\tianjun.example.toml `
   --inventory configs\sim_cluster.example.json `
   --default-execution-mode simulation `
-  --offline `
   --host 127.0.0.1 `
   --port 8024
 ```
@@ -173,36 +176,50 @@ python -B main.py sim-backend `
 http://127.0.0.1:8024/dashboard
 ```
 
-### 方式二：启用 Hermes 的 LLM 辅助
+Windows 下也可在配置好 API key 后双击 `start_tianjun.bat`。该脚本会先执行 LLM 连接检查，再启动控制面、模拟节点后端并打开 Dashboard。`restart_tianjun.bat` 会停止符合当前命令特征的 Tianjun 控制面与模拟后端后重新启动完整闭环。
 
-示例配置默认连接 OpenAI-compatible 的 DeepSeek 接口。可以将密钥放在已被 `.gitignore` 排除的项目根目录 `.env` 中：
+完整启动后可用健康检查确认能力：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8024/health
+Invoke-RestMethod http://127.0.0.1:8024/report
+```
+
+期望状态：
+
+- `/health` 中 `chat_runtime.llm.enabled` 为 `true`。
+- `/health` 中 `model_runtime.status` 为 `loaded`，并加载 `lstm`、`gnn`。
+- `/report` 中出现示例库存的 16 个模拟节点。
+
+### 启动参数说明
+
+常用参数：
+
+- `--offline`：禁用 LLM，用于无 API key 或纯本地调试；Dashboard、确定性调度和模拟后端仍可运行。
+- `--inventory configs\sim_cluster.example.json`：加载示例模拟库存配置，但控制面不会直接注册节点，节点仍由 `sim-backend` 或外部系统上报。
+- `--default-execution-mode simulation`：聊天或策略生成任务未显式指定执行载荷时，默认使用模拟执行模式。
+- `--host` / `--port`：控制 HTTP 服务监听地址，默认示例使用 `127.0.0.1:8024`。
+- `--state-db path\to\state.db`：启用 SQLite 持久化控制面状态。
+- `--model-dir data\trained_models`：指定 LSTM / GraphSAGE 模型资产目录；未安装 `torch` 时会自动降级为确定性调度。
+
+不使用 DeepSeek 密钥命令时，也可以将密钥放在已被 `.gitignore` 排除的项目根目录 `.env` 中：
 
 ```dotenv
 DEEPSEEK_API_KEY=your_api_key_here
 ```
 
-先检查连接，再启动服务：
-
-```powershell
-python -B main.py llm-check --config configs\tianjun.example.toml
-python -B main.py serve --config configs\tianjun.example.toml --inventory configs\sim_cluster.example.json --default-execution-mode simulation
-```
-
-Windows 下也可在配置好 API key 后双击 `start_tianjun.bat`。该脚本会先执行 LLM 连接检查，再启动服务并打开浏览器。脚本只启动控制面；如需出现模拟在线节点，仍需另行启动 `sim-backend` 或 CloudSimPlus。`restart_tianjun.bat` 只会停止符合当前命令特征、占用 `8024` 端口的 Tianjun 服务后重新启动。
-
-也可使用内置密钥命令。`${TIANJUN_CONFIG_DIR}` 默认解析到用户配置目录（Windows 通常为 `%APPDATA%\Tianjun`），不会落入仓库：
-
-```powershell
-python -B main.py secrets --config configs\tianjun.example.toml set deepseek --api-key "your_api_key_here"
-```
-
 > 安全提示：禁止把真实 API key 写入 `configs/tianjun.example.toml` 或其他将提交到 GitHub 的文件。若团队修改 `TIANJUN_CONFIG_DIR` 将密钥目录指向仓库内路径，必须同时增加相应忽略规则。
 
-### 服务健康检查
+最小离线启动示例：
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8024/health
-Invoke-RestMethod http://127.0.0.1:8024/report
+python -B main.py serve `
+  --config configs\tianjun.example.toml `
+  --inventory configs\sim_cluster.example.json `
+  --default-execution-mode simulation `
+  --offline `
+  --host 127.0.0.1 `
+  --port 8024
 ```
 
 服务刚启动但模拟节点/外部 Agent 尚未注册时，报告中节点集合为空，这是预期行为。
