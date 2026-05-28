@@ -1,9 +1,10 @@
 {
   "models": {
     "graphsage_stability_model.pt": {
-      "sha256": "7c67d1efedba27341eacbf7675ae94bc41274a46230bd2a95172b685403de3c1",
+      "sha256": "5bc900f7af3d82cdcc857672bd8ed27c17c76cb8d1c42c51c3b03d22a003f265",
       "runtime_name": "gnn",
-      "source_upload_name": "graphsage_stability_model(1).pt"
+      "source_upload_name": "data/trained_models/dci_reference/graphsage_stability_model.pt",
+      "training_profile": "dci_reference_three_access_points"
     },
     "lstm_latency_model.pt": {
       "sha256": "d121d815a5eb607efd00b69e9a4958c4a5edbbcce29a26a31499e9714f81359d",

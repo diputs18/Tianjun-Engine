@@ -5,7 +5,7 @@ from statistics import mean
 from typing import Any, Iterable
 
 from ..ml.runtime import TrainedModelRuntime, get_default_model_runtime
-from ..domain import METRIC_KEYS, Node, PolicyState, SchedulingDecision, Task, clamp, normalize_weights
+from ..domain import METRIC_KEYS, Node, PhysicalTopology, PolicyState, SchedulingDecision, Task, clamp, normalize_weights
 
 
 class ClosedLoopAdaptiveScheduler:
@@ -17,21 +17,29 @@ class ClosedLoopAdaptiveScheduler:
         self.policy_state = policy_state
         self.model_runtime = model_runtime or get_default_model_runtime()
         self._deterministic_latency_state: dict[str, float] = {}
+        self.physical_topology: PhysicalTopology | None = None
+
+    def set_physical_topology(self, topology: PhysicalTopology | None) -> None:
+        self.physical_topology = topology
 
     def select_node(
         self,
         task: Task,
         nodes: Iterable[Node],
         current_tick: int,
+        *,
+        topology_nodes: Iterable[Node] | None = None,
     ) -> SchedulingDecision | None:
+        candidate_pool = list(nodes)
+        neighbor_pool = list(topology_nodes) if topology_nodes is not None else candidate_pool
         raw_metrics: dict[str, dict[str, float]] = {}
         candidate_details: dict[str, dict[str, Any]] = {}
         candidates: list[Node] = []
-        for node in nodes:
+        for node in candidate_pool:
             if not node.can_host_now(task):
                 continue
 
-            network_snapshot = self._network_snapshot(task, node)
+            network_snapshot = self._network_snapshot(task, node, neighbor_pool)
             if not self._network_feasible(task, network_snapshot):
                 continue
 
@@ -310,7 +318,7 @@ class ClosedLoopAdaptiveScheduler:
             f"融合评分 {fusion_score:.3f}，确定化置信度 {confidence:.3f}，因此被选为目标节点。"
         )
 
-    def _network_snapshot(self, task: Task, node: Node) -> dict[str, Any]:
+    def _network_snapshot(self, task: Task, node: Node, topology_nodes: list[Node]) -> dict[str, Any]:
         profile = node.path_profile_for(task.network_source())
         latency_history = profile.synthesized_latency_history_ms()
         latency_ewma = self._ewma(latency_history)
@@ -318,6 +326,32 @@ class ClosedLoopAdaptiveScheduler:
 
         node_load = node.dominant_utilization_after(task.demand)
         bandwidth_utilization = profile.bandwidth_utilization_estimate()
+        node_by_id = {candidate.node_id: candidate for candidate in topology_nodes}
+        neighbor_distances = (
+            self.physical_topology.compute_neighbor_distances(node.node_id, set(node_by_id))
+            if self.physical_topology is not None
+            else {}
+        )
+        neighbor_ids = sorted(neighbor_distances, key=lambda neighbor_id: (neighbor_distances[neighbor_id], neighbor_id))
+        selected_anchor = (
+            self.physical_topology.compute_attachments.get(node.node_id)
+            if self.physical_topology is not None
+            else None
+        )
+        direct_neighbor_ids = [
+            neighbor_id
+            for neighbor_id in neighbor_ids
+            if self.physical_topology is not None
+            and self.physical_topology.compute_attachments.get(neighbor_id) == selected_anchor
+        ]
+        neighbor_observations = [
+            (
+                node_by_id[neighbor_id],
+                node_by_id[neighbor_id].path_profile_for(task.network_source()),
+                neighbor_distances[neighbor_id],
+            )
+            for neighbor_id in neighbor_ids
+        ]
         model_prediction = self.model_runtime.predict(
             task=task,
             node=node,
@@ -325,6 +359,8 @@ class ClosedLoopAdaptiveScheduler:
             latency_history_ms=latency_history,
             node_load=node_load,
             bandwidth_utilization=bandwidth_utilization,
+            neighbor_observations=neighbor_observations,
+            topology_id=None if self.physical_topology is None else self.physical_topology.topology_id,
         )
         ewma_predicted_latency_ms = max(1.0, latency_ewma + (latency_trend * 0.25))
         if model_prediction.lstm_latency_ms is not None:
@@ -450,13 +486,36 @@ class ClosedLoopAdaptiveScheduler:
                 "gnn_topology": (
                     "GraphSAGE 输出因运行时特征超出训练分布而未参与评分；gnn_topology 使用中性兜底分，需接入同分布拓扑/调用链特征后再启用。"
                     if model_prediction.gnn_applicable is False
-                    else "GraphSAGE 模型已参与 gnn_topology 评分；当前邻居特征使用候选路径自嵌入兜底，后续可接入真实服务调用邻居。"
+                    else (
+                        "GraphSAGE 模型已参与 gnn_topology 评分；当前使用物理拓扑传播时延加权的仿真算力邻居特征。"
+                        if model_prediction.gnn_neighbor_mode == "physical_topology_distance_weighted_neighbors"
+                        else "GraphSAGE 模型已参与 gnn_topology 评分；未注册物理拓扑时使用候选路径自嵌入兜底。"
+                    )
                     if model_prediction.gnn_stability_score is not None
                     else "GraphSAGE 未加载，gnn_topology 使用中性兜底分；待接入模型文件和真实拓扑边特征。"
                 ),
             },
             "algorithm": "deterministic_fusion_with_optional_models",
             "active_model_features": active_model_features,
+            "physical_topology": {
+                "topology_id": None if self.physical_topology is None else self.physical_topology.topology_id,
+                "neighbor_mode": model_prediction.gnn_neighbor_mode,
+                "selected_node_id": node.node_id,
+                "selected_node_service_region": node.service_region or node.location or node.region,
+                "selected_node_location": node.location or node.region,
+                "selected_node_physical_region": node.region,
+                "selected_node_access_point": selected_anchor,
+                "source_location": task.network_source(),
+                "compute_neighbor_ids": neighbor_ids,
+                "topology_reachable_neighbor_count": len(neighbor_ids),
+                "direct_compute_neighbor_ids": direct_neighbor_ids,
+                "direct_compute_neighbor_count": len(direct_neighbor_ids),
+                "compute_neighbor_distance_ms": neighbor_distances,
+                "compute_neighbor_locations": {
+                    neighbor_id: node_by_id[neighbor_id].location or node_by_id[neighbor_id].region
+                    for neighbor_id in neighbor_ids
+                },
+            },
         }
 
     def _network_feasible(self, task: Task, network_snapshot: dict[str, Any]) -> bool:
@@ -488,10 +547,12 @@ class ClosedLoopAdaptiveScheduler:
         )
 
     def _security_raw(self, task: Task, node: Node, network_snapshot: dict[str, Any]) -> float:
-        region_allowed = not task.allowed_regions or node.region in task.allowed_regions
+        region_allowed = not task.allowed_regions or any(
+            node.matches_deployment_region(region) for region in task.allowed_regions
+        )
         data_residency_score = 1.0 if region_allowed else 0.0
         if task.data_region and task.security_level == "high":
-            data_residency_score = 1.0 if node.region == task.data_region else 0.35
+            data_residency_score = 1.0 if node.matches_deployment_region(task.data_region) else 0.35
 
         isolation_scores = {
             "none": 0.35,

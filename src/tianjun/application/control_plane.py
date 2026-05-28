@@ -8,7 +8,7 @@ from statistics import mean
 from typing import Any
 
 from ..core import ComputeNetworkPolicy, UserFeedback, UserRequirement
-from ..domain import ExecutionRecord, NetworkPathProfile, Node, PolicyAdjustment, PolicyState, RunningTask, SchedulingDecision, Task, TaskStatus, clamp
+from ..domain import ExecutionRecord, NetworkPathProfile, Node, PhysicalTopology, PolicyAdjustment, PolicyState, RunningTask, SchedulingDecision, Task, TaskStatus, clamp
 from ..policy.optimizer import PolicyOptimizer
 from ..policy.clarifier import ConversationTurn, RequirementSession, clarification_questions, session_status
 from ..policy.feedback import parse_feedback_instruction
@@ -86,6 +86,7 @@ class CentralControlPlane:
         self.policy_tasks: dict[str, Task] = {}
         self.user_feedback: list[UserFeedback] = []
         self.requirement_sessions: dict[str, RequirementSession] = {}
+        self.physical_topology: PhysicalTopology | None = None
 
         if self.state_store is not None:
             self._restore_from_store()
@@ -105,6 +106,15 @@ class CentralControlPlane:
             self._persist_node(node)
             return node.to_dict()
 
+    def register_topology(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self.lock:
+            topology = PhysicalTopology.from_dict(payload)
+            self.physical_topology = topology
+            self.scheduler.set_physical_topology(topology)
+            if self.state_store is not None:
+                self.state_store.set_control_value("physical_topology", topology.to_dict())
+            return topology.to_dict()
+
     def submit_task(self, task: Task) -> dict[str, Any]:
         with self.lock:
             if task.task_id in self.tasks:
@@ -118,7 +128,12 @@ class CentralControlPlane:
     def preview_task(self, task: Task) -> dict[str, Any] | None:
         with self.lock:
             self._expire_stale_nodes()
-            decision = self.scheduler.select_node(task, self.nodes.values(), current_tick=self.current_tick())
+            decision = self.scheduler.select_node(
+                task,
+                self.nodes.values(),
+                current_tick=self.current_tick(),
+                topology_nodes=self.nodes.values(),
+            )
             return None if decision is None else decision.to_dict()
 
     def schedule_pending_task(self, task_id: str) -> dict[str, Any]:
@@ -142,7 +157,12 @@ class CentralControlPlane:
                 raise ValueError(f"Task {task_id} is {task.status.value}, not pending.")
 
             tick = self.current_tick()
-            decision = self.scheduler.select_node(task, self.nodes.values(), current_tick=tick)
+            decision = self.scheduler.select_node(
+                task,
+                self.nodes.values(),
+                current_tick=tick,
+                topology_nodes=self.nodes.values(),
+            )
             if decision is None:
                 return {
                     "status": "rejected",
@@ -242,9 +262,10 @@ class CentralControlPlane:
         registered_regions: dict[str, int] = {}
         online_regions: dict[str, int] = {}
         for node in self.nodes.values():
-            registered_regions[node.region] = registered_regions.get(node.region, 0) + 1
+            service_region = node.service_region or node.location or node.region
+            registered_regions[service_region] = registered_regions.get(service_region, 0) + 1
             if node.online:
-                online_regions[node.region] = online_regions.get(node.region, 0) + 1
+                online_regions[service_region] = online_regions.get(service_region, 0) + 1
         payload["region_availability"] = {
             "requested_regions": requested_regions,
             "registered_regions": registered_regions,
@@ -394,6 +415,8 @@ class CentralControlPlane:
         reliability_score: float | None = None,
         cost_per_tick: float | None = None,
         region: str | None = None,
+        location: str | None = None,
+        service_region: str | None = None,
         labels: set[str] | None = None,
         performance_factors: dict[str, float] | None = None,
         network_paths: dict[str, dict[str, float]] | None = None,
@@ -411,6 +434,10 @@ class CentralControlPlane:
                 node.cost_per_tick = cost_per_tick
             if region is not None:
                 node.region = region
+            if location is not None:
+                node.location = location
+            if service_region is not None:
+                node.service_region = service_region
             if labels is not None:
                 node.labels = set(labels)
             if performance_factors is not None:
@@ -462,7 +489,12 @@ class CentralControlPlane:
                 if task.target_node_id and task.target_node_id != node_id:
                     continue
                 candidates = [self.nodes[task.target_node_id]] if task.target_node_id and task.target_node_id in self.nodes else list(self.nodes.values())
-                decision = self.scheduler.select_node(task, candidates, current_tick=tick)
+                decision = self.scheduler.select_node(
+                    task,
+                    candidates,
+                    current_tick=tick,
+                    topology_nodes=self.nodes.values(),
+                )
                 if decision is None or decision.node_id != node_id:
                     continue
 
@@ -693,6 +725,7 @@ class CentralControlPlane:
                     self._node_report_payload(node)
                     for node in self.nodes.values()
                 ],
+                "physical_topology": None if self.physical_topology is None else self.physical_topology.to_dict(),
                 "recent_decisions": [decision.to_dict() for decision in self.decision_log[-8:]],
                 "active_runs": self._active_runs_payload(),
                 "recent_progress_events": list(self.progress_events[-16:]),
@@ -745,7 +778,9 @@ class CentralControlPlane:
                     "bandwidth_utilization": "当前由带宽波动与丢包估计，后续需要接入交换机端口或云监控链路利用率。",
                     "security_policy": "安全维度已进入策略对象和调度评分；企业级身份、审计和密钥管理仍需后续接入。",
                     "gnn_topology_embedding": (
-                        "GraphSAGE 模型已参与 gnn_topology 评分；当前邻居特征使用自嵌入兜底，后续可接入真实服务调用邻居和节点资源特征。"
+                        "GraphSAGE 模型已参与 gnn_topology 评分；当前已按物理链路传播时延加权聚合仿真算力邻居特征。"
+                        if "gnn" in loaded_models and self.physical_topology is not None
+                        else "GraphSAGE 模型已参与 gnn_topology 评分；未注册物理拓扑时邻居特征使用自嵌入兜底。"
                         if "gnn" in loaded_models
                         else "GraphSAGE 模型未加载，gnn_topology 使用中性兜底分。"
                     ),
@@ -1003,6 +1038,11 @@ class CentralControlPlane:
         restored_weights = snapshot["control_state"].get("policy_weights")
         if restored_weights:
             self.policy_state.weights = restored_weights
+
+        restored_topology = snapshot["control_state"].get("physical_topology")
+        if restored_topology:
+            self.physical_topology = PhysicalTopology.from_dict(restored_topology)
+            self.scheduler.set_physical_topology(self.physical_topology)
 
         self.policy_state.adjustment_history = [
             PolicyAdjustment(

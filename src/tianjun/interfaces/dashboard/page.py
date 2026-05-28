@@ -497,7 +497,7 @@ DASHBOARD_HTML = r"""
       latency_history: "LSTM 时延", jitter: "时延抖动", node_load: "节点负载", bandwidth_utilization: "带宽可用性", gnn_topology: "GNN 拓扑",
       cpu: "CPU", memory: "内存", gpu: "GPU", storage: "存储"
     };
-    const regions = { shanghai: "上海", beijing: "北京", hangzhou: "杭州", shenzhen: "深圳", guangzhou: "广州", dongguan: "东莞", chengdu: "成都", wuhan: "武汉", huizhou: "惠州", zhuhai: "珠海", foshan: "佛山", zhongshan: "中山" };
+    const regions = { east: "东部区域", west: "西部区域", south: "华南区域", shanghai: "上海", beijing: "北京", hangzhou: "杭州", shenzhen: "深圳", guangzhou: "广州", chongqing: "重庆", dongguan: "东莞", chengdu: "成都", wuhan: "武汉", huizhou: "惠州", zhuhai: "珠海", foshan: "佛山", zhongshan: "中山", dc1: "DC1", dc2: "DC2", dc3: "DC3" };
 
     function escapeHtml(value) {
       return String(value ?? "-")
@@ -659,14 +659,20 @@ DASHBOARD_HTML = r"""
       const decision = latestDecision(report);
       const snap = decision?.network_snapshot || {};
       const pred = snap.model_prediction || runtime.latest_prediction || {};
+      const physical = snap.physical_topology || {};
+      const selectedNode = (report.nodes || []).find((node) => node.node_id === decision?.node_id);
+      const location = displayRegion(physical.selected_node_location || selectedNode?.location || selectedNode?.region);
+      const aggregateNeighborCount = pred.gnn_neighbor_count ?? physical.topology_reachable_neighbor_count ?? (physical.compute_neighbor_ids || []).length;
+      const directNeighborCount = physical.direct_compute_neighbor_count ?? (physical.direct_compute_neighbor_ids || []).length;
       const gnnUsable = pred.gnn_applicable !== false && pred.gnn_stability_score !== undefined && pred.gnn_stability_score !== null;
+      const neighborEvidence = `同接入点直接邻居 ${directNeighborCount} 个 · GNN聚合可达邻居 ${aggregateNeighborCount} 个 · 所在地 ${location}`;
       const gnnSub = pred.gnn_applicable === false
-        ? `已排除分布外输出 · 原始 ${percent(pred.gnn_raw_output ?? 0)}`
-        : "GraphSAGE 拓扑评分";
+        ? `特征分布外已降级 · ${neighborEvidence}`
+        : neighborEvidence;
       const items = [
         ["运行状态", runtime.status || "unknown", runtime.detail || "等待模型运行时"],
         ["LSTM 预测", pred.lstm_latency_ms ? `${display(pred.lstm_latency_ms, " ms")}` : "暂无", snap.latency_predictor || "等待决策"],
-        ["GNN 稳定", gnnUsable ? percent(pred.gnn_stability_score) : (pred.gnn_applicable === false ? "已降级" : "暂无"), gnnSub],
+        ["GNN 拓扑稳定性", gnnUsable ? percent(pred.gnn_stability_score) : (pred.gnn_applicable === false ? "未参与评分" : "待启用"), gnnSub],
         ["GNN 时延", pred.gnn_latency_ms ? `${display(pred.gnn_latency_ms, " ms")}` : "暂无", "拓扑嵌入修正结果"],
       ];
       $("modelPanel").innerHTML = items.map(([label, value, sub]) => `<div class="model-item"><label>${escapeHtml(label)}</label><strong>${escapeHtml(value)}</strong><p>${escapeHtml(sub)}</p></div>`).join("");
@@ -686,19 +692,20 @@ DASHBOARD_HTML = r"""
       const decision = latestDecision(report);
       const selected = state.latestPolicy?.selected_compute?.node_id || decision?.node_id;
       const snap = decision?.network_snapshot || {};
+      const pred = snap.model_prediction || {};
       const canvas = $("topologyCanvas");
       if (!nodes.length) { canvas.innerHTML = emptyCard("等待节点注册。"); return; }
 
       const grouped = new Map();
       for (const node of nodes) {
-        const region = String(node.region || "unknown").toLowerCase();
+        const region = String(node.service_region || node.location || node.region || "unknown").toLowerCase();
         if (!grouped.has(region)) grouped.set(region, []);
         grouped.get(region).push(node);
       }
       const regionsSorted = Array.from(grouped.keys()).sort((a, b) => displayRegion(a).localeCompare(displayRegion(b), "zh-CN"));
       if (state.topologyRegion !== "all" && !grouped.has(state.topologyRegion)) state.topologyRegion = "all";
       const visibleNodes = state.topologyRegion === "all" ? nodes : (grouped.get(state.topologyRegion) || []);
-      const selectedRegion = selected ? String((nodes.find((node) => node.node_id === selected) || {}).region || "").toLowerCase() : "";
+      const selectedRegion = selected ? String((nodes.find((node) => node.node_id === selected) || {}).service_region || (nodes.find((node) => node.node_id === selected) || {}).location || (nodes.find((node) => node.node_id === selected) || {}).region || "").toLowerCase() : "";
       const width = 980, height = 420, cx = 490, cy = 210, radius = Math.max(92, Math.min(160, 48 + visibleNodes.length * 10));
       const lines = [];
       const circles = [];
@@ -714,7 +721,7 @@ DASHBOARD_HTML = r"""
           <g>
             <circle cx="${x}" cy="${y}" r="${active ? 38 : 30}" fill="rgba(7,18,30,.94)" stroke="${color}" stroke-width="${active ? 4 : 2}" />
             <text x="${x}" y="${y - 5}" text-anchor="middle" fill="#edf7ff" font-size="11" font-weight="800">${escapeHtml(node.node_id).slice(0, 18)}</text>
-            <text x="${x}" y="${y + 13}" text-anchor="middle" fill="#93a9ba" font-size="11">${escapeHtml(displayRegion(node.region))}</text>
+            <text x="${x}" y="${y + 13}" text-anchor="middle" fill="#93a9ba" font-size="11">所在地 ${escapeHtml(displayRegion(node.location || node.region))}</text>
           </g>`);
       });
       const tabs = [`<button class="region-tab ${state.topologyRegion === "all" ? "active" : ""}" data-region="all">全部 · ${nodes.length}</button>`]
@@ -725,7 +732,7 @@ DASHBOARD_HTML = r"""
       const gpuCount = visibleNodes.reduce((sum, node) => sum + Number(node.capacity?.gpu || 0), 0);
       const cpuCount = visibleNodes.reduce((sum, node) => sum + Number(node.capacity?.cpu || 0), 0);
       const summaryTitle = state.topologyRegion === "all" ? `全部地域 · ${visibleNodes.length} 节点` : `${displayRegion(state.topologyRegion)} · ${visibleNodes.length} 节点`;
-      const selectedSummary = selectedNode ? `当前策略节点：${selectedNode.node_id} · ${displayRegion(selectedNode.region)} · ${selectedNode.online ? "在线" : "离线"}` : "当前策略节点：等待策略";
+      const selectedSummary = selectedNode ? `当前策略节点：${selectedNode.node_id} · 大区 ${displayRegion(selectedNode.service_region || selectedNode.location || selectedNode.region)} · 所在地 ${displayRegion(selectedNode.location || selectedNode.region)} · 接入 ${displayRegion(selectedNode.region)} · ${selectedNode.online ? "在线" : "离线"}` : "当前策略节点：等待策略";
       canvas.innerHTML = `
         <div class="region-tabs">${tabs}</div>
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="GNN 网络拓扑">
@@ -740,7 +747,7 @@ DASHBOARD_HTML = r"""
           <text x="28" y="40" fill="#93a9ba" font-size="13">当前选择：${escapeHtml(selected || "等待策略")}</text>
           <text x="28" y="64" fill="#93a9ba" font-size="13">选择地域：${escapeHtml(state.topologyRegion === "all" ? "全部" : displayRegion(state.topologyRegion))}</text>
           <text x="28" y="88" fill="#93a9ba" font-size="13">稳定时延：${snap.stable_latency_ms ? `${display(snap.stable_latency_ms, " ms")}` : "暂无"}</text>
-          <text x="28" y="112" fill="#93a9ba" font-size="13">GNN 拓扑：${percent(snap.fusion_features?.gnn_topology ?? 0)}</text>
+          <text x="28" y="112" fill="#93a9ba" font-size="13">GNN 拓扑稳定性：${pred.gnn_applicable === false ? "未参与评分" : (pred.gnn_stability_score !== undefined && pred.gnn_stability_score !== null ? percent(pred.gnn_stability_score) : "待启用")}</text>
           ${selectedRegion && state.topologyRegion !== selectedRegion ? `<text x="28" y="136" fill="#ffd166" font-size="13">提示：当前策略节点位于 ${escapeHtml(displayRegion(selectedRegion))}</text>` : ""}
         </svg>
         <div class="topology-summary">
@@ -778,7 +785,7 @@ DASHBOARD_HTML = r"""
         const isSim = labels.includes("simulation") || labels.includes("simulated-node");
         const source = isSim ? "仿真节点" : "真实节点";
         const onlineText = node.online ? (isSim ? "仿真在线" : "在线") : "离线";
-        return `<div class="node-item ${node.node_id === selected ? "active" : ""}"><div><b>${escapeHtml(node.node_id)}</b><div class="node-meta">${displayRegion(node.region)} · ${source} · 健康 ${percent(node.health_score ?? 0)} · 可靠 ${percent(node.reliability_score ?? 0)}</div></div><span class="tag ${node.online ? "good" : "bad"}">${onlineText}</span><div class="resource-bars">${bars}</div></div>`;
+        return `<div class="node-item ${node.node_id === selected ? "active" : ""}"><div><b>${escapeHtml(node.node_id)}</b><div class="node-meta">${displayRegion(node.service_region || node.location || node.region)} · ${displayRegion(node.location || node.region)} · 接入 ${displayRegion(node.region)} · ${source} · 健康 ${percent(node.health_score ?? 0)} · 可靠 ${percent(node.reliability_score ?? 0)}</div></div><span class="tag ${node.online ? "good" : "bad"}">${onlineText}</span><div class="resource-bars">${bars}</div></div>`;
       }).join("") : emptyCard("暂无节点。");
     }
     function renderTasks(report) {

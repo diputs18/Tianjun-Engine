@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import heapq
+from dataclasses import dataclass, field
+from typing import Any
 
 from .common import clamp
 
@@ -66,3 +68,112 @@ class NetworkPathProfile:
             "packet_loss": round(self.packet_loss, 6),
             "path_reliability": round(self.path_reliability, 6),
         }
+
+
+@dataclass(frozen=True, slots=True)
+class TopologyEdge:
+    source: str
+    target: str
+    propagation_delay_ms: float
+    bandwidth_mbps: float
+
+    def __post_init__(self) -> None:
+        if not self.source or not self.target or self.source == self.target:
+            raise ValueError("A topology edge requires two distinct endpoint names.")
+        if self.propagation_delay_ms < 0.0 or self.bandwidth_mbps <= 0.0:
+            raise ValueError("Topology edge delay must be non-negative and bandwidth must be positive.")
+
+    def to_dict(self) -> dict[str, float | str]:
+        return {
+            "source": self.source,
+            "target": self.target,
+            "propagation_delay_ms": round(self.propagation_delay_ms, 4),
+            "bandwidth_mbps": round(self.bandwidth_mbps, 4),
+        }
+
+
+@dataclass(slots=True)
+class PhysicalTopology:
+    topology_id: str
+    topology_nodes: list[str]
+    topology_edges: list[TopologyEdge]
+    compute_attachments: dict[str, str] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PhysicalTopology":
+        nodes = [str(node) for node in payload.get("topology_nodes", [])]
+        edges = [
+            TopologyEdge(
+                source=str(edge["source"]),
+                target=str(edge["target"]),
+                propagation_delay_ms=float(edge["propagation_delay_ms"]),
+                bandwidth_mbps=float(edge["bandwidth_mbps"]),
+            )
+            for edge in payload.get("topology_edges", [])
+        ]
+        topology = cls(
+            topology_id=str(payload.get("topology_id", "physical_topology")),
+            topology_nodes=nodes,
+            topology_edges=edges,
+            compute_attachments={
+                str(node_id): str(anchor)
+                for node_id, anchor in payload.get("compute_attachments", {}).items()
+            },
+            provenance=dict(payload.get("provenance", {})),
+        )
+        topology.validate()
+        return topology
+
+    def validate(self) -> None:
+        known = set(self.topology_nodes)
+        if not self.topology_id or not known:
+            raise ValueError("Physical topology requires an id and at least one topology node.")
+        for edge in self.topology_edges:
+            if edge.source not in known or edge.target not in known:
+                raise ValueError(f"Topology edge {edge.source}->{edge.target} references an unknown endpoint.")
+        for node_id, anchor in self.compute_attachments.items():
+            if anchor not in known:
+                raise ValueError(f"Compute node {node_id} is attached to unknown topology node {anchor}.")
+
+    def connected_compute_neighbors(self, node_id: str, available_node_ids: set[str]) -> list[str]:
+        distances = self.compute_neighbor_distances(node_id, available_node_ids)
+        return sorted(distances, key=lambda other_id: (distances[other_id], other_id))
+
+    def compute_neighbor_distances(self, node_id: str, available_node_ids: set[str]) -> dict[str, float]:
+        anchor = self.compute_attachments.get(node_id)
+        if anchor is None:
+            return {}
+        distances = self._distances_from(anchor)
+        return {
+            other_id: distances[other_anchor]
+            for other_id, other_anchor in self.compute_attachments.items()
+            if other_id != node_id and other_id in available_node_ids and other_anchor in distances
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "topology_id": self.topology_id,
+            "topology_nodes": list(self.topology_nodes),
+            "topology_edges": [edge.to_dict() for edge in self.topology_edges],
+            "compute_attachments": dict(sorted(self.compute_attachments.items())),
+            "provenance": dict(self.provenance),
+        }
+
+    def _distances_from(self, source: str) -> dict[str, float]:
+        graph: dict[str, list[tuple[str, float]]] = {node: [] for node in self.topology_nodes}
+        for edge in self.topology_edges:
+            graph[edge.source].append((edge.target, edge.propagation_delay_ms))
+            graph[edge.target].append((edge.source, edge.propagation_delay_ms))
+        distances = {source: 0.0}
+        frontier: list[tuple[float, str]] = [(0.0, source)]
+        while frontier:
+            distance, node = heapq.heappop(frontier)
+            if distance != distances.get(node):
+                continue
+            for neighbor, edge_delay in graph.get(node, []):
+                candidate = distance + edge_delay
+                if candidate < distances.get(neighbor, float("inf")):
+                    distances[neighbor] = candidate
+                    heapq.heappush(frontier, (candidate, neighbor))
+        return distances
