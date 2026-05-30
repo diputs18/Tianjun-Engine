@@ -728,7 +728,7 @@ def _cluster_inventory_response(text: str, report: dict[str, Any]) -> tuple[str,
         "regions": regions,
     }
     if not nodes:
-        return "当前控制面没有已注册节点，因此也没有可确认存在的地域节点。请先启动 CloudSimPlus 或节点 Agent 上报节点。", inventory
+        return "当前控制面没有已注册节点，因此也没有可确认存在的地域节点。请先手动启动 CloudSimPlus、sim-backend 或节点 Agent 上报节点。", inventory
 
     available = "、".join(
         f"{_REGION_LABELS.get(region, region)} {counts['online']} 个在线"

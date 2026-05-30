@@ -7,7 +7,6 @@ set "HOST=127.0.0.1"
 set "PORT=8024"
 set "URL=http://%HOST%:%PORT%/dashboard"
 set "CONFIG=configs\tianjun.example.toml"
-set "INVENTORY=configs\sim_cluster.example.json"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$conn = Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($conn) { exit 1 } else { exit 0 }"
@@ -25,7 +24,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Starting Tianjun Engine full runtime...
+echo Starting Tianjun Engine control plane...
 echo Dashboard: %URL%
 
 echo Checking DeepSeek connection for Hermes...
@@ -37,7 +36,7 @@ if errorlevel 1 (
 )
 
 echo Starting control plane...
-start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --inventory "%INVENTORY%" --default-execution-mode simulation --host %HOST% --port %PORT%
+start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --default-execution-mode simulation --host %HOST% --port %PORT%
 
 echo Waiting for control plane health check...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -48,10 +47,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Starting simulation backend...
-start "Tianjun Simulation Backend" cmd /k python -B main.py sim-backend --server http://%HOST%:%PORT% --inventory "%INVENTORY%" --verbose
-
 start "" "%URL%"
 
-echo Tianjun Engine full runtime is starting in separate windows.
-echo Close the Control Plane and Simulation Backend windows to stop it.
+echo Tianjun Engine control plane is running in a separate window.
+echo No simulated nodes are started automatically.
+echo Start CloudSim Plus, sim-backend, or a node agent manually when you want nodes to appear.

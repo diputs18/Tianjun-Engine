@@ -763,7 +763,7 @@ class ComputeNetworkPolicyGenerator:
     def _no_candidate_risks(self, requirement: UserRequirement, task: Task, nodes: list[Node]) -> list[str]:
         risks: list[str] = []
         if not nodes:
-            risks.append("当前控制面没有在线可调度节点；请启动 sim-backend 或真实 Agent。")
+            risks.append("当前控制面没有在线可调度节点；请手动启动 CloudSimPlus、sim-backend 或真实 Agent。")
             return risks
         allowed = set(requirement.region_preference)
         if allowed and not any(any(node.matches_deployment_region(region) for region in allowed) for node in nodes):
