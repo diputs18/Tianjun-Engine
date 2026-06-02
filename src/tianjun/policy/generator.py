@@ -22,7 +22,7 @@ from ..core import (
     UserFeedback,
     UserRequirement,
 )
-from ..domain import ExecutionMode, Node, ResourceVector, SchedulingDecision, Task, TaskExecutionSpec, clamp
+from ..domain import ExecutionMode, METRIC_KEYS, Node, ResourceVector, SchedulingDecision, Task, TaskExecutionSpec, clamp
 from ..scheduling.engine import ClosedLoopAdaptiveScheduler
 
 
@@ -34,11 +34,24 @@ REGION_ALIASES = {
     "上海": "east",
     "杭州": "east",
     "北京": "east",
+    "天津": "east",
+    "南京": "east",
+    "苏州": "east",
+    "无锡": "east",
+    "宁波": "east",
+    "合肥": "east",
+    "济南": "east",
+    "青岛": "east",
     "西部区域": "west",
     "西部": "west",
     "西南": "west",
     "成都": "west",
     "重庆": "west",
+    "西安": "west",
+    "昆明": "west",
+    "贵阳": "west",
+    "兰州": "west",
+    "乌鲁木齐": "west",
     "华南区域": "south",
     "华南": "south",
     "深圳": "south",
@@ -48,6 +61,10 @@ REGION_ALIASES = {
     "珠海": "south",
     "佛山": "south",
     "中山": "south",
+    "厦门": "south",
+    "福州": "south",
+    "南宁": "south",
+    "海口": "south",
     "武汉": "wuhan",
     "华中": "wuhan",
     "east": "east",
@@ -55,9 +72,14 @@ REGION_ALIASES = {
     "shanghai": "east",
     "hangzhou": "east",
     "beijing": "east",
+    "tianjin": "east",
+    "nanjing": "east",
+    "suzhou": "east",
     "west": "west",
     "chengdu": "west",
     "chongqing": "west",
+    "cd": "west",
+    "cq": "west",
     "south": "south",
     "south china": "south",
     "shenzhen": "south",
@@ -70,8 +92,28 @@ REGION_ALIASES = {
     "wuhan": "wuhan",
 }
 
-SERVICE_REGION_CODES = {"east", "west", "south"}
+SERVICE_REGION_CODES = {"east", "west", "south", "wuhan"}
 GUANGDONG_REGIONS = ["south"]
+PRIORITY_VECTOR_KEYS = {
+    "latency",
+    "cost",
+    "quality",
+    "security",
+    "balance",
+    "fragmentation",
+    "locality",
+    "network",
+}
+PRIORITY_TO_METRICS = {
+    "latency": {"performance": 0.52, "completion": 0.18, "network": 0.30},
+    "cost": {"cost": 1.0},
+    "quality": {"reliability": 0.58, "completion": 0.24, "performance": 0.18},
+    "security": {"security": 0.76, "reliability": 0.14, "locality": 0.10},
+    "balance": {"balance": 1.0},
+    "fragmentation": {"fragmentation": 1.0},
+    "locality": {"locality": 1.0},
+    "network": {"network": 0.78, "performance": 0.22},
+}
 
 
 class ComputeNetworkPolicyGenerator:
@@ -86,6 +128,7 @@ class ComputeNetworkPolicyGenerator:
         text = " ".join(str(message or "").strip().split())
         if not text:
             raise ValueError("requirement message must not be empty")
+        priority = self._priority(text)
         data: dict[str, Any] = {
             "objective": text,
             "workload_type": self._workload_type(text),
@@ -97,7 +140,8 @@ class ComputeNetworkPolicyGenerator:
             "bandwidth_mbps": self._bandwidth_mbps(text),
             "budget_limit": self._budget_limit(text),
             "security_level": self._security_level(text),
-            "priority": self._priority(text),
+            "priority": priority,
+            "priority_vector": self._priority_vector(text, priority),
             "deployment": self._deployment_spec(text),
         }
         if overrides:
@@ -160,6 +204,11 @@ class ComputeNetworkPolicyGenerator:
             data["security_level"] = parsed.security_level
         if parsed.priority != "balanced" or base.priority == "balanced":
             data["priority"] = parsed.priority
+        if parsed.priority_vector:
+            data["priority_vector"] = self._merge_priority_vectors(
+                dict(data.get("priority_vector") or {}),
+                parsed.priority_vector,
+            )
 
         if overrides:
             data.update({key: value for key, value in overrides.items() if value is not None and not str(key).startswith("__")})
@@ -329,13 +378,19 @@ class ComputeNetworkPolicyGenerator:
         return merged
 
     def finalize_requirement(self, data: dict[str, Any], *, evidence_text: str) -> UserRequirement:
+        data["priority_vector"] = self._normalize_priority_vector(dict(data.get("priority_vector") or {}))
         missing_fields = []
         region_unspecified = bool(dict(data.get("deployment") or {}).get("region_unspecified"))
         if not data.get("region_preference") and not region_unspecified:
             missing_fields.append("region_preference")
-        if data.get("latency_target_ms") is None and data.get("priority") == "latency":
+        priority_vector = dict(data.get("priority_vector") or {})
+        if data.get("latency_target_ms") is None and (
+            data.get("priority") == "latency" or priority_vector.get("latency", 0.0) >= 0.45
+        ):
             missing_fields.append("latency_target_ms")
-        if data.get("budget_limit") is None and data.get("priority") == "cost":
+        if data.get("budget_limit") is None and (
+            data.get("priority") == "cost" or priority_vector.get("cost", 0.0) >= 0.45
+        ):
             missing_fields.append("budget_limit")
         workload_unspecified = bool(dict(data.get("deployment") or {}).get("workload_type_unspecified"))
         if data.get("workload_type") == "batch" and not workload_unspecified and not self._has_explicit_batch_intent(str(evidence_text)):
@@ -369,18 +424,65 @@ class ComputeNetworkPolicyGenerator:
                 }
             }
 
-        confidence = 0.42
-        if data.get("workload_type") and not (data.get("workload_type") == "batch" and "workload_type" in missing_fields):
-            confidence += 0.10
-        for key in ("region_preference", "latency_target_ms", "budget_limit", "security_level", "priority"):
-            if data.get(key):
-                confidence += 0.08
-        if data.get("cpu_cores") is not None or data.get("memory_gb") is not None or data.get("gpu_count") is not None:
-            confidence += 0.06
-        confidence -= len(missing_fields) * 0.06
+        slot_confidence = self._slot_confidence(data, evidence_text=str(evidence_text), missing_fields=missing_fields)
         data["missing_fields"] = missing_fields
-        data["confidence"] = clamp(confidence, 0.30, 0.97)
+        data["slot_confidence"] = slot_confidence
+        data["confidence"] = self._weighted_confidence(
+            str(data.get("workload_type") or "batch"),
+            slot_confidence,
+        )
         return UserRequirement.from_dict(data)
+
+    def _slot_confidence(
+        self,
+        data: dict[str, Any],
+        *,
+        evidence_text: str,
+        missing_fields: list[str],
+    ) -> dict[str, float]:
+        has_resources = any(data.get(key) is not None for key in ("cpu_cores", "memory_gb", "gpu_count"))
+        explicit_workload = self._has_explicit_workload_intent(evidence_text)
+        workload = 1.0 if explicit_workload else (0.76 if has_resources or data.get("deployment") else 0.30)
+        if "workload_type" in missing_fields:
+            workload = 0.0
+        region = 1.0 if data.get("region_preference") else (
+            0.72 if dict(data.get("deployment") or {}).get("region_unspecified") else 0.0
+        )
+        latency = 1.0 if data.get("latency_target_ms") is not None else (
+            0.0 if "latency_target_ms" in missing_fields else 0.58
+        )
+        budget = 1.0 if data.get("budget_limit") is not None else (
+            0.0 if "budget_limit" in missing_fields else 0.58
+        )
+        security = 1.0 if self._mentions_security(evidence_text) else 0.68
+        priority = 1.0 if data.get("priority_vector") or data.get("priority") != "balanced" else 0.60
+        return {
+            "workload_type": workload,
+            "region_preference": region,
+            "resources": 1.0 if has_resources else 0.62,
+            "latency_target_ms": latency,
+            "budget_limit": budget,
+            "security_level": security,
+            "priority": priority,
+        }
+
+    def _weighted_confidence(self, workload_type: str, slot_confidence: dict[str, float]) -> float:
+        weights = {
+            "workload_type": 0.18,
+            "region_preference": 0.18,
+            "resources": 0.18,
+            "latency_target_ms": 0.12,
+            "budget_limit": 0.10,
+            "security_level": 0.10,
+            "priority": 0.14,
+        }
+        if workload_type in {"inference", "streaming"}:
+            weights.update({"latency_target_ms": 0.20, "resources": 0.14, "budget_limit": 0.06})
+        elif workload_type == "training":
+            weights.update({"resources": 0.26, "latency_target_ms": 0.06, "budget_limit": 0.10})
+        total = sum(weights.values())
+        confidence = sum(weights[key] * slot_confidence.get(key, 0.0) for key in weights) / total
+        return clamp(confidence, 0.30, 0.98)
 
     def draft_policy(
         self,
@@ -446,6 +548,7 @@ class ComputeNetworkPolicyGenerator:
             max_latency_ms=requirement.latency_target_ms,
             min_bandwidth_mbps=requirement.bandwidth_mbps,
             network_sensitivity=0.9 if requirement.priority == "latency" else defaults["network_sensitivity"],
+            intent_weights=self._metric_intent_weights(requirement),
             preferred_labels=preferred_labels,
             security_level=requirement.security_level,
             isolation_level=isolation_level,
@@ -464,24 +567,45 @@ class ComputeNetworkPolicyGenerator:
         data = requirement.to_dict()
         deltas = feedback.preference_delta
         instruction = feedback.instruction
+        metric_preferences = dict(data.get("metric_preferences") or {})
+        for key, value in deltas.items():
+            if key in METRIC_KEYS:
+                metric_preferences[key] = max(0.0, metric_preferences.get(key, 0.0) + float(value))
+        data["metric_preferences"] = metric_preferences
 
-        if feedback.target == "latency" or deltas.get("latency_weight", 0.0) > 0:
+        if feedback.target == "latency" or deltas.get("performance", 0.0) > 0:
             data["priority"] = "latency"
+            data["priority_vector"] = self._merge_priority_vectors(
+                dict(data.get("priority_vector") or {}),
+                {"latency": 1.0},
+            )
             current = data.get("latency_target_ms")
             data["latency_target_ms"] = max(5.0, float(current) * 0.85) if current else 50.0
             increase = self._percentage(instruction)
             if increase and data.get("budget_limit") is not None:
                 data["budget_limit"] = float(data["budget_limit"]) * (1.0 + increase)
-        if feedback.target == "cost" or deltas.get("cost_weight", 0.0) > 0:
+        if feedback.target == "cost" or deltas.get("cost", 0.0) > 0:
             data["priority"] = "cost"
+            data["priority_vector"] = self._merge_priority_vectors(
+                dict(data.get("priority_vector") or {}),
+                {"cost": 1.0},
+            )
             current_budget = data.get("budget_limit")
             if current_budget is not None:
                 data["budget_limit"] = max(1.0, float(current_budget) * 0.9)
-        if feedback.target == "security" or deltas.get("security_weight", 0.0) > 0:
+        if feedback.target == "security" or deltas.get("security", 0.0) > 0:
             data["priority"] = "security"
+            data["priority_vector"] = self._merge_priority_vectors(
+                dict(data.get("priority_vector") or {}),
+                {"security": 1.0},
+            )
             data["security_level"] = "high"
-        if feedback.target == "qos" or deltas.get("quality_weight", 0.0) > 0:
+        if feedback.target == "qos" or deltas.get("reliability", 0.0) > 0:
             data["priority"] = "quality"
+            data["priority_vector"] = self._merge_priority_vectors(
+                dict(data.get("priority_vector") or {}),
+                {"quality": 1.0},
+            )
 
         data["objective"] = f"{requirement.objective} | feedback: {feedback.instruction}"
         data["missing_fields"] = []
@@ -861,9 +985,14 @@ class ComputeNetworkPolicyGenerator:
             return "training"
         if "streaming" in lower or any(word in text for word in ("流式", "实时流", "视频流")):
             return "streaming"
-        if any(word in lower for word in ("inference", "serving")) or any(word in text for word in ("推理", "文生图", "在线服务", "离线推理评测")):
+        if any(word in lower for word in ("inference", "serving", "embedding", "chatbot")) or any(
+            word in text
+            for word in ("推理", "文生图", "在线服务", "在线问答", "问答服务", "对话服务", "向量化", "向量嵌入", "离线推理评测")
+        ):
             return "inference"
-        if "analytics" in lower or any(word in text for word in ("分析", "数仓", "数据处理")):
+        if any(word in lower for word in ("analytics", "etl")) or any(
+            word in text for word in ("分析", "数仓", "数据处理", "批量打标签", "批量标注", "数据清洗")
+        ):
             return "analytics"
         if self._has_explicit_batch_intent(text):
             return "batch"
@@ -980,8 +1109,8 @@ class ComputeNetworkPolicyGenerator:
             for word in (
                 "training", "pretrain", "finetune", "训练", "预训练", "微调",
                 "streaming", "流式", "实时流", "视频流",
-                "inference", "serving", "推理", "文生图", "在线服务",
-                "analytics", "分析", "数仓", "数据处理",
+                "inference", "serving", "embedding", "chatbot", "推理", "文生图", "在线服务", "在线问答", "问答服务", "对话服务", "向量化", "向量嵌入",
+                "analytics", "etl", "分析", "数仓", "数据处理", "批量打标签", "批量标注", "数据清洗",
             )
         )
 
@@ -993,9 +1122,51 @@ class ComputeNetworkPolicyGenerator:
         for raw, region in REGION_ALIASES.items():
             haystack = lower if raw.isascii() else text
             needle = raw.lower() if raw.isascii() else raw
-            if needle in haystack and region not in regions:
+            if self._region_alias_present(haystack, needle) and region not in regions:
                 regions.append(region)
+        fuzzy_region = self._fuzzy_region(text)
+        if fuzzy_region and fuzzy_region not in regions:
+            regions.append(fuzzy_region)
         return regions
+
+    @staticmethod
+    def _region_alias_present(haystack: str, needle: str) -> bool:
+        if needle.isascii() and len(needle) <= 3:
+            return bool(re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack))
+        return needle in haystack
+
+    def _fuzzy_region(self, text: str) -> str | None:
+        city_aliases = {
+            alias: region
+            for alias, region in REGION_ALIASES.items()
+            if not alias.isascii() and len(alias) in {2, 3} and alias not in {"东部", "华东", "华北", "西部", "西南", "华南", "华中"}
+        }
+        contextual = re.findall(r"(?:部署在|部署|地域|地区|区域|位于|选择|选在|放在|在|到)\s*([\u4e00-\u9fff]{2,5})", text)
+        best: tuple[int, str] | None = None
+        for chunk in contextual:
+            for alias, region in city_aliases.items():
+                for length in range(max(2, len(alias) - 1), min(len(chunk), len(alias) + 1) + 1):
+                    candidate = chunk[:length]
+                    distance = self._edit_distance(candidate, alias)
+                    if distance <= 1 and (best is None or distance < best[0]):
+                        best = (distance, region)
+        return None if best is None else best[1]
+
+    @staticmethod
+    def _edit_distance(left: str, right: str) -> int:
+        previous = list(range(len(right) + 1))
+        for row, left_char in enumerate(left, start=1):
+            current = [row]
+            for column, right_char in enumerate(right, start=1):
+                current.append(
+                    min(
+                        current[-1] + 1,
+                        previous[column] + 1,
+                        previous[column - 1] + (left_char != right_char),
+                    )
+                )
+            previous = current
+        return previous[-1]
 
     def _cpu_cores(self, text: str) -> float | None:
         if "单核" in text or "一核" in text:
@@ -1327,6 +1498,77 @@ class ComputeNetworkPolicyGenerator:
         if any(word in lower for word in ("quality", "reliable")) or any(word in text for word in ("质量", "可靠")):
             return "quality"
         return "balanced"
+
+    def _priority_vector(self, text: str, primary: str) -> dict[str, float]:
+        lower = text.lower()
+        vector: dict[str, float] = {}
+        signals = {
+            "latency": (
+                ("latency", "realtime", "低延迟", "低时延", "实时", "响应要快"),
+                0.78,
+            ),
+            "cost": (
+                ("cost", "budget", "cheap", "成本", "预算", "便宜", "不能超预算", "不超预算"),
+                0.66,
+            ),
+            "quality": (
+                ("quality", "reliable", "sla", "质量", "可靠", "稳定", "成功率", "可用性"),
+                0.62,
+            ),
+            "security": (
+                ("security", "secure", "安全", "隔离", "合规", "加密", "国密"),
+                0.70,
+            ),
+            "balance": (
+                ("balance", "负载均衡", "负载太高", "热点", "均衡"),
+                0.56,
+            ),
+            "fragmentation": (
+                ("fragmentation", "碎片", "gpu 等待", "gpu排队", "卡资源"),
+                0.54,
+            ),
+            "locality": (
+                ("locality", "本地", "就近", "数据驻留", "跨地域"),
+                0.58,
+            ),
+            "network": (
+                ("network", "网络", "抖动", "丢包", "带宽"),
+                0.58,
+            ),
+        }
+        for key, (keywords, weight) in signals.items():
+            if any(keyword in lower if keyword.isascii() else keyword in text for keyword in keywords):
+                vector[key] = weight
+        if primary != "balanced":
+            vector[primary] = max(vector.get(primary, 0.0), 0.72)
+        return self._normalize_priority_vector(vector)
+
+    @staticmethod
+    def _normalize_priority_vector(vector: dict[str, float]) -> dict[str, float]:
+        valid = {
+            str(key): max(0.0, float(value))
+            for key, value in vector.items()
+            if str(key) in PRIORITY_VECTOR_KEYS and float(value) > 0.0
+        }
+        total = sum(valid.values())
+        return {} if total <= 0.0 else {key: value / total for key, value in valid.items()}
+
+    def _merge_priority_vectors(self, base: dict[str, float], update: dict[str, float]) -> dict[str, float]:
+        merged = dict(base)
+        for key, value in update.items():
+            if key in PRIORITY_VECTOR_KEYS:
+                merged[key] = max(merged.get(key, 0.0), float(value))
+        return self._normalize_priority_vector(merged)
+
+    def _metric_intent_weights(self, requirement: UserRequirement) -> dict[str, float]:
+        weights = {key: 0.0 for key in METRIC_KEYS}
+        for intent, strength in requirement.priority_vector.items():
+            for metric, share in PRIORITY_TO_METRICS.get(intent, {}).items():
+                weights[metric] += float(strength) * float(share) * 0.48
+        for metric, strength in requirement.metric_preferences.items():
+            if metric in weights:
+                weights[metric] += max(0.0, float(strength))
+        return {key: value for key, value in weights.items() if value > 0.0}
 
     def _isolation_level(self, security_level: str) -> str:
         if security_level == "high":
