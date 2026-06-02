@@ -226,6 +226,9 @@ class ClosedLoopAdaptiveScheduler:
         weights["completion"] += 0.14 + (0.18 * urgency)
         weights["reliability"] += 0.10 * urgency
         weights["balance"] += 0.08
+        for metric, boost in task.intent_weights.items():
+            if metric in weights:
+                weights[metric] += max(0.0, float(boost))
         if task.deadline is not None:
             weights["completion"] += 0.10
         if task.budget is not None:

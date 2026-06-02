@@ -56,6 +56,10 @@ def task_from_dict(data: dict[str, Any]) -> Task:
         max_latency_ms=data.get("max_latency_ms"),
         min_bandwidth_mbps=data.get("min_bandwidth_mbps"),
         network_sensitivity=float(data.get("network_sensitivity", 0.5)),
+        intent_weights={
+            str(key): float(value)
+            for key, value in dict(data.get("intent_weights", {})).items()
+        },
         preferred_labels=set(data.get("preferred_labels", [])),
         security_level=str(data.get("security_level", "medium")),
         isolation_level=str(data.get("isolation_level", "process")),
