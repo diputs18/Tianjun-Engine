@@ -52,6 +52,7 @@ def build_http_server(
                             "status": "ok",
                             "model_runtime": control_plane.scheduler.model_runtime.describe(),
                             "chat_runtime": chat.describe(),
+                            "cors_allow_origin": cors_allow_origin(),
                         },
                     )
                     return

@@ -5,9 +5,6 @@ import "@arco-design/web-react/dist/css/arco.css";
 import "./dashboard.css";
 import "./styles/app.css";
 import { App } from "./app/App.jsx";
-import * as api from "./services/api.js";
-
-window.tianjunApi = api;
 
 createRoot(document.getElementById("root")).render(
   <BrowserRouter>

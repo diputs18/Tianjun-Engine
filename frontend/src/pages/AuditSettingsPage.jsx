@@ -20,7 +20,7 @@ export function AuditSettingsPage() {
               column={1}
               data={[
                 { label: "API Base", value: API_BASE },
-                { label: "CORS Origin", value: "http://127.0.0.1:5173" },
+                { label: "CORS Origin", value: health?.cors_allow_origin ?? "TIANJUN_CORS_ALLOW_ORIGIN default: http://127.0.0.1:5173" },
                 { label: "模型状态", value: state.model?.status ?? "unknown" },
                 { label: "Hermes LLM", value: health?.chat_runtime?.llm?.enabled ? "enabled" : "fallback" },
               ]}

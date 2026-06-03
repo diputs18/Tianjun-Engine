@@ -166,7 +166,8 @@ body::before {
 
 .tj-panel,
 .tj-kpi-card,
-.tj-legacy-card {
+.tj-legacy-card,
+.tj-ai-card {
   border: 1px solid rgba(16, 24, 40, 0.08);
   border-radius: 8px;
   box-shadow: 0 16px 36px rgba(17, 32, 39, 0.07);
@@ -258,6 +259,216 @@ body::before {
   max-width: 1680px;
 }
 
+.tj-ai-card {
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.tj-ai-console {
+  display: grid;
+  gap: 16px;
+}
+
+.tj-ai-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 8px;
+  background: #f8fbfa;
+}
+
+.tj-ai-topbar > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tj-ai-alert {
+  margin: 0;
+}
+
+.tj-ai-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.tj-ai-chat-panel,
+.tj-ai-side-panel {
+  min-height: 680px;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.tj-ai-chat-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tj-ai-side-panel {
+  display: grid;
+  grid-template-rows: minmax(320px, auto) 1fr;
+  gap: 14px;
+  padding: 14px;
+}
+
+.tj-ai-panel-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid rgba(16, 24, 40, 0.08);
+}
+
+.tj-ai-panel-head svg {
+  color: var(--tj-teal);
+  font-size: 22px;
+}
+
+.tj-ai-panel-head b,
+.tj-ai-policy-head h3,
+.tj-ai-trace-item b {
+  display: block;
+  color: var(--tj-ink);
+}
+
+.tj-ai-panel-head span,
+.tj-ai-policy-head span,
+.tj-ai-trace-item span {
+  display: block;
+  margin-top: 3px;
+  color: var(--tj-muted);
+  font-size: 12px;
+}
+
+.tj-ai-message-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.tj-ai-message {
+  width: min(760px, 92%);
+  padding: 13px 15px;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.tj-ai-message.user {
+  align-self: flex-end;
+  background: #edf8f5;
+  border-color: rgba(42, 157, 143, 0.2);
+}
+
+.tj-ai-message.assistant {
+  align-self: flex-start;
+}
+
+.tj-ai-message span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--tj-teal);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tj-ai-message p,
+.tj-ai-confirm-text {
+  margin: 0;
+  color: var(--tj-slate);
+  line-height: 1.72;
+  white-space: pre-wrap;
+}
+
+.tj-ai-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px;
+  border-top: 1px solid rgba(16, 24, 40, 0.08);
+  background: #ffffff;
+}
+
+.tj-ai-policy,
+.tj-ai-trace {
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.tj-ai-policy {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.tj-ai-policy-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.tj-ai-policy-head h3 {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
+.tj-ai-trace {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.tj-ai-trace-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 8px;
+  background: #f8fbfa;
+}
+
+.tj-ai-trace-item span {
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+.tj-ai-trace-item.running {
+  border-color: rgba(23, 107, 135, 0.26);
+  background: #eef7fa;
+}
+
+.tj-ai-trace-item.done {
+  border-color: rgba(42, 157, 143, 0.24);
+  background: #f1faf7;
+}
+
+.tj-ai-trace-item.error {
+  border-color: rgba(195, 58, 50, 0.22);
+  background: #fff5f4;
+}
+
+.tj-ai-empty {
+  align-self: center;
+  margin: auto;
+}
+
 .tj-legacy-card {
   padding: 0;
   overflow: hidden;
@@ -318,5 +529,15 @@ body::before {
 
   .tj-content {
     padding: 16px;
+  }
+
+  .tj-ai-grid,
+  .tj-ai-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .tj-ai-chat-panel,
+  .tj-ai-side-panel {
+    min-height: 520px;
   }
 }

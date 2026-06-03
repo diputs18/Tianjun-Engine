@@ -1,20 +1,21 @@
 import ReactECharts from "echarts-for-react";
 
 const labels = {
-  performance: "性能",
-  completion: "完成率",
-  cost: "成本",
-  reliability: "可靠性",
-  balance: "负载均衡",
-  fragmentation: "碎片",
-  locality: "局部性",
-  network: "网络",
+  performance: "Performance",
+  completion: "Completion",
+  cost: "Cost",
+  reliability: "Reliability",
+  balance: "Balance",
+  fragmentation: "Fragmentation",
+  locality: "Locality",
+  network: "Network",
+  security: "Security",
 };
 
 export function WeightChart({ weights = {} }) {
   const entries = Object.entries(weights);
   const option = {
-    grid: { left: 72, right: 24, top: 18, bottom: 24 },
+    grid: { left: 96, right: 24, top: 18, bottom: 24 },
     xAxis: {
       type: "value",
       axisLabel: { color: "#667085" },
