@@ -36,7 +36,5 @@ frontend/dist/
 Thumbs.db
 desktop.ini
 
-# AI agent artifacts
-AGENTS.md
 CLAUDE.md
 .cursorrules
