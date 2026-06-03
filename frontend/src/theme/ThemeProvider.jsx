@@ -22,7 +22,7 @@ function applyTheme(mode) {
 }
 
 export function ThemeProvider({ children }) {
-  const [mode, setMode] = useState(() => localStorage.getItem(STORAGE_KEY) || "light");
+  const [mode, setMode] = useState(() => localStorage.getItem(STORAGE_KEY) || "system");
   const resolvedTheme = useMemo(() => resolveTheme(mode), [mode]);
 
   useEffect(() => {

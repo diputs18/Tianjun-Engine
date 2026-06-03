@@ -52,7 +52,7 @@
 
 .tj-infra-metric.tone-amber .tj-infra-metric-icon {
   color: var(--tj-amber);
-  background: var(--tj-amber);
+  background: var(--tj-amber-soft);
 }
 
 .tj-infra-metric span:not(.tj-infra-metric-icon) {
@@ -116,15 +116,13 @@
   min-height: 500px;
   overflow: hidden;
   border-radius: 16px;
-  background:
-    radial-gradient(circle at 50% 48%, rgba(15, 111, 255, 0.1), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 255, 0.98));
+  background: var(--tj-topology-bg);
 }
 
 .tj-infra-link {
   position: absolute;
   z-index: 0;
-  background: var(--tj-blue-soft);
+  background: var(--tj-topology-line);
 }
 
 .tj-infra-link.horizontal {
@@ -151,11 +149,11 @@
   place-items: center;
   width: 54px;
   height: 54px;
-  border: 2px solid var(--tj-blue-soft);
+  border: 2px solid var(--tj-topology-line);
   border-radius: 50%;
   color: var(--tj-blue);
   font-size: 26px;
-  background: var(--tj-blue-soft);
+  background: var(--tj-topology-hub-bg);
   transform: translate(-50%, -50%);
   box-shadow: 0 12px 28px rgba(15, 111, 255, 0.18);
 }
@@ -232,8 +230,8 @@
   color: var(--tj-text-secondary);
   font-size: 12px;
   font-weight: 800;
-  background: var(--tj-surface-muted);
-  box-shadow: 0 12px 30px rgba(31, 67, 120, 0.08);
+  background: var(--tj-topology-zone-bg);
+  box-shadow: var(--tj-topology-zone-shadow);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
@@ -359,11 +357,11 @@
   gap: 6px;
   width: 92px;
   height: 92px;
-  border: 2px solid var(--tj-blue-soft);
+  border: 2px solid var(--tj-topology-line);
   border-radius: 50%;
   color: var(--tj-blue);
   font-size: 28px;
-  background: var(--tj-blue-soft);
+  background: var(--tj-topology-hub-bg);
   transform: translate(-50%, -50%);
   box-shadow: 0 18px 36px rgba(15, 111, 255, 0.16);
 }
@@ -380,7 +378,7 @@
   left: 50%;
   width: 330px;
   height: 230px;
-  border: 2px dashed rgba(159, 196, 255, 0.72);
+  border: 2px dashed var(--tj-topology-line);
   border-radius: 50%;
   transform: translate(-50%, -50%);
 }

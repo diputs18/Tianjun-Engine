@@ -7,7 +7,7 @@
     <script>
       (function () {
         try {
-          var mode = localStorage.getItem("tianjun:theme") || "light";
+          var mode = localStorage.getItem("tianjun:theme") || "system";
           var systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
           var theme = mode === "system" ? (systemDark ? "dark" : "light") : mode;
           document.documentElement.dataset.theme = theme;

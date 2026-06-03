@@ -33,9 +33,19 @@
   --tj-purple-soft: #efe6ff;
   --tj-red: #c33a32;
   --tj-amber: #b7791f;
+  --tj-amber-soft: #fff3e8;
 
   /* Elevation */
   --tj-card-shadow: 0 14px 34px rgba(31, 67, 120, 0.07);
+
+  /* Topology */
+  --tj-topology-bg:
+    radial-gradient(circle at 50% 48%, rgba(15, 111, 255, 0.1), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 255, 0.98));
+  --tj-topology-line: rgba(168, 204, 255, 0.58);
+  --tj-topology-hub-bg: #eaf3ff;
+  --tj-topology-zone-bg: rgba(247, 251, 255, 0.88);
+  --tj-topology-zone-shadow: 0 12px 30px rgba(31, 67, 120, 0.08);
 
   /* Typography */
   --tj-font-xs: 11px;
@@ -93,8 +103,21 @@
   --tj-purple-soft: rgba(179, 140, 255, 0.16);
   --tj-red: #ff7875;
   --tj-amber: #f6c56b;
+  --tj-amber-soft: rgba(246, 197, 107, 0.14);
 
   --tj-card-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+
+  /* Topology */
+  --tj-topology-bg:
+    radial-gradient(circle at 50% 48%, rgba(91, 156, 255, 0.14), transparent 30%),
+    radial-gradient(circle at 50% 48%, rgba(91, 156, 255, 0.08), transparent 46%),
+    linear-gradient(180deg, rgba(13, 22, 37, 0.96), rgba(8, 14, 26, 0.98));
+  --tj-topology-line: rgba(91, 156, 255, 0.28);
+  --tj-topology-hub-bg: rgba(91, 156, 255, 0.16);
+  --tj-topology-zone-bg: rgba(13, 22, 37, 0.92);
+  --tj-topology-zone-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 @media (min-width: 1600px) {
