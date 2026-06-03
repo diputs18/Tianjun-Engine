@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tianjun.domain import NetworkPathProfile, Node, PhysicalTopology, PolicyState, ResourceVector, Task
+from tianjun.interfaces.http.server import DEFAULT_CORS_ALLOW_ORIGIN, cors_allow_origin
 from tianjun.ml.runtime import ModelPrediction
 from tianjun.scheduling.engine import ClosedLoopAdaptiveScheduler
 
@@ -94,3 +95,11 @@ def test_service_region_filters_nodes_without_replacing_physical_attachment() ->
     assert west_dc2_b.can_host_now(task)
     assert not east_dc1.can_host_now(task)
     assert not south_dc3.can_host_now(task)
+
+
+def test_cors_allow_origin_uses_environment_override(monkeypatch) -> None:
+    monkeypatch.delenv("TIANJUN_CORS_ALLOW_ORIGIN", raising=False)
+    assert cors_allow_origin() == DEFAULT_CORS_ALLOW_ORIGIN
+
+    monkeypatch.setenv("TIANJUN_CORS_ALLOW_ORIGIN", "http://127.0.0.1:4173")
+    assert cors_allow_origin() == "http://127.0.0.1:4173"

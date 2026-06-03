@@ -6,7 +6,7 @@ Tianjun Engine 是一个面向算力网络资源编排的本地原型系统。�
 
 - 后端只提供 HTTP API 与 SSE 流式接口，默认监听 `http://127.0.0.1:8024`。
 - 前端是独立 Vite + React 工程，默认开发地址为 `http://127.0.0.1:5173`。
-- 浏览器从前端开发服务器访问后端 API，后端已为 `http://127.0.0.1:5173` 配置 CORS。
+- 浏览器从前端开发服务器访问后端 API，后端默认允许 `http://127.0.0.1:5173`，可通过 `TIANJUN_CORS_ALLOW_ORIGIN` 调整 CORS 来源。
 - 后端不再内置 HTML 页面，Dashboard 由独立前端工程提供。
 
 ## 核心能力
@@ -78,6 +78,7 @@ export const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8024"
 ```
 
 如需连接其他后端地址，可在前端环境中设置 `VITE_API_BASE`。
+如需修改允许访问后端的前端来源，可设置 `TIANJUN_CORS_ALLOW_ORIGIN`。
 
 ## 环境要求
 
@@ -109,6 +110,17 @@ python -m pip install -e .
 cd frontend
 npm install
 ```
+
+可先复制示例环境变量文件：
+
+```powershell
+Copy-Item .env.example .env
+Copy-Item frontend\.env.example frontend\.env
+```
+
+- 根目录 `.env` 会在启动时自动加载，且不会覆盖当前 shell 中已存在的环境变量。
+- `frontend/.env` 可设置 `VITE_API_BASE`，让前端连接到其他后端地址。
+- 根目录 `.env` 可设置 `TIANJUN_CORS_ALLOW_ORIGIN`，让后端允许新的前端 Origin。
 
 ## 启动
 
@@ -160,7 +172,10 @@ python -B main.py llm-check --config configs\tianjun.example.toml
 
 ```dotenv
 DEEPSEEK_API_KEY=your_api_key_here
+TIANJUN_CORS_ALLOW_ORIGIN=http://127.0.0.1:5173
 ```
+
+启动时会自动加载项目根目录 `.env`，但不会覆盖当前 shell 已有的同名环境变量。
 
 ## 健康检查
 
@@ -201,13 +216,15 @@ Invoke-RestMethod http://127.0.0.1:8024/report
 
 ## CORS
 
-后端允许前端开发服务器访问：
+后端默认允许前端开发服务器访问：
 
 ```text
 Access-Control-Allow-Origin: http://127.0.0.1:5173
 Access-Control-Allow-Headers: Content-Type
 Access-Control-Allow-Methods: GET, POST, OPTIONS
 ```
+
+如需改成其他前端来源，可设置环境变量 `TIANJUN_CORS_ALLOW_ORIGIN`。
 
 ## 验证
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -11,7 +12,11 @@ from ...chat import ChatRuntime
 from ...scenarios import node_from_dict, task_from_dict
 
 
-CORS_ALLOW_ORIGIN = "http://127.0.0.1:5173"
+DEFAULT_CORS_ALLOW_ORIGIN = "http://127.0.0.1:5173"
+
+
+def cors_allow_origin() -> str:
+    return os.environ.get("TIANJUN_CORS_ALLOW_ORIGIN", DEFAULT_CORS_ALLOW_ORIGIN)
 
 
 def build_http_server(
@@ -304,7 +309,7 @@ def build_http_server(
             self.wfile.write(body)
 
         def _send_cors_headers(self) -> None:
-            self.send_header("Access-Control-Allow-Origin", CORS_ALLOW_ORIGIN)
+            self.send_header("Access-Control-Allow-Origin", cors_allow_origin())
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
