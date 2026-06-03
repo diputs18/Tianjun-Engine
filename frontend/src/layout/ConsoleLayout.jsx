@@ -1,11 +1,16 @@
 import { Button, Layout, Menu, Space, Tag, Typography } from "@arco-design/web-react";
-import { IconRefresh, IconThunderbolt } from "@arco-design/web-react/icon";
+import {
+  IconBranch,
+  IconCodeSandbox,
+  IconRefresh,
+  IconRobot,
+} from "@arco-design/web-react/icon";
 import clsx from "clsx";
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { routes } from "../app/routes.jsx";
-import { useControlPlaneContext } from "./ControlPlaneProvider.jsx";
 import { shortTime } from "../utils/format.js";
+import { useControlPlaneContext } from "./ControlPlaneProvider.jsx";
 
 const { Sider, Header, Content } = Layout;
 
@@ -19,12 +24,12 @@ export function ConsoleLayout({ children }) {
 
   return (
     <Layout className="tj-console">
-      <Sider className="tj-sider" width={232}>
+      <Sider className="tj-sider" width={260}>
         <div className="tj-brand">
-          <span className="tj-brand-mark"><IconThunderbolt /></span>
+          <span className="tj-brand-mark"><IconCodeSandbox /></span>
           <div>
-            <Typography.Title heading={5}>Tianjun</Typography.Title>
-            <Typography.Text>Compute Control</Typography.Text>
+            <Typography.Title heading={5}>天钧</Typography.Title>
+            <Typography.Text>算力控制</Typography.Text>
           </div>
         </div>
         <Menu
@@ -39,31 +44,37 @@ export function ConsoleLayout({ children }) {
             const Icon = route.icon;
             return (
               <Menu.Item key={route.key}>
-                <Icon /> {route.label}
+                <Icon /> <span>{route.label}</span>
               </Menu.Item>
             );
           })}
         </Menu>
+        <button className="tj-sider-collapse" type="button" aria-label="collapse sidebar">‹</button>
       </Sider>
-      <Layout>
+      <Layout className="tj-main-layout">
         <Header className="tj-header">
-          <div>
-            <Typography.Text className="tj-kicker">算力网络资源调度智能体</Typography.Text>
-            <Typography.Title heading={4}>企业控制台</Typography.Title>
+          <div className="tj-header-center">
+            <div className="tj-product-pill">
+              <IconBranch />
+              <span>算力网络资源调度智能体</span>
+            </div>
+            <div className="tj-console-title">
+              <IconCodeSandbox />
+              <span>企业控制台</span>
+            </div>
           </div>
-          <Space size={12}>
+          <Space size={14} className="tj-header-status">
             <Tag color={error ? "red" : "green"} className={clsx("tj-status-tag", error && "is-error")}>
-              {error ? "API 连接异常" : "API 正常"}
+              <span className="tj-status-dot" />
+              {error ? "API 异常" : "API 正常"}
             </Tag>
-            <Tag color={state.modelLoaded ? "arcoblue" : "orangered"}>
-              模型 {state.model?.status ?? "unknown"}
+            <Tag color={state.modelLoaded ? "purple" : "orangered"} className="tj-model-tag">
+              <IconRobot />
+              <span><b>模型 {state.modelLoaded ? "已加载" : state.model?.status ?? "未知"}</b><small>Hermes LLM</small></span>
             </Tag>
-            <Tag color={state.llmEnabled ? "green" : "gray"}>
-              Hermes {state.llmEnabled ? "LLM" : "规则"}
-            </Tag>
-            <Typography.Text type="secondary">同步 {shortTime(updatedAt)}</Typography.Text>
-            <Button icon={<IconRefresh />} onClick={() => void refresh()}>
-              刷新
+            <span className="tj-header-divider" />
+            <Button className="tj-sync-button" icon={<IconRefresh />} onClick={() => void refresh()}>
+              同步 {shortTime(updatedAt)}
             </Button>
           </Space>
         </Header>

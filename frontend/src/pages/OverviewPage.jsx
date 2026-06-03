@@ -1,85 +1,137 @@
-import { Alert, Card, Grid, List, Space, Tag, Typography } from "@arco-design/web-react";
-import { IconCheckCircle, IconExclamationCircle } from "@arco-design/web-react/icon";
-import { KpiCard } from "../features/common/KpiCard.jsx";
+import { Alert, Card, Empty, Grid, Tag } from "@arco-design/web-react";
+import {
+  IconCalendarClock,
+  IconCheckCircle,
+  IconCodeSandbox,
+  IconCommand,
+  IconDashboard,
+  IconHeart,
+  IconMindMapping,
+  IconRobot,
+} from "@arco-design/web-react/icon";
 import { PageHeader } from "../features/common/PageHeader.jsx";
 import { SlaChart } from "../features/charts/SlaChart.jsx";
 import { useControlPlaneContext } from "../layout/ControlPlaneProvider.jsx";
-import { num, pct, regionLabel } from "../utils/format.js";
+import { num, pct } from "../utils/format.js";
 
 const { Row, Col } = Grid;
+
+function HeroMetric({ icon, title, value, detail, tone = "blue" }) {
+  return (
+    <div className={`tj-hero-metric tone-${tone}`}>
+      <span className="tj-hero-icon">{icon}</span>
+      <div>
+        <label>{title}</label>
+        <b>{value}</b>
+        <p>{detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function SummaryItem({ icon, title, tag, tagColor, detail }) {
+  return (
+    <div className="tj-summary-item">
+      <span>{icon}</span>
+      <div>
+        <b>{title}</b>
+        <Tag color={tagColor}>{tag}</Tag>
+        {detail ? <p>{detail}</p> : null}
+      </div>
+    </div>
+  );
+}
 
 export function OverviewPage() {
   const { error, report, state } = useControlPlaneContext();
   const decisions = (report?.recent_decisions ?? []).slice().reverse().slice(0, 5);
-  const onlineRatio = state.nodeCount ? state.onlineNodes / state.nodeCount : 0;
 
   return (
-    <div className="tj-page">
-      <PageHeader
-        eyebrow="P1 / OPERATIONS OVERVIEW"
-        title="系统健康总览"
-        description="5 秒内回答三个问题：系统是否健康、SLA 是否达标、模型是否加载。"
-      />
-      {error ? (
-        <Alert type="error" content={`后端控制面暂不可用：${error.message}`} />
-      ) : null}
-      <Row gutter={[16, 16]}>
-        <Col span={6}>
-          <KpiCard
+    <div className="tj-page tj-overview-page">
+      <PageHeader eyebrow="P1 / OPERATIONS OVERVIEW" title="系统健康总览" />
+      {error ? <Alert type="error" content={`后端控制面暂不可用：${error.message}`} /> : null}
+
+      <Row gutter={[22, 22]} className="tj-hero-row">
+        <Col span={8}>
+          <HeroMetric
+            icon={<IconHeart />}
             title="系统健康"
             value={error ? "异常" : "正常"}
-            trend={`${state.onlineNodes}/${state.nodeCount} 节点在线`}
-            progress={onlineRatio}
-            tone={error ? "red" : "green"}
+            detail={`${state.onlineNodes}/${state.nodeCount} 节点在线`}
+            tone="green"
           />
         </Col>
-        <Col span={6}>
-          <KpiCard title="SLA 达标率" value={(state.slaRate * 100).toFixed(1)} suffix="%" progress={state.slaRate} />
+        <Col span={8}>
+          <HeroMetric
+            icon={<IconDashboard />}
+            title="SLA 达标率"
+            value={`${(state.slaRate * 100).toFixed(1)}%`}
+            detail="过去 24h 服务目标"
+            tone="blue"
+          />
         </Col>
-        <Col span={6}>
-          <KpiCard title="模型状态" value={state.modelLoaded ? "Loaded" : state.model?.status ?? "Unknown"} trend={(state.model?.loaded_models ?? []).join(" / ") || "fallback"} tone="ink" />
-        </Col>
-        <Col span={6}>
-          <KpiCard title="运行任务" value={state.runningTasks} trend={`${state.pendingTasks} 个等待调度`} tone="amber" />
+        <Col span={8}>
+          <HeroMetric
+            icon={<IconMindMapping />}
+            title="模型状态"
+            value={state.modelLoaded ? "已加载" : state.model?.status ?? "未知"}
+            detail={(state.model?.loaded_models ?? []).join(" / ") || "lstm / gnn"}
+            tone="purple"
+          />
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} className="tj-section-row">
-        <Col span={12}>
-          <Card title="SLA 与执行成功率" bordered={false} className="tj-panel">
+      <Row gutter={[22, 22]} className="tj-section-row">
+        <Col span={10}>
+          <Card bordered={false} className="tj-panel tj-task-card">
+            <div>
+              <h3>运行任务</h3>
+              <strong>{state.runningTasks}</strong>
+              <p>{state.pendingTasks} 个等待调度</p>
+            </div>
+            <IconCalendarClock />
+          </Card>
+        </Col>
+        <Col span={14}>
+          <Card title="SLA 与执行成功率" bordered={false} className="tj-panel tj-chart-card">
             <SlaChart slaRate={state.slaRate} successRate={state.successRate} />
           </Card>
         </Col>
-        <Col span={12}>
-          <Card title="控制面摘要" bordered={false} className="tj-panel">
-            <div className="tj-health-lines">
-              <div><IconCheckCircle /> API 控制面 <Tag color="green">online</Tag></div>
-              <div>{state.modelLoaded ? <IconCheckCircle /> : <IconExclamationCircle />} 模型运行时 <Tag color={state.modelLoaded ? "arcoblue" : "orangered"}>{state.model?.status ?? "unknown"}</Tag></div>
-              <div>{state.llmEnabled ? <IconCheckCircle /> : <IconExclamationCircle />} Hermes LLM <Tag color={state.llmEnabled ? "green" : "gray"}>{state.llmEnabled ? "enabled" : "fallback"}</Tag></div>
+      </Row>
+
+      <Row gutter={[22, 22]} className="tj-section-row">
+        <Col span={10}>
+          <Card title="控制面摘要" bordered={false} className="tj-panel tj-summary-card">
+            <div className="tj-summary-top">
+              <SummaryItem icon={<IconCodeSandbox />} title="API 控制面" tag="online" tagColor="green" />
+              <SummaryItem icon={<IconMindMapping />} title="模型运行时" tag={state.modelLoaded ? "已加载" : "fallback"} tagColor={state.modelLoaded ? "purple" : "orangered"} detail="Hermes LLM" />
+              <SummaryItem icon={<IconCommand />} title="调度引擎" tag="enabled" tagColor="arcoblue" />
             </div>
-            <Space className="tj-score-strip" size={10}>
-              <Tag>平均稳定时延 {num(report?.metrics?.average_stable_latency_ms, 1)} ms</Tag>
-              <Tag>融合评分 {num(report?.metrics?.average_fusion_score, 3)}</Tag>
-              <Tag>确定性置信 {pct(report?.metrics?.average_deterministic_confidence)}</Tag>
-            </Space>
+            <div className="tj-summary-metrics">
+              <div><span>平均稳定时延</span><b>{num(report?.metrics?.average_stable_latency_ms, 1)} ms</b></div>
+              <div><span>融合评分</span><b>{num(report?.metrics?.average_fusion_score, 3)}</b></div>
+              <div><span>确定性置信</span><b>{pct(report?.metrics?.average_deterministic_confidence)}</b></div>
+            </div>
+          </Card>
+        </Col>
+        <Col span={14}>
+          <Card title="最近调度决策" bordered={false} className="tj-panel tj-decisions-card">
+            {decisions.length ? (
+              <div className="tj-decision-list-modern">
+                {decisions.map((item) => (
+                  <div key={`${item.task_id}-${item.node_id}`}>
+                    <IconCheckCircle />
+                    <b>{item.task_id} → {item.node_id}</b>
+                    <span>评分 {num(item.total_score, 3)} / 成本 {num(item.predicted_cost, 2)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Empty description="暂无数据" />
+            )}
           </Card>
         </Col>
       </Row>
-
-      <Card title="最近调度决策" bordered={false} className="tj-panel tj-section-row">
-        <List
-          dataSource={decisions}
-          render={(item) => (
-            <List.Item>
-              <List.Item.Meta
-                title={`${item.task_id} -> ${item.node_id}`}
-                description={`评分 ${num(item.total_score, 3)} / 成本 ${num(item.predicted_cost, 2)} / 区域 ${regionLabel(item.network_snapshot?.selected_node_region)}`}
-              />
-              <Typography.Text type="secondary">{item.explanation || "等待解释"}</Typography.Text>
-            </List.Item>
-          )}
-        />
-      </Card>
     </div>
   );
 }

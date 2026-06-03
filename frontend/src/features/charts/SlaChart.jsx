@@ -1,33 +1,44 @@
 import ReactECharts from "echarts-for-react";
 
 export function SlaChart({ slaRate = 0, successRate = 0 }) {
+  const sla = Number((slaRate * 100).toFixed(1));
+  const success = Number((successRate * 100).toFixed(1));
   const option = {
-    tooltip: { trigger: "item" },
-    legend: { bottom: 0, textStyle: { color: "#667085" } },
+    animation: false,
+    grid: { left: 44, right: 28, top: 28, bottom: 34 },
+    tooltip: { trigger: "axis" },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: ["-24h", "-18h", "-12h", "-6h", "现在"],
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: "#65758b", fontSize: 13 },
+    },
+    yAxis: {
+      type: "value",
+      min: 0,
+      max: 100,
+      interval: 100,
+      axisLabel: { formatter: "{value}%", color: "#65758b", fontSize: 13 },
+      splitLine: { lineStyle: { type: "dashed", color: "#cfd8e6" } },
+    },
     series: [
       {
         name: "SLA",
-        type: "pie",
-        radius: ["58%", "76%"],
-        center: ["32%", "45%"],
-        label: { formatter: "{b}\n{d}%" },
-        data: [
-          { value: slaRate, name: "达标", itemStyle: { color: "#176b87" } },
-          { value: Math.max(0, 1 - slaRate), name: "未达标", itemStyle: { color: "#e6edf1" } },
-        ],
+        type: "line",
+        symbol: "none",
+        data: [sla, sla, sla, sla, sla],
+        lineStyle: { width: 3, color: "#0f6fff" },
       },
       {
-        name: "成功率",
-        type: "pie",
-        radius: ["44%", "55%"],
-        center: ["72%", "45%"],
-        label: { formatter: "{b}\n{d}%" },
-        data: [
-          { value: successRate, name: "成功", itemStyle: { color: "#2a9d8f" } },
-          { value: Math.max(0, 1 - successRate), name: "失败/等待", itemStyle: { color: "#e9ecef" } },
-        ],
+        name: "执行成功率",
+        type: "line",
+        symbol: "none",
+        data: [success, success, success, success, success],
+        lineStyle: { width: 2, color: "#18b46b" },
       },
     ],
   };
-  return <ReactECharts option={option} style={{ height: 280 }} />;
+  return <ReactECharts option={option} style={{ height: 176 }} />;
 }
