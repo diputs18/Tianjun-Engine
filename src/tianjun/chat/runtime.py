@@ -448,6 +448,16 @@ class ChatRuntime:
                     "budget_limit": "number|null",
                     "security_level": "low|medium|high|null",
                     "priority": "latency|cost|quality|balanced|security|null",
+                    "priority_vector": {
+                        "latency": "0..1",
+                        "cost": "0..1",
+                        "quality": "0..1",
+                        "security": "0..1",
+                        "balance": "0..1",
+                        "fragmentation": "0..1",
+                        "locality": "0..1",
+                        "network": "0..1",
+                    },
                 },
                 "confirmed_slots": ["slot names confirmed by the latest user message"],
                 "ready_intent": "boolean; true only when the user asks to proceed/directly schedule and required slots are inferable",
@@ -522,6 +532,17 @@ class ChatRuntime:
         priority = updates.get("priority")
         if isinstance(priority, str) and priority in allowed_priority:
             safe["priority"] = priority
+        vector = updates.get("priority_vector")
+        if isinstance(vector, dict):
+            safe_vector = {
+                str(key): value
+                for key, raw in vector.items()
+                if str(key) in {"latency", "cost", "quality", "security", "balance", "fragmentation", "locality", "network"}
+                and (value := _safe_float(raw)) is not None
+                and 0.0 <= value <= 1.0
+            }
+            if safe_vector:
+                safe["priority_vector"] = safe_vector
         regions = updates.get("region_preference")
         if isinstance(regions, str):
             regions = [regions]
@@ -728,7 +749,7 @@ def _cluster_inventory_response(text: str, report: dict[str, Any]) -> tuple[str,
         "regions": regions,
     }
     if not nodes:
-        return "当前控制面没有已注册节点，因此也没有可确认存在的地域节点。请先启动 CloudSimPlus 或节点 Agent 上报节点。", inventory
+        return "当前控制面没有已注册节点，因此也没有可确认存在的地域节点。请先手动启动 CloudSimPlus、sim-backend 或节点 Agent 上报节点。", inventory
 
     available = "、".join(
         f"{_REGION_LABELS.get(region, region)} {counts['online']} 个在线"

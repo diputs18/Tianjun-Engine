@@ -8,8 +8,21 @@ from ..domain import round_payload
 WorkloadType = Literal["inference", "training", "streaming", "analytics", "batch"]
 SecurityLevel = Literal["low", "medium", "high"]
 RequirementPriority = Literal["latency", "cost", "quality", "balanced", "security"]
+PriorityVector = dict[str, float]
 PolicyStatus = Literal["draft", "simulated", "approved", "committed", "failed"]
-FeedbackTarget = Literal["overall", "latency", "cost", "qos", "security", "module", "workflow"]
+FeedbackTarget = Literal[
+    "overall",
+    "latency",
+    "cost",
+    "qos",
+    "security",
+    "balance",
+    "fragmentation",
+    "locality",
+    "network",
+    "module",
+    "workflow",
+]
 FeedbackSentiment = Literal["positive", "negative", "neutral"]
 
 
@@ -35,6 +48,14 @@ def _optional_int(value: Any) -> int | None:
     return int(value)
 
 
+def _float_dict(value: Any) -> dict[str, float]:
+    return {
+        str(key): float(item)
+        for key, item in dict(value or {}).items()
+        if float(item) >= 0.0
+    }
+
+
 @dataclass(slots=True)
 class UserRequirement:
     objective: str
@@ -48,8 +69,11 @@ class UserRequirement:
     budget_limit: float | None = None
     security_level: SecurityLevel = "medium"
     priority: RequirementPriority = "balanced"
+    priority_vector: PriorityVector = field(default_factory=dict)
+    metric_preferences: dict[str, float] = field(default_factory=dict)
     missing_fields: list[str] = field(default_factory=list)
     confidence: float = 0.0
+    slot_confidence: dict[str, float] = field(default_factory=dict)
     deployment: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -66,8 +90,11 @@ class UserRequirement:
             budget_limit=_optional_float(data.get("budget_limit")),
             security_level=_security_level(data.get("security_level", "medium")),
             priority=_priority(data.get("priority", "balanced")),
+            priority_vector=_float_dict(data.get("priority_vector")),
+            metric_preferences=_float_dict(data.get("metric_preferences")),
             missing_fields=_str_list(data.get("missing_fields")),
             confidence=float(data.get("confidence", 0.0)),
+            slot_confidence=_float_dict(data.get("slot_confidence")),
             deployment=dict(data.get("deployment", {})),
         )
 
@@ -85,8 +112,11 @@ class UserRequirement:
                 "budget_limit": self.budget_limit,
                 "security_level": self.security_level,
                 "priority": self.priority,
+                "priority_vector": dict(self.priority_vector),
+                "metric_preferences": dict(self.metric_preferences),
                 "missing_fields": list(self.missing_fields),
                 "confidence": self.confidence,
+                "slot_confidence": dict(self.slot_confidence),
                 "deployment": dict(self.deployment),
             }
         )
@@ -460,7 +490,19 @@ def _priority(value: Any) -> RequirementPriority:
 
 def _feedback_target(value: Any) -> FeedbackTarget:
     text = str(value or "overall")
-    allowed = {"overall", "latency", "cost", "qos", "security", "module", "workflow"}
+    allowed = {
+        "overall",
+        "latency",
+        "cost",
+        "qos",
+        "security",
+        "balance",
+        "fragmentation",
+        "locality",
+        "network",
+        "module",
+        "workflow",
+    }
     return text if text in allowed else "overall"  # type: ignore[return-value]
 
 

@@ -200,7 +200,7 @@ class CentralControlPlane:
         with self.lock:
             requirement = self.policy_generator.parse_requirement(message, overrides=overrides)
             payload = requirement.to_dict()
-            payload["questions"] = clarification_questions(requirement)
+            payload["questions"] = clarification_questions(requirement, self.nodes.values())
             payload["dialogue_status"] = session_status(requirement, payload["questions"])
             return payload
 
@@ -212,7 +212,7 @@ class CentralControlPlane:
     ) -> dict[str, Any]:
         with self.lock:
             requirement = self.policy_generator.parse_requirement(message, overrides=overrides)
-            questions = clarification_questions(requirement)
+            questions = clarification_questions(requirement, self.nodes.values())
             session = RequirementSession(
                 session_id=self._new_session_id(),
                 requirement=requirement,
@@ -239,7 +239,7 @@ class CentralControlPlane:
                 message,
                 overrides=overrides,
             )
-            questions = clarification_questions(requirement)
+            questions = clarification_questions(requirement, self.nodes.values())
             session.requirement = requirement
             session.questions = questions
             session.status = session_status(requirement, questions)
@@ -387,7 +387,16 @@ class CentralControlPlane:
             # Feedback can be a full constraint update, not only a preference delta.
             # Always merge explicit fields first; apply the lightweight optimizer only for terse preference feedback.
             requirement = self.policy_generator.merge_requirement_update(base_policy.requirement, feedback.instruction)
-            if feedback.target in {"latency", "cost", "security", "qos"} and len(feedback.instruction) < 80:
+            if feedback.target in {
+                "latency",
+                "cost",
+                "security",
+                "qos",
+                "balance",
+                "fragmentation",
+                "locality",
+                "network",
+            } and len(feedback.instruction) < 80:
                 requirement = self.policy_generator.apply_feedback(requirement, feedback)
             base_task = self.policy_tasks.get(feedback.policy_id)
             policy, task = self.policy_generator.draft_policy(

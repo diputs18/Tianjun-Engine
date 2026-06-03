@@ -7,7 +7,6 @@ set "HOST=127.0.0.1"
 set "PORT=8024"
 set "URL=http://%HOST%:%PORT%/dashboard"
 set "CONFIG=configs\tianjun.example.toml"
-set "INVENTORY=configs\sim_cluster.example.json"
 
 where python >nul 2>nul
 if errorlevel 1 (
@@ -27,15 +26,6 @@ if errorlevel 1 (
 echo Restarting Tianjun Engine on %HOST%:%PORT%...
 echo Note: active in-memory CloudSim task state will be reset by this restart.
 
-echo Stopping Tianjun simulation backend processes...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -in @('python.exe', 'pythonw.exe') }; foreach ($process in $procs) { $cmd = [string]$process.CommandLine; if ($cmd -match 'main\.py\s+sim-backend' -and $cmd -match [regex]::Escape('http://%HOST%:%PORT%')) { Write-Host ('Stopping Tianjun simulation backend ' + $process.ProcessId + '...'); Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop } }"
-if errorlevel 1 (
-  echo Tianjun simulation backend could not be stopped safely.
-  pause
-  exit /b 1
-)
-
 echo Stopping Tianjun control plane...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$port = %PORT%; $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue); foreach ($listener in $listeners) { $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $listener.OwningProcess) -ErrorAction SilentlyContinue; if (-not $process) { continue }; $cmd = [string]$process.CommandLine; if ($cmd -match 'main\.py\s+serve' -and $cmd -match ('--port\s+' + $port)) { Write-Host ('Stopping Tianjun process ' + $process.ProcessId + '...'); Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop } else { Write-Error ('Port ' + $port + ' is occupied by another process: ' + $process.Name + ' (' + $process.ProcessId + ').'); exit 2 } }; $limit = (Get-Date).AddSeconds(8); do { $busy = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if (-not $busy) { exit 0 }; Start-Sleep -Milliseconds 200 } while ((Get-Date) -lt $limit); Write-Error ('Port ' + $port + ' did not become available in time.'); exit 3"
@@ -45,10 +35,10 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Starting Tianjun Engine full runtime...
+echo Starting Tianjun Engine control plane...
 echo Dashboard: %URL%
 echo Starting control plane...
-start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --inventory "%INVENTORY%" --default-execution-mode simulation --host %HOST% --port %PORT%
+start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --default-execution-mode simulation --host %HOST% --port %PORT%
 
 echo Waiting for control plane health check...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -59,11 +49,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Starting simulation backend...
-start "Tianjun Simulation Backend" cmd /k python -B main.py sim-backend --server http://%HOST%:%PORT% --inventory "%INVENTORY%" --verbose
-
 start "" "%URL%"
 
-echo Tianjun Engine full runtime is starting in separate windows.
-echo Close the Control Plane and Simulation Backend windows to stop it.
+echo Tianjun Engine control plane is running in a separate window.
+echo No simulated nodes are started automatically.
+echo Start CloudSim Plus, sim-backend, or a node agent manually when you want nodes to appear.
 pause

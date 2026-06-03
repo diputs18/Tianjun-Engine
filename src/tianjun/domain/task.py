@@ -31,6 +31,7 @@ class Task:
     max_latency_ms: float | None = None
     min_bandwidth_mbps: float | None = None
     network_sensitivity: float = 0.5
+    intent_weights: dict[str, float] = field(default_factory=dict)
     preferred_labels: set[str] = field(default_factory=set)
     security_level: str = "medium"
     isolation_level: str = "process"
@@ -78,6 +79,7 @@ class Task:
             "max_latency_ms": self.max_latency_ms,
             "min_bandwidth_mbps": self.min_bandwidth_mbps,
             "network_sensitivity": self.network_sensitivity,
+            "intent_weights": dict(self.intent_weights),
             "preferred_labels": sorted(self.preferred_labels),
             "security_level": self.security_level,
             "isolation_level": self.isolation_level,
