@@ -1,11 +1,16 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { DashboardPage } from "./components/DashboardPage.jsx";
-import * as api from "./api.js";
+import { BrowserRouter } from "react-router-dom";
+import "@arco-design/web-react/dist/css/arco.css";
 import "./dashboard.css";
+import "./styles/app.css";
+import { App } from "./app/App.jsx";
+import * as api from "./services/api.js";
 
 window.tianjunApi = api;
 
 createRoot(document.getElementById("root")).render(
-  <DashboardPage />,
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>,
 );

@@ -1,24 +1,22 @@
 import { useEffect } from "react";
-import { StatusHeader } from "./StatusHeader.jsx";
-import { ChatPanel } from "./ChatPanel.jsx";
-import { PolicyPanel } from "./PolicyPanel.jsx";
-import { NodePanel } from "./NodePanel.jsx";
-import { TaskPanel } from "./TaskPanel.jsx";
-import { ReportPanel } from "./ReportPanel.jsx";
+import { ChatPanel } from "./legacy/ChatPanel.jsx";
+import { NodePanel } from "./legacy/NodePanel.jsx";
+import { PolicyPanel } from "./legacy/PolicyPanel.jsx";
+import { ReportPanel } from "./legacy/ReportPanel.jsx";
+import { StatusHeader } from "./legacy/StatusHeader.jsx";
+import { TaskPanel } from "./legacy/TaskPanel.jsx";
 
-export function DashboardPage() {
+export function SchedulingConsole() {
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "/dashboardRuntime.js";
     script.async = false;
     document.body.appendChild(script);
-    return () => {
-      script.remove();
-    };
+    return () => script.remove();
   }, []);
 
   return (
-    <main className="shell">
+    <div className="tj-scheduling-console">
       <StatusHeader />
       <section className="conversation-stage">
         <div className="interaction-stack">
@@ -31,6 +29,6 @@ export function DashboardPage() {
         <TaskPanel />
         <ReportPanel />
       </section>
-    </main>
+    </div>
   );
 }
