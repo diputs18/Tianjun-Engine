@@ -319,7 +319,8 @@ def main() -> None:
         chat_runtime = ChatRuntime.with_llm_settings(control_plane, resolved_llm_settings(args, app_config))
         server = build_http_server(control_plane, host, port, chat_runtime=chat_runtime)
         print(f"Control plane listening on http://{host}:{port}")
-        print(f"Dashboard available at http://{host}:{port}/dashboard")
+        print("Dashboard frontend: cd frontend && npm install && npm run dev")
+        print("Default frontend URL: http://127.0.0.1:5173")
         try:
             server.serve_forever()
         except KeyboardInterrupt:

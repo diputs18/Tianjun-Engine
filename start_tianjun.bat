@@ -5,9 +5,11 @@ cd /d "%~dp0"
 
 set "HOST=127.0.0.1"
 set "PORT=8024"
-set "URL=http://%HOST%:%PORT%/dashboard"
+set "FRONTEND_PORT=5173"
+set "URL=http://127.0.0.1:%FRONTEND_PORT%"
 set "CONFIG=configs\tianjun.example.toml"
 set "INVENTORY=configs\sim_cluster.example.json"
+set "FRONTEND_DIR=frontend"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$conn = Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($conn) { exit 1 } else { exit 0 }"
@@ -50,6 +52,9 @@ if errorlevel 1 (
 
 echo Starting simulation backend...
 start "Tianjun Simulation Backend" cmd /k python -B main.py sim-backend --server http://%HOST%:%PORT% --inventory "%INVENTORY%" --verbose
+
+echo Starting dashboard frontend...
+start "Tianjun Dashboard Frontend" cmd /k "cd /d ""%CD%\%FRONTEND_DIR%"" && npm install && npm run dev"
 
 start "" "%URL%"
 

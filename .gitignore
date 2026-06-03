@@ -15,3 +15,6 @@ tianjun.toml
 
 data/alibaba_microservices_v2022/
 runtime_report.json
+
+frontend/node_modules/
+frontend/dist/

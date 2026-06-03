@@ -173,7 +173,7 @@ python -B main.py sim-backend `
 访问：
 
 ```text
-http://127.0.0.1:8024/dashboard
+http://127.0.0.1:5173
 ```
 
 Windows 下也可在配置好 API key 后双击 `start_tianjun.bat`。该脚本会先执行 LLM 连接检查，再启动控制面、模拟节点后端并打开 Dashboard。`restart_tianjun.bat` 会停止符合当前命令特征的 Tianjun 控制面与模拟后端后重新启动完整闭环。
@@ -603,7 +603,7 @@ MCP server 只负责把工具调用转发到 Tianjun HTTP 控制面，因此节�
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/dashboard` | Dashboard 页面 |
+| `GET` | `/` | API 状态 `{ name, status }` |
 | `GET` | `/health` | 服务、LLM 与模型运行时健康信息 |
 | `GET` | `/report` | 控制面完整监控报告 |
 | `GET` | `/hermes/status` | 智能体运行状态 |
@@ -723,3 +723,23 @@ git push -u origin feature/my-change
 ---
 
 天钧的目标不是让智能体替代调度器，而是让人能够用自然语言提出需求、看懂策略依据，并在清晰可控的边界内驱动算力网络实验持续迭代。
+## Frontend / API Split
+
+The dashboard is now an independent Vite + React app under `frontend/`. The Python server keeps the control-plane HTTP API on `127.0.0.1:8024`; the frontend development server runs on `127.0.0.1:5173` and calls the backend through `VITE_API_BASE`.
+
+Backend:
+
+```powershell
+python -B main.py serve --config configs\tianjun.example.toml --inventory configs\sim_cluster.example.json --host 127.0.0.1 --port 8024
+```
+
+Frontend:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The legacy `/dashboard` HTML route is disabled by default and can be temporarily restored with `TIANJUN_ENABLE_LEGACY_DASHBOARD=1`.
+
