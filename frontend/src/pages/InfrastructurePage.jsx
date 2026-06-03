@@ -5,7 +5,7 @@ import { EmptyState } from "../features/common/EmptyState.jsx";
 import { PageHeader } from "../features/common/PageHeader.jsx";
 import { InfrastructureTopology } from "../features/topology/InfrastructureTopology.jsx";
 import { useControlPlaneContext } from "../layout/ControlPlaneProvider.jsx";
-import { num, pct, regionLabel } from "../utils/format.js";
+import { num, pct, regionLabel, statusLabel } from "../utils/format.js";
 
 const { Row, Col } = Grid;
 
@@ -25,7 +25,7 @@ function onlineCell(online) {
   return (
     <span className={online ? "tj-infra-online online" : "tj-infra-online offline"}>
       <i />
-      {online ? "online" : "offline"}
+      {statusLabel(online ? "online" : "offline")}
     </span>
   );
 }

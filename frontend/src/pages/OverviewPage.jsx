@@ -12,7 +12,7 @@ import {
 import { PageHeader } from "../features/common/PageHeader.jsx";
 import { SlaChart } from "../features/charts/SlaChart.jsx";
 import { useControlPlaneContext } from "../layout/ControlPlaneProvider.jsx";
-import { num, pct } from "../utils/format.js";
+import { num, pct, statusLabel } from "../utils/format.js";
 
 const { Row, Col } = Grid;
 
@@ -74,7 +74,7 @@ export function OverviewPage() {
           <HeroMetric
             icon={<IconMindMapping />}
             title="模型状态"
-            value={state.modelLoaded ? "已加载" : state.model?.status ?? "未知"}
+            value={state.modelLoaded ? statusLabel("loaded") : statusLabel(state.model?.status ?? "unknown")}
             detail={(state.model?.loaded_models ?? []).join(" / ") || "lstm / gnn"}
             tone="purple"
           />
@@ -103,9 +103,9 @@ export function OverviewPage() {
         <Col span={10}>
           <Card title="控制面摘要" bordered={false} className="tj-panel tj-summary-card">
             <div className="tj-summary-top">
-              <SummaryItem icon={<IconCodeSandbox />} title="API 控制面" tag="online" tagColor="green" />
-              <SummaryItem icon={<IconMindMapping />} title="模型运行时" tag={state.modelLoaded ? "已加载" : "fallback"} tagColor={state.modelLoaded ? "purple" : "orangered"} detail="Hermes LLM" />
-              <SummaryItem icon={<IconCommand />} title="调度引擎" tag="enabled" tagColor="arcoblue" />
+              <SummaryItem icon={<IconCodeSandbox />} title="API 控制面" tag={statusLabel("online")} tagColor="green" />
+              <SummaryItem icon={<IconMindMapping />} title="模型运行时" tag={state.modelLoaded ? statusLabel("loaded") : statusLabel("fallback")} tagColor={state.modelLoaded ? "purple" : "orangered"} detail="Hermes LLM" />
+              <SummaryItem icon={<IconCommand />} title="调度引擎" tag={statusLabel("enabled")} tagColor="arcoblue" />
             </div>
             <div className="tj-summary-metrics">
               <div><span>平均稳定时延</span><b>{num(report?.metrics?.average_stable_latency_ms, 1)} ms</b></div>

@@ -58,14 +58,14 @@ function createTraceId(event) {
 
 function upsertToolTrace(trace, event) {
   if (event.type === "tool_start") {
-    return [...trace, { id: createTraceId(event), tool: event.tool, label: event.label ?? event.tool, status: "running", summary: "执行中" }];
+    return [...trace, { id: createTraceId(event), tool: event.tool, label: event.label ?? event.tool, status: "running", summary: event.summary ?? "" }];
   }
   const index = trace.findLastIndex((item) => item.tool === event.tool && item.status === "running");
   if (index < 0) {
-    return [...trace, { id: createTraceId(event), tool: event.tool, label: event.label ?? event.tool, status: "done", summary: event.summary ?? "已完成" }];
+    return [...trace, { id: createTraceId(event), tool: event.tool, label: event.label ?? event.tool, status: "done", summary: event.summary ?? "" }];
   }
   return trace.map((item, itemIndex) => (
-    itemIndex === index ? { ...item, status: "done", summary: event.summary ?? "已完成" } : item
+    itemIndex === index ? { ...item, status: "done", summary: event.summary ?? "" } : item
   ));
 }
 
@@ -118,13 +118,13 @@ export function useChatStream({ onCommitted } = {}) {
           return;
         }
         if (event.type === "llm_start") {
-          setToolTrace((current) => [...current, { id: messageId("llm"), tool: "llm", label: "意图理解", status: "running", summary: "正在解析需求" }]);
+          setToolTrace((current) => [...current, { id: messageId("llm"), tool: "llm", label: "意图理解", status: "running", summary: "" }]);
           return;
         }
         if (event.type === "llm_done" || event.type === "llm_fallback") {
           setToolTrace((current) => current.map((item) => (
             item.tool === "llm" && item.status === "running"
-              ? { ...item, status: event.type === "llm_done" ? "done" : "error", summary: event.detail ?? event.reason ?? "已结束" }
+              ? { ...item, status: event.type === "llm_done" ? "done" : "error", summary: event.detail ?? event.reason ?? "" }
               : item
           )));
           return;

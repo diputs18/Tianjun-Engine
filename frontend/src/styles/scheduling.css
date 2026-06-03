@@ -63,6 +63,80 @@
   overflow: auto;
 }
 
+.tj-ai-message-list-empty {
+  display: grid;
+  place-items: center;
+}
+
+.tj-ai-empty-hero {
+  display: grid;
+  justify-items: center;
+  gap: 22px;
+  max-width: 560px;
+  margin: auto;
+  color: #34435f;
+  text-align: center;
+}
+
+.tj-ai-empty-hero p {
+  margin: 0;
+  color: #34435f;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.8;
+}
+
+.tj-ai-empty-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 136px;
+  height: 136px;
+  border-radius: 50%;
+  color: #6e8dff;
+  font-size: 58px;
+  background:
+    radial-gradient(circle at 38% 35%, rgba(115, 143, 255, 0.24), transparent 38%),
+    linear-gradient(145deg, #eef4ff 0%, #f8fbff 100%);
+}
+
+.tj-ai-empty-orb::before,
+.tj-ai-empty-orb::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: #b8c9ff;
+  opacity: 0.8;
+  animation: tjTwinkle 2.4s ease-in-out infinite;
+}
+
+.tj-ai-empty-orb::before {
+  width: 10px;
+  height: 10px;
+  left: -10px;
+  top: 48px;
+}
+
+.tj-ai-empty-orb::after {
+  width: 7px;
+  height: 7px;
+  right: -8px;
+  top: 62px;
+  animation-delay: 0.7s;
+}
+
+@keyframes tjTwinkle {
+  0%, 100% {
+    transform: scale(0.78);
+    opacity: 0.45;
+  }
+
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+
 .tj-ai-turn {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -107,6 +181,15 @@
 
 .tj-ai-message.assistant {
   background: rgba(255, 255, 255, 0.88);
+}
+
+.tj-ai-message.is-empty {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.tj-ai-message.is-empty:empty {
+  display: none;
 }
 
 .tj-ai-message p,
@@ -160,17 +243,45 @@
 }
 
 .tj-ai-trace-step.running .tj-ai-trace-icon {
+  position: relative;
   color: var(--tj-blue);
   background: #e7f1ff;
+  animation: tjTracePulse 1.35s ease-in-out infinite;
+}
+
+.tj-ai-trace-step.running .tj-ai-trace-icon svg {
+  animation: tjTraceSpin 1.1s linear infinite;
+}
+
+.tj-ai-trace-step.running::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: -6px;
+  bottom: 6px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(15, 111, 255, 0.08), rgba(19, 180, 103, 0.05));
+  opacity: 0;
+  animation: tjTraceGlow 1.6s ease-in-out infinite;
 }
 
 .tj-ai-trace-step.error .tj-ai-trace-icon {
   background: var(--tj-red);
+  animation: tjTraceShake 0.36s ease-in-out;
 }
 
 .tj-ai-trace-step.idle .tj-ai-trace-icon {
   color: #8ba0bb;
   background: #edf2f7;
+}
+
+.tj-ai-trace-step.done .tj-ai-trace-icon {
+  animation: tjTraceDonePop 0.34s ease-out;
+}
+
+.tj-ai-trace-step.done:not(:last-child)::after {
+  border-left-color: rgba(19, 180, 103, 0.62);
 }
 
 .tj-ai-trace-step b {
@@ -192,6 +303,62 @@
   color: #7b8799;
   font-size: 12px;
   line-height: 1.35;
+}
+
+@keyframes tjTracePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(15, 111, 255, 0.22);
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px rgba(15, 111, 255, 0.06);
+  }
+}
+
+@keyframes tjTraceSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tjTraceGlow {
+  0%, 100% {
+    opacity: 0;
+    transform: scaleX(0.98);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes tjTraceDonePop {
+  0% {
+    transform: scale(0.78);
+  }
+
+  70% {
+    transform: scale(1.12);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes tjTraceShake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+
+  30% {
+    transform: translateX(-2px);
+  }
+
+  60% {
+    transform: translateX(2px);
+  }
 }
 
 .tj-ai-composer-shell {
@@ -253,9 +420,8 @@
   color: #17243b;
 }
 
-.tj-ai-policy.empty {
-  display: grid;
-  place-items: center;
+.tj-ai-policy-empty {
+  grid-template-rows: auto auto auto minmax(120px, 1fr) auto;
 }
 
 .tj-ai-policy-head {
@@ -319,6 +485,37 @@
   font-size: 14px;
   line-height: 1.65;
   overflow-wrap: anywhere;
+}
+
+.tj-ai-policy-placeholder {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  min-height: 132px;
+  margin-top: 18px;
+  padding: 24px;
+  border: 1px dashed #cfd9e8;
+  border-radius: 12px;
+  color: #6d7b91;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.tj-ai-policy-placeholder-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: #a4b0c2;
+  background: #eef3f9;
+}
+
+.tj-ai-policy-placeholder p {
+  margin: 0;
+  color: #6d7b91;
+  font-size: 14px;
 }
 
 .tj-ai-commit-button {

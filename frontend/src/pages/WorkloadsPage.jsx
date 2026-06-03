@@ -3,6 +3,7 @@ import { EmptyState } from "../features/common/EmptyState.jsx";
 import { KpiCard } from "../features/common/KpiCard.jsx";
 import { PageHeader } from "../features/common/PageHeader.jsx";
 import { useControlPlaneContext } from "../layout/ControlPlaneProvider.jsx";
+import { statusLabel } from "../utils/format.js";
 
 const { Row, Col } = Grid;
 
@@ -39,7 +40,7 @@ export function WorkloadsPage() {
               {
                 title: "状态",
                 dataIndex: "status",
-                render: (status) => <Tag color={status === "failed" ? "red" : status === "succeeded" ? "green" : status === "running" ? "arcoblue" : "orange"}>{status}</Tag>,
+                render: (status) => <Tag color={status === "failed" ? "red" : status === "succeeded" ? "green" : status === "running" ? "arcoblue" : "orange"}>{statusLabel(status)}</Tag>,
               },
               {
                 title: "进度",

@@ -2,6 +2,7 @@ import { Card, Descriptions, Grid, List, Tag } from "@arco-design/web-react";
 import { PageHeader } from "../features/common/PageHeader.jsx";
 import { useControlPlaneContext } from "../layout/ControlPlaneProvider.jsx";
 import { API_BASE } from "../services/api.js";
+import { statusLabel } from "../utils/format.js";
 
 const { Row, Col } = Grid;
 
@@ -21,8 +22,8 @@ export function AuditSettingsPage() {
               data={[
                 { label: "API Base", value: API_BASE },
                 { label: "CORS Origin", value: health?.cors_allow_origin ?? "TIANJUN_CORS_ALLOW_ORIGIN default: http://127.0.0.1:5173" },
-                { label: "模型状态", value: state.model?.status ?? "unknown" },
-                { label: "Hermes LLM", value: health?.chat_runtime?.llm?.enabled ? "enabled" : "fallback" },
+                { label: "模型状态", value: statusLabel(state.model?.status ?? "unknown") },
+                { label: "Hermes LLM", value: statusLabel(health?.chat_runtime?.llm?.enabled ? "enabled" : "fallback") },
               ]}
             />
           </Card>
@@ -44,7 +45,7 @@ export function AuditSettingsPage() {
       <Row gutter={[16, 16]} className="tj-section-row">
         <Col span={12}>
           <Card title="近期进度事件" bordered={false} className="tj-panel">
-            <List dataSource={events.slice().reverse().slice(0, 8)} render={(item) => <List.Item>{item.task_id ?? "-"} / {item.stage ?? "-"} / {item.status ?? "-"}</List.Item>} />
+            <List dataSource={events.slice().reverse().slice(0, 8)} render={(item) => <List.Item>{item.task_id ?? "-"} / {item.stage ?? "-"} / {statusLabel(item.status ?? "-")}</List.Item>} />
           </Card>
         </Col>
         <Col span={12}>

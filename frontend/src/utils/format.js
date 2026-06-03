@@ -58,3 +58,26 @@ export function regionLabel(value) {
   const normalized = String(value).trim().toLowerCase();
   return map[normalized] ?? String(value);
 }
+
+export function statusLabel(value) {
+  const map = {
+    online: "在线",
+    offline: "离线",
+    enabled: "已启用",
+    disabled: "已停用",
+    fallback: "回退模式",
+    loaded: "已加载",
+    loading: "加载中",
+    unknown: "未知",
+    ok: "正常",
+    degraded: "降级",
+    committed: "已提交",
+    pending: "待处理",
+    running: "运行中",
+    succeeded: "成功",
+    failed: "失败",
+  };
+  if (value == null || value === "") return "-";
+  const normalized = String(value).trim().toLowerCase();
+  return map[normalized] ?? String(value);
+}

@@ -117,23 +117,21 @@
 .tj-weight-list {
   overflow: hidden;
   border: 1px solid #e1e8f2;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
 }
 
-.tj-weight-row {
+.tj-weight-row.detailed {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr) 112px;
   align-items: center;
-  min-height: 22px;
-  padding: 0 54px 0 0;
+  min-height: 58px;
+  padding: 0 14px 0 0;
   border-bottom: 1px solid #e7edf5;
   color: #25344f;
-  font-size: 12px;
-  font-weight: 800;
 }
 
-.tj-weight-row:last-child {
+.tj-weight-row.detailed:last-child {
   border-bottom: 0;
 }
 
@@ -152,14 +150,64 @@
   background: #f2ebff;
 }
 
+.tj-weight-main {
+  min-width: 0;
+}
+
+.tj-weight-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
 .tj-weight-name {
   overflow: hidden;
+  color: #17243a;
+  font-size: 13px;
+  font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tj-weight-row .arco-tag {
-  min-width: 58px;
+.tj-weight-meta code {
+  color: #7a8597;
+  font-size: 11px;
+  font-weight: 700;
+  background: transparent;
+}
+
+.tj-weight-bar {
+  height: 7px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef3fa;
+}
+
+.tj-weight-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--tj-purple), var(--tj-blue));
+}
+
+.tj-weight-side {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+}
+
+.tj-weight-side b {
+  color: #101d35;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tj-weight-side .arco-tag {
+  min-width: 62px;
   justify-content: center;
   font-weight: 900;
 }
@@ -180,6 +228,10 @@
   color: #7a8597;
   font-size: 14px;
   font-weight: 750;
+}
+
+.tj-weight-empty {
+  min-height: 240px;
 }
 
 .tj-draft-card {
@@ -278,8 +330,8 @@
     min-height: 316px;
   }
 
-  .tj-weight-row {
-    min-height: 22px;
+  .tj-weight-row.detailed {
+    min-height: 58px;
   }
 
   .tj-model-empty {
