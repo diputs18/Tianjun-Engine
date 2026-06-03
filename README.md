@@ -35,15 +35,15 @@ Tianjun-Engine/
 │  ├─ tianjun.example.toml
 │  └─ sim_cluster.example.json
 ├─ frontend/
-│  ├─ public/dashboardRuntime.js
 │  ├─ src/
 │  │  ├─ app/          # 路由定义与应用入口
 │  │  ├─ layout/       # 侧栏、顶栏、控制面数据 Provider
 │  │  ├─ pages/        # 六个页面级入口
-│  │  ├─ services/     # API 封装
-│  │  ├─ hooks/        # 轮询与状态聚合
 │  │  ├─ features/     # KPI、图表、拓扑、调度台等业务组件
-│  │  ├─ styles/       # Arco 控制台样式
+│  │  ├─ services/     # API 封装
+│  │  ├─ hooks/        # SSE、轮询与状态聚合
+│  │  ├─ theme/        # ThemeProvider 与主题 token hook
+│  │  ├─ styles/       # 主题 token、布局与页面样式
 │  │  └─ utils/        # 格式化工具
 │  ├─ package.json
 │  └─ vite.config.js
@@ -60,14 +60,14 @@ Tianjun-Engine/
 
 ## 前端页面
 
-前端使用 Arco Design、React Router、ECharts、G6、dayjs 与 clsx。页面级设计如下：
+前端使用 Arco Design、React Router、ECharts、dayjs 与 clsx；内置 light/dark 双主题系统，默认跟随系统偏好。页面级设计如下：
 
 | 路由 | 页面 | 目标 |
 | --- | --- | --- |
 | `/` | OverviewPage | 5 秒内判断系统是否健康、SLA 是否达标、模型是否加载 |
 | `/scheduling` | SchedulingPage | AI 对话、调度工作台、仿真结果和正式下发保护 |
 | `/workloads` | WorkloadsPage | 任务队列、运行态与历史执行结果 |
-| `/infrastructure` | InfrastructurePage | 资源池概览、节点表格、G6 拓扑、节点详情抽屉 |
+| `/infrastructure` | InfrastructurePage | 资源池概览、区域分级拓扑、节点表格和节点详情抽屉 |
 | `/model-policy` | ModelPolicyPage | 模型运行时、策略权重、策略草案与解释性历史 |
 | `/audit-settings` | AuditSettingsPage | 只读审计、运行配置与安全边界 |
 

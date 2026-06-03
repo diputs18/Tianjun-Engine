@@ -9,7 +9,6 @@
     "preview": "vite preview --host 127.0.0.1 --port 5173"
   },
   "dependencies": {
-    "@antv/g6": "^5.1.1",
     "@arco-design/web-react": "^2.66.15",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.21",
