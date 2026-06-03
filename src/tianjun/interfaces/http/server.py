@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -10,7 +9,6 @@ from urllib.parse import urlparse
 from ...application.control_plane import CentralControlPlane
 from ...chat import ChatRuntime
 from ...scenarios import node_from_dict, task_from_dict
-from ..dashboard.page import render_dashboard_html
 
 
 CORS_ALLOW_ORIGIN = "http://127.0.0.1:5173"
@@ -38,9 +36,6 @@ def build_http_server(
             try:
                 if path == "/":
                     self._write_json(200, {"name": "Tianjun Engine API", "status": "ok"})
-                    return
-                if path == "/dashboard" and os.environ.get("TIANJUN_ENABLE_LEGACY_DASHBOARD") == "1":
-                    self._write_html(200, render_dashboard_html())
                     return
                 if path == "/report":
                     self._write_json(200, control_plane.build_report())
@@ -359,7 +354,7 @@ def build_http_server(
                 status = committed.get("status", "committed")
             return {
                 "status": status,
-                "mode": "optimized_legacy_dashboard_gateway",
+                "mode": "optimized_intent_gateway",
                 "interpretation": {
                     "requirement": requirement,
                     "policy_id": policy_id,
@@ -480,14 +475,5 @@ def build_http_server(
                 send({"type": "error", "error": str(exc)})
                 send({"type": "done"})
                 self.close_connection = True
-
-        def _write_html(self, status: int, payload: str) -> None:
-            body = payload.encode("utf-8")
-            self.send_response(status)
-            self._send_cors_headers()
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
 
     return ThreadingHTTPServer((host, port), ControlPlaneHandler)

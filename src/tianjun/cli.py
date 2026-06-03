@@ -307,7 +307,7 @@ def main() -> None:
             control_plane.policy_generator.default_execution_mode = ExecutionMode(str(default_execution_mode))
         if inventory:
             # Validate the inventory path/configuration, but do not register its
-            # nodes here. The dashboard should discover resources only after the
+            # nodes here. The frontend should discover resources only after the
             # CloudSimPlus/simulation backend reports them.
             load_inventory_config(inventory)
         if scenario and not control_plane.tasks:
