@@ -273,7 +273,8 @@
 }
 
 .tj-content {
-  padding: 24px 24px 32px;
+  min-width: 0;
+  padding: var(--tj-content-padding-y) var(--tj-content-padding-x) 32px;
 }
 
 @media (max-width: 1366px) {

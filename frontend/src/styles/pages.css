@@ -6,8 +6,25 @@
 }
 
 .tj-page {
-  max-width: 1280px;
+  width: 100%;
+  max-width: var(--tj-page-standard);
   margin: 0;
+}
+
+.tj-page.page-narrow {
+  max-width: var(--tj-page-narrow);
+}
+
+.tj-page.page-standard {
+  max-width: var(--tj-page-standard);
+}
+
+.tj-page.page-wide {
+  max-width: var(--tj-page-wide);
+}
+
+.tj-page.page-full {
+  max-width: none;
 }
 
 .tj-page-header {

@@ -23,6 +23,32 @@
   --tj-radius-sm: 8px;
   --tj-radius-md: 10px;
   --tj-card-shadow: 0 14px 34px rgba(31, 67, 120, 0.07);
+
+  /* Layout width tokens */
+  --tj-content-padding-x: 24px;
+  --tj-content-padding-y: 24px;
+  --tj-page-narrow: 1120px;
+  --tj-page-standard: 1440px;
+  --tj-page-wide: 1680px;
+  --tj-page-full: none;
+  --tj-grid-gap: 16px;
+  --tj-grid-gap-lg: 22px;
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --tj-content-padding-x: 32px;
+    --tj-page-standard: 1520px;
+    --tj-page-wide: 1760px;
+  }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    --tj-content-padding-x: 36px;
+    --tj-page-standard: 1600px;
+    --tj-page-wide: 1840px;
+  }
 }
 
 * {

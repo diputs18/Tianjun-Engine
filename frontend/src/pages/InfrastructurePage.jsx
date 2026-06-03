@@ -58,7 +58,7 @@ export function InfrastructurePage() {
   }
 
   return (
-    <div className="tj-page tj-page-infrastructure">
+    <div className="tj-page tj-page-infrastructure page-full">
       <PageHeader eyebrow="P4 / INFRASTRUCTURE" title="基础设施" />
       <Row gutter={[20, 20]} className="tj-infra-metric-row">
         <Col span={6}><InfraMetric title="节点总数" value={state.nodeCount} icon={<IconStorage />} /></Col>

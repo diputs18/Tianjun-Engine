@@ -1,5 +1,5 @@
 .tj-page-model-policy {
-  max-width: 1500px;
+  max-width: var(--tj-page-wide);
 }
 
 .tj-model-metric-row {
@@ -58,6 +58,14 @@
   font-size: 26px;
   font-weight: 900;
   line-height: 1;
+}
+
+.tj-model-metric-inline-detail {
+  margin-left: 8px;
+  color: #4f5d75;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 750;
 }
 
 .tj-model-metric.tone-purple b {

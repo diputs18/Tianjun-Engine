@@ -68,83 +68,85 @@ export function WorkloadsPage() {
   ];
 
   return (
-    <div className="tj-page tj-page-workloads">
+    <div className="tj-page tj-page-workloads page-wide">
       <PageHeader eyebrow="P3 / WORKLOADS" title="任务执行" />
 
-      <Row gutter={[20, 20]} className="tj-workload-metric-row">
-        <Col span={6}>
-          <WorkloadMetric
-            title="任务总数"
-            value={state.totals.tasks ?? 0}
-            icon={<IconCalendar />}
-          />
-        </Col>
-        <Col span={6}>
-          <WorkloadMetric
-            title="等待调度"
-            value={state.pendingTasks}
-            icon={<IconClockCircle />}
-            tone="blue"
-          />
-        </Col>
-        <Col span={6}>
-          <WorkloadMetric
-            title="运行中"
-            value={state.runningTasks}
-            icon={<IconPlayCircle />}
-            tone="green"
-          />
-        </Col>
-        <Col span={6}>
-          <WorkloadMetric
-            title="执行成功率"
-            value={(state.successRate * 100).toFixed(1)}
-            suffix="%"
-            icon={<IconArrowRise />}
-            tone="green"
-          />
-        </Col>
-      </Row>
+      <div className="tj-workload-content">
+        <Row gutter={[20, 20]} className="tj-workload-metric-row">
+          <Col span={6}>
+            <WorkloadMetric
+              title="任务总数"
+              value={state.totals.tasks ?? 0}
+              icon={<IconCalendar />}
+            />
+          </Col>
+          <Col span={6}>
+            <WorkloadMetric
+              title="等待调度"
+              value={state.pendingTasks}
+              icon={<IconClockCircle />}
+              tone="blue"
+            />
+          </Col>
+          <Col span={6}>
+            <WorkloadMetric
+              title="运行中"
+              value={state.runningTasks}
+              icon={<IconPlayCircle />}
+              tone="green"
+            />
+          </Col>
+          <Col span={6}>
+            <WorkloadMetric
+              title="执行成功率"
+              value={(state.successRate * 100).toFixed(1)}
+              suffix="%"
+              icon={<IconArrowRise />}
+              tone="green"
+            />
+          </Col>
+        </Row>
 
-      <Card title="任务管理" bordered={false} className="tj-panel tj-workload-table-card">
-        {rows.length ? (
-          <Table
-            className="tj-workload-table"
-            rowKey="key"
-            data={rows}
-            pagination={{ pageSize: 10, showTotal: true }}
-            columns={[
-              { title: "任务 ID", dataIndex: "task_id", width: 260 },
-              { title: "类型", dataIndex: "type", width: 160 },
-              { title: "节点", dataIndex: "node", width: 180 },
-              {
-                title: "状态",
-                dataIndex: "status",
-                width: 160,
-                render: (status) => (
-                  <Tag color={statusColor(status)}>{statusLabel(status)}</Tag>
-                ),
-              },
-              {
-                title: "进度",
-                dataIndex: "progress",
-                width: 260,
-                render: (value) => {
-                  const percent = Math.round(Number(value ?? 0) * 100);
-                  return (
-                    <div className="tj-workload-progress">
-                      <span>{percent}%</span>
-                      <Progress percent={percent} showText={false} size="small" />
-                    </div>
-                  );
+        <Card title="任务管理" bordered={false} className="tj-panel tj-workload-table-card">
+          {rows.length ? (
+            <Table
+              className="tj-workload-table"
+              rowKey="key"
+              data={rows}
+              pagination={{ pageSize: 10, showTotal: true }}
+              columns={[
+                { title: "任务 ID", dataIndex: "task_id", width: 260 },
+                { title: "类型", dataIndex: "type", width: 160 },
+                { title: "节点", dataIndex: "node", width: 180 },
+                {
+                  title: "状态",
+                  dataIndex: "status",
+                  width: 160,
+                  render: (status) => (
+                    <Tag color={statusColor(status)}>{statusLabel(status)}</Tag>
+                  ),
                 },
-              },
-            ]}
-          />
-        ) : (
-          <EmptyState description="暂无任务。启动 sim-backend 或提交策略后会出现任务。" />
-        )}
-      </Card>
+                {
+                  title: "进度",
+                  dataIndex: "progress",
+                  width: 260,
+                  render: (value) => {
+                    const percent = Math.round(Number(value ?? 0) * 100);
+                    return (
+                      <div className="tj-workload-progress">
+                        <span>{percent}%</span>
+                        <Progress percent={percent} showText={false} size="small" />
+                      </div>
+                    );
+                  },
+                },
+              ]}
+            />
+          ) : (
+            <EmptyState description="暂无任务。启动 sim-backend 或提交策略后会出现任务。" />
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

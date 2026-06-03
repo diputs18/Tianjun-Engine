@@ -1,5 +1,17 @@
 .tj-page-scheduling {
-  max-width: 1680px;
+  max-width: var(--tj-page-wide);
+}
+
+@media (min-width: 1680px) {
+  .tj-ai-workbench-grid {
+    grid-template-columns: minmax(620px, 1.08fr) minmax(520px, 0.92fr);
+  }
+}
+
+@media (min-width: 1800px) {
+  .tj-page-scheduling {
+    max-width: none;
+  }
 }
 
 .tj-ai-card {

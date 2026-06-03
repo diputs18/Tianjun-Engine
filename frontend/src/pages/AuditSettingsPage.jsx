@@ -12,7 +12,7 @@ export function AuditSettingsPage() {
   const events = report?.recent_progress_events ?? [];
 
   return (
-    <div className="tj-page">
+    <div className="tj-page tj-page-audit-settings page-standard">
       <PageHeader eyebrow="P6 / AUDIT & SETTINGS" title="审计与设置" description="第一版只读呈现运行配置、安全边界和近期事件。" />
       <Row gutter={[16, 16]}>
         <Col span={12}>

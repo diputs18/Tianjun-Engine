@@ -4,7 +4,7 @@ import { SchedulingConsole } from "../features/scheduling/SchedulingConsole.jsx"
 
 export function SchedulingPage() {
   return (
-    <div className="tj-page tj-page-scheduling">
+    <div className="tj-page tj-page-scheduling page-wide">
       <PageHeader
         eyebrow="P2 / SCHEDULING WORKBENCH"
         title="调度工作台"

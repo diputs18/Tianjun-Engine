@@ -12,54 +12,44 @@ import { num, statusLabel } from "../utils/format.js";
 
 const { Row, Col } = Grid;
 
-const weightOrder = [
-  "resource_fit",
-  "deadline_completion",
-  "cost",
-  "reliability",
-  "load_balance",
-  "locality",
-  "jitter",
-  "node_load",
-  "bandwidth_utilization",
-  "security_policy",
-  "lstm_latency_prediction",
-  "graphsage_topology_score",
+const weightDisplayItems = [
+  { key: "performance", label: "资源匹配", feature: "resource_fit" },
+  { key: "completion", label: "截止期完成", feature: "deadline_completion" },
+  { key: "cost", label: "成本", feature: "cost" },
+  { key: "reliability", label: "可靠性", feature: "reliability" },
+  { key: "balance", label: "负载均衡", feature: "load_balance" },
+  { key: "fragmentation", label: "资源碎片", feature: "node_load" },
+  { key: "locality", label: "地域亲和", feature: "locality" },
+  { key: "network", label: "网络稳定性", feature: "bandwidth_utilization" },
+  { key: "security", label: "安全策略", feature: "security_policy" },
 ];
-
-const weightLabels = {
-  resource_fit: "资源匹配",
-  deadline_completion: "截止期完成",
-  cost: "成本",
-  reliability: "可靠性",
-  load_balance: "负载均衡",
-  locality: "地域亲和",
-  jitter: "时延抖动",
-  node_load: "节点负载",
-  bandwidth_utilization: "带宽利用率",
-  security_policy: "安全策略",
-  lstm_latency_prediction: "LSTM 时延预测",
-  graphsage_topology_score: "GraphSAGE 拓扑评分",
-};
-
-const mlWeightKeys = new Set([
-  "lstm_latency_prediction",
-  "graphsage_topology_score",
-]);
 
 function modelStatus(state) {
   if (state.modelLoaded) return statusLabel("loaded");
   return statusLabel(state.model?.status ?? "unknown");
 }
 
-function PolicyMetric({ icon, title, value, detail, tone = "blue", iconSide = "left" }) {
+function PolicyMetric({
+  icon,
+  title,
+  value,
+  detail,
+  tone = "blue",
+  iconSide = "left",
+  detailInline = false,
+}) {
   return (
     <Card className={`tj-model-metric tone-${tone} icon-${iconSide}`} bordered={false}>
       {iconSide === "left" ? <span className="tj-model-metric-icon">{icon}</span> : null}
       <div>
         <span>{title}</span>
-        <b>{value}</b>
-        {detail ? <small>{detail}</small> : null}
+        <b>
+          {value}
+          {detail && detailInline ? (
+            <em className="tj-model-metric-inline-detail">{detail}</em>
+          ) : null}
+        </b>
+        {detail && !detailInline ? <small>{detail}</small> : null}
       </div>
       {iconSide === "right" ? <span className="tj-model-metric-icon">{icon}</span> : null}
     </Card>
@@ -68,9 +58,7 @@ function PolicyMetric({ icon, title, value, detail, tone = "blue", iconSide = "l
 
 function WeightList({ weights = {}, features }) {
   const featureSet = new Set(features ?? []);
-  const keys = weightOrder.filter((key) => key in weights || featureSet.has(key));
-  const fallbackKeys = Object.keys(weights ?? {});
-  const rows = keys.length ? keys : fallbackKeys;
+  const rows = weightDisplayItems.filter((item) => item.key in weights);
 
   if (!rows.length) {
     return (
@@ -80,23 +68,22 @@ function WeightList({ weights = {}, features }) {
     );
   }
 
-  const maxWeight = Math.max(...rows.map((key) => Number(weights[key] ?? 0)), 1);
+  const maxWeight = Math.max(...rows.map((item) => Number(weights[item.key] ?? 0)), 1);
 
   return (
     <div className="tj-weight-list">
-      {rows.map((key) => {
-        const value = Number(weights[key] ?? 0);
+      {rows.map((item) => {
+        const value = Number(weights[item.key] ?? 0);
         const percent = Math.max(4, Math.round((value / maxWeight) * 100));
-        const isFeatureLoaded = featureSet.has(key);
-        const isMlWeight = mlWeightKeys.has(key);
+        const isFeatureLoaded = featureSet.has(item.feature);
 
         return (
-          <div className="tj-weight-row detailed" key={key}>
+          <div className="tj-weight-row detailed" key={item.key}>
             <span className="tj-weight-icon"><IconMindMapping /></span>
             <div className="tj-weight-main">
               <div className="tj-weight-meta">
-                <span className="tj-weight-name">{weightLabels[key] ?? key}</span>
-                <code>{key}</code>
+                <span className="tj-weight-name">{item.label}</span>
+                <code>{item.key}</code>
               </div>
               <div className="tj-weight-bar">
                 <i style={{ width: `${percent}%` }} />
@@ -104,8 +91,8 @@ function WeightList({ weights = {}, features }) {
             </div>
             <div className="tj-weight-side">
               <b>{num(value, 3)}</b>
-              <Tag color={isMlWeight ? "purple" : isFeatureLoaded ? "arcoblue" : "green"}>
-                {isMlWeight ? "ML" : isFeatureLoaded ? "feature" : "weight"}
+              <Tag color={isFeatureLoaded ? "arcoblue" : "green"}>
+                weight
               </Tag>
             </div>
           </div>
@@ -146,7 +133,7 @@ export function ModelPolicyPage() {
   const draftRows = useMemo(() => policies.slice(0, 5), [policies]);
 
   return (
-    <div className="tj-page tj-page-model-policy">
+    <div className="tj-page tj-page-model-policy page-wide">
       <PageHeader eyebrow="P5 / MODEL & POLICY" title="模型与策略" />
       <Row gutter={[20, 20]} className="tj-model-metric-row">
         <Col span={6}>
@@ -154,6 +141,7 @@ export function ModelPolicyPage() {
             title="模型运行时"
             value={modelStatus(state)}
             detail={loadedModels.join(" / ") || "lstm / gnn"}
+            detailInline
             icon={<IconMindMapping />}
             tone="purple"
             iconSide="right"

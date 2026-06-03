@@ -1,5 +1,11 @@
 .tj-page-infrastructure {
-  max-width: 1500px;
+  max-width: var(--tj-page-wide);
+}
+
+@media (min-width: 1800px) {
+  .tj-page-infrastructure {
+    max-width: none;
+  }
 }
 
 .tj-infra-metric-row {
@@ -495,10 +501,6 @@
 }
 
 @media (max-width: 1366px) {
-  .tj-page-infrastructure {
-    max-width: 1288px;
-  }
-
   .tj-infra-metric .arco-card-body {
     gap: 18px;
     padding: 20px;

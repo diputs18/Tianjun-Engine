@@ -1,13 +1,24 @@
 .tj-page-workloads {
-  max-width: 1500px;
+  max-width: var(--tj-page-wide);
+}
+
+@media (min-width: 1800px) {
+  .tj-page-workloads {
+    max-width: none;
+  }
 }
 
 .tj-page-workloads .tj-page-header {
   margin-bottom: 24px;
 }
 
+.tj-workload-content {
+  display: grid;
+  gap: 32px;
+}
+
 .tj-workload-metric-row {
-  margin-bottom: 32px;
+  margin-bottom: 0;
 }
 
 .tj-workload-metric {
@@ -82,6 +93,12 @@
 
 .tj-workload-table-card .arco-card-body {
   padding: 0;
+}
+
+.tj-workload-table-card .tj-empty {
+  min-height: 300px;
+  display: grid;
+  place-items: center;
 }
 
 .tj-workload-table .arco-table-container {
