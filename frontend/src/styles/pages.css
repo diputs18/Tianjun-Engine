@@ -44,12 +44,12 @@
 .tj-kicker::after {
   content: " / ";
   margin: 0 9px;
-  color: #b8c4d7;
+  color: var(--tj-line);
 }
 
 .tj-page-header h2 {
   margin: 8px 0 0;
-  color: #081632;
+  color: var(--tj-text);
   font-size: var(--tj-font-page-title);
   font-weight: 900;
   line-height: 1.2;
@@ -71,7 +71,7 @@
 .tj-kpi-card,
 .tj-ai-card,
 .tj-hero-metric {
-  border: 1px solid #dce6f2;
+  border: 1px solid var(--tj-line);
   border-radius: var(--tj-radius-md);
   box-shadow: var(--tj-card-shadow);
   background: var(--tj-surface);
@@ -83,7 +83,7 @@
 }
 
 .tj-panel .arco-card-header-title {
-  color: #111d35;
+  color: var(--tj-text);
   font-size: var(--tj-font-lg);
   font-weight: 800;
 }
@@ -161,12 +161,9 @@
 .tj-topology-graph {
   width: 100%;
   min-height: 420px;
-  border: 1px solid rgba(16, 24, 40, 0.08);
+  border: 1px solid var(--tj-line-soft);
   border-radius: var(--tj-radius-sm);
-  background:
-    linear-gradient(90deg, rgba(23, 107, 135, 0.08) 1px, transparent 1px),
-    linear-gradient(rgba(23, 107, 135, 0.06) 1px, transparent 1px),
-    #fbfdfc;
+  background: var(--tj-surface-muted);
   background-size: 24px 24px;
 }
 

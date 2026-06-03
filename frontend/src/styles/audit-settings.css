@@ -9,7 +9,7 @@
 .tj-page-audit-settings .tj-page-header .arco-typography-paragraph {
   display: block;
   margin: 10px 0 0;
-  color: #5e6d86;
+  color: var(--tj-text-secondary);
   font-size: 14px;
   font-weight: 650;
 }
@@ -35,7 +35,7 @@
 }
 
 .tj-audit-card .arco-card-header-title {
-  color: #0d1b36;
+  color: var(--tj-text);
   font-size: 18px;
   font-weight: 900;
 }
@@ -47,16 +47,16 @@
 /* 运行配置：双列表格 */
 .tj-audit-config-table {
   overflow: hidden;
-  border: 1px solid #dce6f2;
+  border: 1px solid var(--tj-line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--tj-surface);
 }
 
 .tj-audit-config-row {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   min-height: 54px;
-  border-bottom: 1px solid #e2e9f2;
+  border-bottom: 1px solid var(--tj-line-soft);
 }
 
 .tj-audit-config-row:last-child {
@@ -69,13 +69,13 @@
   align-items: center;
   min-width: 0;
   padding: 0 18px;
-  color: #24324c;
+  color: var(--tj-text);
   font-size: 14px;
 }
 
 .tj-audit-config-label {
-  border-right: 1px solid #e2e9f2;
-  background: rgba(247, 250, 255, 0.72);
+  border-right: 1px solid var(--tj-line-soft);
+  background: var(--tj-surface-muted);
   font-weight: 850;
 }
 
@@ -89,9 +89,9 @@
 /* 安全边界 */
 .tj-audit-guardrail-list {
   overflow: hidden;
-  border: 1px solid #dce6f2;
+  border: 1px solid var(--tj-line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--tj-surface);
 }
 
 .tj-audit-guardrail-item {
@@ -99,7 +99,7 @@
   grid-template-columns: 92px minmax(0, 1fr);
   align-items: center;
   min-height: 52px;
-  border-bottom: 1px solid #e2e9f2;
+  border-bottom: 1px solid var(--tj-line-soft);
 }
 
 .tj-audit-guardrail-item:last-child {
@@ -114,7 +114,7 @@
 .tj-audit-guardrail-item span {
   min-width: 0;
   padding: 0 16px;
-  color: #24324c;
+  color: var(--tj-text);
   font-size: 14px;
   font-weight: 650;
   overflow: hidden;
@@ -136,7 +136,7 @@
 
 .tj-audit-empty .arco-empty-description {
   margin-top: 14px;
-  color: #7a8597;
+  color: var(--tj-text-muted);
   font-size: 14px;
   font-weight: 650;
 }
@@ -153,9 +153,9 @@
   gap: 12px;
   min-height: 44px;
   padding: 0 12px;
-  border: 1px solid #e2e9f2;
+  border: 1px solid var(--tj-line-soft);
   border-radius: 8px;
-  background: rgba(247, 250, 255, 0.72);
+  background: var(--tj-surface-muted);
 }
 
 .tj-audit-event-item .arco-tag {
@@ -166,7 +166,7 @@
 .tj-audit-event-item span {
   min-width: 0;
   overflow: hidden;
-  color: #24324c;
+  color: var(--tj-text);
   font-size: 13px;
   font-weight: 750;
   text-overflow: ellipsis;
@@ -175,7 +175,7 @@
 
 .tj-audit-event-item em {
   overflow: hidden;
-  color: #6b778c;
+  color: var(--tj-text-muted);
   font-size: 13px;
   font-style: normal;
   font-weight: 650;
@@ -203,7 +203,7 @@
   .tj-audit-config-label {
     min-height: 42px;
     border-right: 0;
-    border-bottom: 1px solid #e2e9f2;
+    border-bottom: 1px solid var(--tj-line-soft);
   }
 
   .tj-audit-guardrail-item {

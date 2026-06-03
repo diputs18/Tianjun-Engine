@@ -1,8 +1,10 @@
 import { Graph } from "@antv/g6";
 import { useEffect, useRef } from "react";
+import { useThemeTokens } from "../../theme/useThemeTokens.js";
 
 export function TopologyGraph({ nodes = [], topology }) {
   const hostRef = useRef(null);
+  const tokens = useThemeTokens();
 
   useEffect(() => {
     if (!hostRef.current) return undefined;
@@ -25,8 +27,8 @@ export function TopologyGraph({ nodes = [], topology }) {
       type: "topology",
       style: {
         labelText: id.slice(0, 18),
-        fill: "#f7f2df",
-        stroke: "#b7791f",
+        fill: tokens.amber + "33",
+        stroke: tokens.amber,
         size: 42,
       },
     }));
@@ -36,8 +38,8 @@ export function TopologyGraph({ nodes = [], topology }) {
       data: node,
       style: {
         labelText: node.node_id.replace("dci-", "").slice(0, 18),
-        fill: node.online ? "#e9fbf7" : "#fff1f0",
-        stroke: node.online ? "#2a9d8f" : "#f53f3f",
+        fill: node.online ? tokens.green + "22" : tokens.red + "22",
+        stroke: node.online ? tokens.green : tokens.red,
         size: 32,
       },
     }));
@@ -48,7 +50,7 @@ export function TopologyGraph({ nodes = [], topology }) {
         id: `physical-${index}`,
         source: String(edge.source ?? ""),
         target: String(edge.target ?? ""),
-        style: { stroke: "#9aa8b2", lineWidth: 1.6 },
+        style: { stroke: tokens.textMuted, lineWidth: 1.6 },
       })),
       ...Object.entries(attachments)
         .filter(([computeId]) => computeNodeIds.has(String(computeId)))
@@ -56,7 +58,7 @@ export function TopologyGraph({ nodes = [], topology }) {
           id: `attach-${computeId}`,
           source: String(computeId),
           target: String(anchor),
-          style: { stroke: "#2a9d8f", lineDash: [6, 5], lineWidth: 1.2 },
+          style: { stroke: tokens.green, lineDash: [6, 5], lineWidth: 1.2 },
         })),
     ];
     const safeEdges = graphEdges.filter((edge) => graphNodeIds.has(edge.source) && graphNodeIds.has(edge.target));
@@ -78,13 +80,13 @@ export function TopologyGraph({ nodes = [], topology }) {
         },
       },
       edge: {
-        style: { stroke: "#b8c4cc", lineWidth: 1.2 },
+        style: { stroke: tokens.line, lineWidth: 1.2 },
       },
       behaviors: ["drag-canvas", "zoom-canvas", "drag-element"],
     });
     graph.render();
     return () => graph.destroy();
-  }, [nodes, topology]);
+  }, [nodes, topology, tokens]);
 
   return <div ref={hostRef} className="tj-topology-graph" />;
 }

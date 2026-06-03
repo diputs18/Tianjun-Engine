@@ -1,6 +1,7 @@
 import { Card, Empty, Tag } from "@arco-design/web-react";
 import { PageHeader } from "../features/common/PageHeader.jsx";
 import { useControlPlaneContext } from "../layout/ControlPlaneProvider.jsx";
+import { useTheme } from "../theme/ThemeProvider.jsx";
 import { API_BASE } from "../services/api.js";
 import { statusLabel } from "../utils/format.js";
 
@@ -76,6 +77,7 @@ function FeedbackList({ items }) {
 
 export function AuditSettingsPage() {
   const { health, report, state } = useControlPlaneContext();
+  const { mode, theme } = useTheme();
   const feedback = report?.user_feedback ?? [];
   const events = report?.recent_progress_events ?? [];
 
@@ -92,6 +94,14 @@ export function AuditSettingsPage() {
     {
       label: "Hermes LLM",
       value: statusLabel(health?.chat_runtime?.llm?.enabled ? "enabled" : "fallback"),
+    },
+    {
+      label: "主题模式",
+      value: mode === "system" ? "跟随系统" : mode === "dark" ? "暗色" : "浅色",
+    },
+    {
+      label: "当前主题",
+      value: theme,
     },
   ];
 

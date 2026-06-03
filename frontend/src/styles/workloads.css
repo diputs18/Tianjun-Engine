@@ -23,9 +23,9 @@
 
 .tj-workload-metric {
   min-height: 118px;
-  border: 1px solid #dce6f2;
+  border: 1px solid var(--tj-line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--tj-surface);
   box-shadow: var(--tj-card-shadow);
 }
 
@@ -39,7 +39,7 @@
 
 .tj-workload-metric span:not(.tj-workload-metric-icon) {
   display: block;
-  color: #59677f;
+  color: var(--tj-text-secondary);
   font-size: 16px;
   font-weight: 850;
 }
@@ -47,7 +47,7 @@
 .tj-workload-metric b {
   display: block;
   margin-top: 18px;
-  color: #07142d;
+  color: var(--tj-text);
   font-size: 34px;
   font-weight: 900;
   line-height: 1;
@@ -67,7 +67,7 @@
   border-radius: 50%;
   color: var(--tj-blue);
   font-size: 34px;
-  background: #eaf3ff;
+  background: var(--tj-blue-soft);
 }
 
 .tj-workload-metric.tone-green b,
@@ -86,7 +86,7 @@
 }
 
 .tj-workload-table-card .arco-card-header-title {
-  color: #07142d;
+  color: var(--tj-text);
   font-size: 18px;
   font-weight: 900;
 }
@@ -107,15 +107,15 @@
 
 .tj-workload-table .arco-table-th {
   height: 58px;
-  color: #6b778c;
+  color: var(--tj-text-muted);
   font-size: 14px;
   font-weight: 900;
-  background: #f7faff;
+  background: var(--tj-surface-muted);
 }
 
 .tj-workload-table .arco-table-td {
   height: 76px;
-  color: #17243a;
+  color: var(--tj-text);
   font-size: 14px;
   font-weight: 750;
 }
@@ -140,7 +140,7 @@
 }
 
 .tj-workload-progress span {
-  color: #17243a;
+  color: var(--tj-text);
   font-weight: 850;
 }
 

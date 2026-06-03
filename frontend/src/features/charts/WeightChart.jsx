@@ -1,4 +1,5 @@
 import ReactECharts from "echarts-for-react";
+import { useThemeTokens } from "../../theme/useThemeTokens.js";
 
 const labels = {
   performance: "Performance",
@@ -13,18 +14,19 @@ const labels = {
 };
 
 export function WeightChart({ weights = {} }) {
+  const tokens = useThemeTokens();
   const entries = Object.entries(weights);
   const option = {
     grid: { left: 96, right: 24, top: 18, bottom: 24 },
     xAxis: {
       type: "value",
-      axisLabel: { color: "#667085" },
-      splitLine: { lineStyle: { color: "rgba(16, 24, 40, 0.08)" } },
+      axisLabel: { color: tokens.textMuted },
+      splitLine: { lineStyle: { color: tokens.line } },
     },
     yAxis: {
       type: "category",
       data: entries.map(([key]) => labels[key] ?? key),
-      axisLabel: { color: "#344054" },
+      axisLabel: { color: tokens.text },
       axisTick: { show: false },
       axisLine: { show: false },
     },
@@ -35,7 +37,7 @@ export function WeightChart({ weights = {} }) {
         barWidth: 12,
         itemStyle: {
           borderRadius: [0, 8, 8, 0],
-          color: "#176b87",
+          color: tokens.blue,
         },
       },
     ],

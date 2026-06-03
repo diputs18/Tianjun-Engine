@@ -67,15 +67,15 @@
 }
 
 .tj-hero-metric.tone-green::before {
-  background: linear-gradient(110deg, rgba(19, 180, 103, 0.08), rgba(255, 255, 255, 0.7));
+  background: linear-gradient(110deg, rgba(19, 180, 103, 0.08), var(--tj-surface));
 }
 
 .tj-hero-metric.tone-blue::before {
-  background: linear-gradient(110deg, rgba(15, 111, 255, 0.08), rgba(255, 255, 255, 0.72));
+  background: linear-gradient(110deg, rgba(15, 111, 255, 0.08), var(--tj-surface));
 }
 
 .tj-hero-metric.tone-purple::before {
-  background: linear-gradient(110deg, rgba(123, 69, 217, 0.1), rgba(255, 255, 255, 0.72));
+  background: linear-gradient(110deg, rgba(123, 69, 217, 0.1), var(--tj-surface));
 }
 
 .tj-hero-metric > * {
@@ -94,23 +94,23 @@
 }
 
 .tone-green .tj-hero-icon {
-  color: #07984f;
-  background: #dcf8e9;
+  color: var(--tj-green);
+  background: var(--tj-green-soft);
 }
 
 .tone-blue .tj-hero-icon {
   color: var(--tj-blue);
-  background: #e4efff;
+  background: var(--tj-blue-soft);
 }
 
 .tone-purple .tj-hero-icon {
   color: var(--tj-purple);
-  background: #eee3ff;
+  background: var(--tj-purple-soft);
 }
 
 .tj-hero-metric label {
   display: block;
-  color: #17243a;
+  color: var(--tj-text);
   font-size: var(--tj-font-md);
   font-weight: 700;
 }
@@ -125,7 +125,7 @@
 }
 
 .tone-green b {
-  color: #08a650;
+  color: var(--tj-green);
 }
 
 .tone-purple b {
@@ -134,7 +134,7 @@
 
 .tj-hero-metric p {
   margin: 6px 0 0;
-  color: #4f5d75;
+  color: var(--tj-text-secondary);
   font-size: var(--tj-font-md);
 }
 
@@ -161,26 +161,26 @@
 }
 
 .tj-task-card h3 {
-  color: #111d35;
+  color: var(--tj-text);
   font-size: var(--tj-font-lg);
 }
 
 .tj-task-card strong {
   display: block;
   margin-top: 18px;
-  color: #10213f;
+  color: var(--tj-text);
   font-size: 34px;
   line-height: 1;
 }
 
 .tj-task-card p {
   margin-top: 12px;
-  color: #5b6b82;
+  color: var(--tj-text-secondary);
   font-size: 15px;
 }
 
 .tj-task-card svg {
-  color: #b8d0ff;
+  color: var(--tj-blue-soft);
   font-size: 70px;
 }
 
@@ -202,7 +202,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding-bottom: 20px;
-  border-bottom: 1px solid #e3eaf4;
+  border-bottom: 1px solid var(--tj-line-soft);
 }
 
 .tj-summary-item {
@@ -219,30 +219,30 @@
   flex: 0 0 auto;
   border-radius: 50%;
   color: var(--tj-blue);
-  background: #e7f1ff;
+  background: var(--tj-blue-soft);
   font-size: 19px;
 }
 
 .tj-summary-item:nth-child(1) > span {
   color: var(--tj-green);
-  background: #e1faec;
+  background: var(--tj-green-soft);
 }
 
 .tj-summary-item:nth-child(2) > span {
   color: var(--tj-purple);
-  background: #efe6ff;
+  background: var(--tj-purple-soft);
 }
 
 .tj-summary-item b {
   display: block;
   margin-bottom: 7px;
-  color: #13213a;
+  color: var(--tj-text);
   font-size: 14px;
 }
 
 .tj-summary-item p {
   margin: 5px 0 0;
-  color: #5b6b82;
+  color: var(--tj-text-secondary);
 }
 
 .tj-summary-metrics {
@@ -254,7 +254,7 @@
 .tj-summary-metrics div {
   min-height: 56px;
   padding: 0 16px;
-  border-right: 1px solid #e3eaf4;
+  border-right: 1px solid var(--tj-line-soft);
 }
 
 .tj-summary-metrics div:first-child {
@@ -267,14 +267,14 @@
 
 .tj-summary-metrics span {
   display: block;
-  color: #607089;
+  color: var(--tj-text-muted);
   font-size: 13px;
 }
 
 .tj-summary-metrics b {
   display: block;
   margin-top: 10px;
-  color: #0c1931;
+  color: var(--tj-text);
   font-size: 17px;
 }
 
@@ -296,9 +296,9 @@
   gap: 12px;
   align-items: center;
   padding: 10px;
-  border: 1px solid #e4ebf4;
+  border: 1px solid var(--tj-line);
   border-radius: var(--tj-radius-md);
-  background: rgba(248, 251, 255, 0.9);
+  background: var(--tj-surface-muted);
 }
 
 .tj-decision-list-modern svg {
@@ -307,13 +307,13 @@
 
 .tj-decision-list-modern b {
   overflow: hidden;
-  color: #14233d;
+  color: var(--tj-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tj-decision-list-modern span {
-  color: #65758b;
+  color: var(--tj-text-secondary);
 }
 
 @media (max-width: 1366px) {
@@ -382,6 +382,6 @@
   .tj-summary-metrics div {
     padding: 12px 0;
     border-right: 0;
-    border-bottom: 1px solid #e3eaf4;
+    border-bottom: 1px solid var(--tj-line-soft);
   }
 }

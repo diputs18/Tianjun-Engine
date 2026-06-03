@@ -1,17 +1,42 @@
-import { Button, Layout, Menu, Space, Tag, Typography } from "@arco-design/web-react";
+import { Button, Dropdown, Layout, Menu, Space, Tag, Typography } from "@arco-design/web-react";
 import {
   IconCodeSandbox,
+  IconDesktop,
+  IconMoon,
   IconRefresh,
   IconRobot,
+  IconSun,
 } from "@arco-design/web-react/icon";
 import clsx from "clsx";
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { routes } from "../app/routes.jsx";
+import { useTheme } from "../theme/ThemeProvider.jsx";
 import { shortTime } from "../utils/format.js";
 import { useControlPlaneContext } from "./ControlPlaneProvider.jsx";
 
 const { Sider, Header, Content } = Layout;
+
+function ThemeSwitcher() {
+  const { mode, setMode, isDark } = useTheme();
+
+  return (
+    <Dropdown
+      droplist={
+        <Menu selectedKeys={[mode]} onClickMenuItem={(key) => setMode(key)}>
+          <Menu.Item key="light"><IconSun /> 浅色</Menu.Item>
+          <Menu.Item key="dark"><IconMoon /> 暗色</Menu.Item>
+          <Menu.Item key="system"><IconDesktop /> 跟随系统</Menu.Item>
+        </Menu>
+      }
+      trigger="click"
+    >
+      <Button className="tj-theme-button" type="text" icon={isDark ? <IconMoon /> : <IconSun />}>
+        {mode === "system" ? "系统" : isDark ? "暗色" : "浅色"}
+      </Button>
+    </Dropdown>
+  );
+}
 
 export function ConsoleLayout({ children }) {
   const navigate = useNavigate();
@@ -59,6 +84,7 @@ export function ConsoleLayout({ children }) {
             </div>
           </div>
           <Space size={8} className="tj-header-status">
+            <ThemeSwitcher />
             <Tag color={error ? "red" : "green"} className={clsx("tj-state-pill", error && "is-error")}>
               <span className="tj-status-dot" />
               <span>{error ? "API 异常" : "API 正常"}</span>

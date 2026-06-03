@@ -8,9 +8,9 @@
 
 .tj-model-metric {
   min-height: 102px;
-  border: 1px solid #dce6f2;
+  border: 1px solid var(--tj-line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--tj-surface);
   box-shadow: var(--tj-card-shadow);
 }
 
@@ -36,17 +36,17 @@
   border-radius: 50%;
   color: var(--tj-blue);
   font-size: 26px;
-  background: #eaf3ff;
+  background: var(--tj-blue-soft);
 }
 
 .tj-model-metric.tone-purple .tj-model-metric-icon {
   color: var(--tj-purple);
-  background: #f1e8ff;
+  background: var(--tj-purple-soft);
 }
 
 .tj-model-metric span:not(.tj-model-metric-icon) {
   display: block;
-  color: #59677f;
+  color: var(--tj-text-secondary);
   font-size: 14px;
   font-weight: 850;
 }
@@ -54,7 +54,7 @@
 .tj-model-metric b {
   display: block;
   margin-top: 8px;
-  color: #0d1b36;
+  color: var(--tj-text);
   font-size: 26px;
   font-weight: 900;
   line-height: 1;
@@ -62,7 +62,7 @@
 
 .tj-model-metric-inline-detail {
   margin-left: 8px;
-  color: #4f5d75;
+  color: var(--tj-text-secondary);
   font-size: 13px;
   font-style: normal;
   font-weight: 750;
@@ -75,7 +75,7 @@
 .tj-model-metric small {
   display: block;
   margin-top: 6px;
-  color: #4f5d75;
+  color: var(--tj-text-secondary);
   font-size: 13px;
   font-weight: 750;
 }
@@ -97,9 +97,9 @@
 }
 
 .tj-model-panel {
-  border: 1px solid #dce6f2;
+  border: 1px solid var(--tj-line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--tj-surface);
 }
 
 .tj-model-panel .arco-card-header {
@@ -108,7 +108,7 @@
 }
 
 .tj-model-panel .arco-card-header-title {
-  color: #101d35;
+  color: var(--tj-text);
   font-size: 17px;
   font-weight: 900;
 }
@@ -124,9 +124,9 @@
 
 .tj-weight-list {
   overflow: hidden;
-  border: 1px solid #e1e8f2;
+  border: 1px solid var(--tj-line-soft);
   border-radius: 12px;
-  background: #fff;
+  background: var(--tj-surface-solid);
 }
 
 .tj-weight-row.detailed {
@@ -135,8 +135,8 @@
   align-items: center;
   min-height: 58px;
   padding: 0 14px 0 0;
-  border-bottom: 1px solid #e7edf5;
-  color: #25344f;
+  border-bottom: 1px solid var(--tj-line-soft);
+  color: var(--tj-text);
 }
 
 .tj-weight-row.detailed:last-child {
@@ -155,7 +155,7 @@
   height: 16px;
   padding: 3px;
   border-radius: 50%;
-  background: #f2ebff;
+  background: var(--tj-purple-soft);
 }
 
 .tj-weight-main {
@@ -172,7 +172,7 @@
 
 .tj-weight-name {
   overflow: hidden;
-  color: #17243a;
+  color: var(--tj-text);
   font-size: 13px;
   font-weight: 900;
   text-overflow: ellipsis;
@@ -180,7 +180,7 @@
 }
 
 .tj-weight-meta code {
-  color: #7a8597;
+  color: var(--tj-text-muted);
   font-size: 11px;
   font-weight: 700;
   background: transparent;
@@ -191,7 +191,7 @@
   margin-top: 9px;
   overflow: hidden;
   border-radius: 999px;
-  background: #eef3fa;
+  background: var(--tj-bg-soft);
 }
 
 .tj-weight-bar i {
@@ -208,7 +208,7 @@
 }
 
 .tj-weight-side b {
-  color: #101d35;
+  color: var(--tj-text);
   font-size: 14px;
   font-weight: 900;
   line-height: 1;
@@ -233,7 +233,7 @@
 
 .tj-model-empty .arco-empty-description {
   margin-top: 18px;
-  color: #7a8597;
+  color: var(--tj-text-muted);
   font-size: 14px;
   font-weight: 750;
 }
@@ -256,15 +256,15 @@
 
 .tj-policy-table .arco-table-th {
   height: 42px;
-  color: #7b8798;
+  color: var(--tj-text-muted);
   font-size: 13px;
   font-weight: 900;
-  background: #f7f9fc;
+  background: var(--tj-surface-muted);
 }
 
 .tj-policy-table .arco-table-td {
   height: 50px;
-  color: #24324c;
+  color: var(--tj-text);
   font-size: 13px;
   font-weight: 750;
 }
@@ -286,7 +286,7 @@
 .tj-history-empty {
   min-height: 206px;
   border-radius: 8px;
-  background: #f7f9fd;
+  background: var(--tj-surface-muted);
 }
 
 .tj-history-list {
@@ -296,20 +296,20 @@
 
 .tj-history-list div {
   padding: 12px 14px;
-  border: 1px solid #e1e8f2;
+  border: 1px solid var(--tj-line-soft);
   border-radius: 8px;
-  background: #fbfdff;
+  background: var(--tj-surface-muted);
 }
 
 .tj-history-list span {
-  color: #52617a;
+  color: var(--tj-text-secondary);
   font-size: 12px;
   font-weight: 900;
 }
 
 .tj-history-list p {
   margin: 6px 0 0;
-  color: #17243a;
+  color: var(--tj-text);
   font-size: 13px;
   font-weight: 750;
 }
