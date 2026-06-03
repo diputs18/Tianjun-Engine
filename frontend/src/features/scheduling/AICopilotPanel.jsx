@@ -17,9 +17,9 @@ export function AICopilotPanel() {
   const chat = useChatStream({ onCommitted: refresh });
   const canCommit = Boolean(chat.requiresUserButton && chat.commitPolicyId);
   const status = useMemo(() => {
-    if (chat.streaming) return "streaming";
-    if (canCommit) return "awaiting confirmation";
-    return "ready";
+    if (chat.streaming) return "生成中";
+    if (canCommit) return "待确认";
+    return "就绪";
   }, [canCommit, chat.streaming]);
 
   const submit = () => {
@@ -31,13 +31,14 @@ export function AICopilotPanel() {
     <div className="tj-ai-console">
       <div className="tj-ai-topbar">
         <div>
-          <Tag color={state.llmEnabled ? "green" : "orange"}>{state.llmEnabled ? "LLM enabled" : "rules fallback"}</Tag>
+          <Tag color={state.llmEnabled ? "green" : "orange"}>{state.llmEnabled ? "LLM 已启用" : "规则回退"}</Tag>
           <Tag color="arcoblue">{status}</Tag>
-          {chat.sessionId ? <Tag>session {chat.sessionId}</Tag> : null}
+          {chat.sessionId ? <Tag>会话 {chat.sessionId}</Tag> : null}
         </div>
         <Space>
+          <Button onClick={chat.stop} disabled={!chat.streaming}>停止生成</Button>
           <Button icon={<IconRefresh />} onClick={chat.reset} disabled={chat.streaming} />
-          <Button type="primary" icon={<IconCheckCircle />} disabled={!canCommit} onClick={() => setConfirmOpen(true)}>Commit</Button>
+          <Button type="primary" icon={<IconCheckCircle />} disabled={!canCommit} onClick={() => setConfirmOpen(true)}>正式提交</Button>
         </Space>
       </div>
       {chat.error ? <Alert type="error" content={chat.error} className="tj-ai-alert" /> : null}
@@ -46,8 +47,8 @@ export function AICopilotPanel() {
           <div className="tj-ai-panel-head">
             <IconRobot />
             <div>
-              <b>AI scheduling dialogue</b>
-              <span>Streamed by /chat/sessions/* with React state.</span>
+              <b>AI 调度对话</b>
+              <span>通过 `/chat/sessions/*` 流式驱动，并由 React 状态管理。</span>
             </div>
           </div>
           <ChatMessageList messages={chat.messages} />
@@ -56,7 +57,7 @@ export function AICopilotPanel() {
               value={draft}
               onChange={setDraft}
               autoSize={{ minRows: 3, maxRows: 6 }}
-              placeholder="Example: deploy an online inference workload in east region, P95 latency under 80ms, keep cost below 20k."
+              placeholder="示例：在东部区域部署在线推理业务，P95 时延低于 80ms，总成本控制在 2 万以内。"
               onPressEnter={(event) => {
                 if (!event.shiftKey) {
                   event.preventDefault();
@@ -64,7 +65,7 @@ export function AICopilotPanel() {
                 }
               }}
             />
-            <Button type="primary" icon={<IconSend />} loading={chat.streaming} disabled={!draft.trim()} onClick={submit}>Send</Button>
+            <Button type="primary" icon={<IconSend />} loading={chat.streaming} disabled={!draft.trim()} onClick={submit}>发送</Button>
           </div>
         </section>
         <aside className="tj-ai-side-panel">

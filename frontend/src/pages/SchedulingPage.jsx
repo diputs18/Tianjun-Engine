@@ -6,9 +6,9 @@ export function SchedulingPage() {
   return (
     <div className="tj-page tj-page-scheduling">
       <PageHeader
-        eyebrow="P2 / AI SCHEDULING WORKBENCH"
-        title="Scheduling Workbench"
-        description="AI dialogue, policy draft, tool trace, simulation result, and explicit commit protection are handled in React state."
+        eyebrow="P2 / 智能调度工作台"
+        title="智能调度工作台"
+        description="在 React 状态中统一承载 AI 对话、策略草案、工具轨迹、仿真结果和显式提交流程。"
       />
       <Card bordered={false} className="tj-ai-card">
         <SchedulingConsole />

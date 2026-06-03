@@ -4,7 +4,7 @@ import { commitChatSession, streamChatSession } from "../services/api.js";
 const welcomeMessage = {
   id: "welcome",
   role: "assistant",
-  content: "Describe the workload, region, latency target, budget, and any policy constraints. Tianjun will turn the intent into a schedulable policy draft.",
+  content: "请描述业务类型、部署区域、时延目标、预算和策略约束，天钧会将你的意图整理为可调度的策略草案。",
 };
 
 function parseEventBlock(block) {
@@ -60,14 +60,14 @@ function appendAssistantDelta(messages, id, delta) {
 function upsertToolTrace(trace, event) {
   const key = `${event.tool}-${trace.length}`;
   if (event.type === "tool_start") {
-    return [...trace, { id: key, tool: event.tool, label: event.label ?? event.tool, status: "running", summary: "Running" }];
+    return [...trace, { id: key, tool: event.tool, label: event.label ?? event.tool, status: "running", summary: "执行中" }];
   }
   const index = trace.findLastIndex((item) => item.tool === event.tool && item.status === "running");
   if (index < 0) {
-    return [...trace, { id: key, tool: event.tool, label: event.label ?? event.tool, status: "done", summary: event.summary ?? "Done" }];
+    return [...trace, { id: key, tool: event.tool, label: event.label ?? event.tool, status: "done", summary: event.summary ?? "已完成" }];
   }
   return trace.map((item, itemIndex) => (
-    itemIndex === index ? { ...item, status: "done", summary: event.summary ?? "Done" } : item
+    itemIndex === index ? { ...item, status: "done", summary: event.summary ?? "已完成" } : item
   ));
 }
 
@@ -114,24 +114,24 @@ export function useChatStream({ onCommitted } = {}) {
           setMessages((current) => appendAssistantDelta(current, assistantId, String(event.delta ?? "")));
           return;
         }
-        if (event.type === "tool_start" || event.type === "tool_done") {
+        if (event.type === "tool_start" || event.type === "tool_done" || event.type === "tool_result") {
           setToolTrace((current) => upsertToolTrace(current, event));
           return;
         }
         if (event.type === "llm_start") {
-          setToolTrace((current) => [...current, { id: messageId("llm"), tool: "llm", label: "LLM intent parser", status: "running", summary: "Parsing intent" }]);
+          setToolTrace((current) => [...current, { id: messageId("llm"), tool: "llm", label: "LLM 意图解析", status: "running", summary: "正在解析需求" }]);
           return;
         }
         if (event.type === "llm_done" || event.type === "llm_fallback") {
           setToolTrace((current) => current.map((item) => (
             item.tool === "llm" && item.status === "running"
-              ? { ...item, status: event.type === "llm_done" ? "done" : "error", summary: event.detail ?? event.reason ?? "Finished" }
+              ? { ...item, status: event.type === "llm_done" ? "done" : "error", summary: event.detail ?? event.reason ?? "已结束" }
               : item
           )));
           return;
         }
         if (event.type === "error") {
-          setError(event.message ?? "chat stream failed");
+          setError(event.message ?? "对话流处理失败");
           return;
         }
         if (event.type === "done" && event.result) {
@@ -165,7 +165,7 @@ export function useChatStream({ onCommitted } = {}) {
       setRequiresUserButton(false);
       setCommitPolicyId(null);
       setArtifacts((current) => ({ ...current, commit: result.artifacts?.commit, dashboard_payload: result.dashboard_payload }));
-      setMessages((current) => [...current, { id: messageId("commit"), role: "assistant", content: result.message ?? "Policy committed." }]);
+      setMessages((current) => [...current, { id: messageId("commit"), role: "assistant", content: result.message ?? "策略已正式提交。" }]);
       await onCommitted?.();
     } catch (nextError) {
       setError(nextError.message);
@@ -176,6 +176,7 @@ export function useChatStream({ onCommitted } = {}) {
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
+    abortRef.current = null;
     setSessionId(null);
     setMessages([welcomeMessage]);
     setToolTrace([]);
@@ -184,6 +185,11 @@ export function useChatStream({ onCommitted } = {}) {
     setCommitPolicyId(null);
     setError(null);
     setStreaming(false);
+  }, []);
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
   }, []);
 
   return {
@@ -196,6 +202,7 @@ export function useChatStream({ onCommitted } = {}) {
     reset,
     sendMessage,
     sessionId,
+    stop,
     streaming,
     toolTrace,
   };
