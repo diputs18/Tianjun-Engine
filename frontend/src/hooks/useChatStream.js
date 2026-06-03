@@ -1,12 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { commitChatSession, streamChatSession } from "../services/api.js";
 
-const welcomeMessage = {
-  id: "welcome",
-  role: "assistant",
-  content: "请描述业务类型、部署区域、时延目标、预算和策略约束，天钧会将你的意图整理为可调度的策略草案。",
-};
-
 function parseEventBlock(block) {
   let event = "message";
   const data = [];
@@ -78,7 +72,7 @@ function upsertToolTrace(trace, event) {
 export function useChatStream({ onCommitted } = {}) {
   const abortRef = useRef(null);
   const [sessionId, setSessionId] = useState(null);
-  const [messages, setMessages] = useState([welcomeMessage]);
+  const [messages, setMessages] = useState([]);
   const [toolTrace, setToolTrace] = useState([]);
   const [artifacts, setArtifacts] = useState({});
   const [requiresUserButton, setRequiresUserButton] = useState(false);
@@ -124,7 +118,7 @@ export function useChatStream({ onCommitted } = {}) {
           return;
         }
         if (event.type === "llm_start") {
-          setToolTrace((current) => [...current, { id: messageId("llm"), tool: "llm", label: "LLM 意图解析", status: "running", summary: "正在解析需求" }]);
+          setToolTrace((current) => [...current, { id: messageId("llm"), tool: "llm", label: "意图理解", status: "running", summary: "正在解析需求" }]);
           return;
         }
         if (event.type === "llm_done" || event.type === "llm_fallback") {
@@ -184,7 +178,7 @@ export function useChatStream({ onCommitted } = {}) {
     abortRef.current?.abort();
     abortRef.current = null;
     setSessionId(null);
-    setMessages([welcomeMessage]);
+    setMessages([]);
     setToolTrace([]);
     setArtifacts({});
     setRequiresUserButton(false);

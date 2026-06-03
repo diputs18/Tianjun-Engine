@@ -1,4 +1,5 @@
-import { Descriptions, Empty, Progress, Tag } from "@arco-design/web-react";
+import { Button, Progress, Tag } from "@arco-design/web-react";
+import { IconCheckCircle } from "@arco-design/web-react/icon";
 
 function findPolicy(artifacts) {
   return artifacts?.policy ?? artifacts?.commit?.policy ?? artifacts?.dashboard_payload?.policy ?? null;
@@ -85,16 +86,19 @@ function getDecisionCost(decision, policy) {
 
 function getPolicyStatus(artifacts, simulation, commitPolicyId) {
   if (artifacts?.commit) return { color: "arcoblue", label: "已提交" };
-  if (simulation?.feasible === false) return { color: "red", label: "受阻" };
-  if (simulation?.feasible === true && commitPolicyId) return { color: "green", label: "可提交" };
-  return { color: "orange", label: "等待仿真" };
+  if (simulation?.feasible === false) return { color: "red", label: "blocked" };
+  if (simulation?.feasible === true && commitPolicyId) return { color: "green", label: "ready" };
+  return { color: "orange", label: "pending" };
 }
 
-export function PolicyWorkspace({ artifacts, commitPolicyId }) {
+export function PolicyWorkspace({ artifacts, commitPolicyId, canCommit, committing, onCommit }) {
   const policy = findPolicy(artifacts);
   const simulation = findSimulation(artifacts);
   if (!policy && !simulation && !commitPolicyId) {
-    return <Empty className="tj-ai-empty" description="策略草案会显示在这里" />;
+    return (
+      <div className="tj-ai-policy empty">
+      </div>
+    );
   }
   const decision = policy?.decision ?? policy?.preview_decision ?? {};
   const nodeId = getDecisionNodeId(decision, policy);
@@ -103,26 +107,45 @@ export function PolicyWorkspace({ artifacts, commitPolicyId }) {
   const cost = getDecisionCost(decision, policy);
   const riskValue = simulation?.risk_summary ?? simulation?.risks ?? policy?.risk_summary ?? policy?.explanation?.risks ?? "-";
   const status = getPolicyStatus(artifacts, simulation, commitPolicyId);
+  const rows = [
+    ["Selected node", formatValue(nodeId)],
+    ["Reason", formatValue(decision.reason ?? decision.explanation ?? policy?.explanation)],
+    ["Latency", latency != null ? `${latency.toFixed(1)} ms` : "-"],
+    ["Cost", cost != null ? cost.toFixed(3) : "-"],
+    ["Risk", formatValue(riskValue)],
+  ];
   return (
     <div className="tj-ai-policy">
       <div className="tj-ai-policy-head">
         <div>
-          <span>策略工作区</span>
-          <h3>{policy?.policy_id ?? commitPolicyId ?? "草案生成中"}</h3>
+          <h3>Policy workspace</h3>
+          <span>{policy?.policy_id ?? commitPolicyId ?? "草案生成中"}</span>
         </div>
         <Tag color={status.color}>{status.label}</Tag>
       </div>
-      <Progress percent={Math.round(score * 100)} size="small" />
-      <Descriptions
-        column={1}
-        data={[
-          { label: "选中节点", value: formatValue(nodeId) },
-          { label: "推荐说明", value: formatValue(decision.reason ?? decision.explanation ?? policy?.explanation) },
-          { label: "预测时延", value: latency != null ? `${latency.toFixed(1)} ms` : "-" },
-          { label: "预测成本", value: cost != null ? cost.toFixed(3) : "-" },
-          { label: "风险提示", value: formatValue(riskValue) },
-        ]}
-      />
+      <div className="tj-ai-policy-score">
+        <b>{Math.round(score * 100)}%</b>
+        <Progress percent={Math.round(score * 100)} showText={false} size="small" />
+      </div>
+      <div className="tj-ai-policy-table">
+        {rows.map(([label, value]) => (
+          <div key={label} className="tj-ai-policy-row">
+            <label>{label}</label>
+            <p>{value}</p>
+          </div>
+        ))}
+      </div>
+      <Button
+        className="tj-ai-commit-button"
+        type="primary"
+        size="large"
+        icon={<IconCheckCircle />}
+        disabled={!canCommit}
+        loading={committing}
+        onClick={onCommit}
+      >
+        确认下发
+      </Button>
     </div>
   );
 }

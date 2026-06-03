@@ -1,27 +1,26 @@
-import { Alert, Button, Input, Space, Tag } from "@arco-design/web-react";
-import { IconCheckCircle, IconRefresh, IconRobot, IconSend } from "@arco-design/web-react/icon";
-import { useMemo, useState } from "react";
+import { Alert, Button, Input } from "@arco-design/web-react";
+import {
+  IconAttachment,
+  IconDelete,
+  IconSend,
+  IconSettings,
+  IconStar,
+} from "@arco-design/web-react/icon";
+import { useState } from "react";
 import { useChatStream } from "../../hooks/useChatStream.js";
 import { useControlPlaneContext } from "../../layout/ControlPlaneProvider.jsx";
 import { ChatMessageList } from "./ChatMessageList.jsx";
 import { CommitConfirmDialog } from "./CommitConfirmDialog.jsx";
 import { PolicyWorkspace } from "./PolicyWorkspace.jsx";
-import { ToolTraceTimeline } from "./ToolTraceTimeline.jsx";
 
 const { TextArea } = Input;
 
 export function AICopilotPanel() {
-  const { refresh, state } = useControlPlaneContext();
+  const { refresh } = useControlPlaneContext();
   const [draft, setDraft] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const chat = useChatStream({ onCommitted: refresh });
   const canCommit = Boolean(chat.requiresUserButton && chat.commitPolicyId);
-  const status = useMemo(() => {
-    if (chat.committing) return "提交中";
-    if (chat.streaming) return "生成中";
-    if (canCommit) return "待确认";
-    return "就绪";
-  }, [canCommit, chat.committing, chat.streaming]);
 
   const submit = () => {
     void chat.sendMessage(draft);
@@ -30,36 +29,17 @@ export function AICopilotPanel() {
 
   return (
     <div className="tj-ai-console">
-      <div className="tj-ai-topbar">
-        <div>
-          <Tag color={state.llmEnabled ? "green" : "orange"}>{state.llmEnabled ? "LLM 已启用" : "规则回退"}</Tag>
-          <Tag color="arcoblue">{status}</Tag>
-          {chat.sessionId ? <Tag>会话 {chat.sessionId}</Tag> : null}
-        </div>
-        <Space>
-          <Button onClick={chat.stop} disabled={!chat.streaming}>停止生成</Button>
-          <Button icon={<IconRefresh />} onClick={chat.reset} disabled={chat.streaming || chat.committing} />
-          <Button type="primary" icon={<IconCheckCircle />} disabled={!canCommit || chat.streaming || chat.committing} loading={chat.committing} onClick={() => setConfirmOpen(true)}>正式提交</Button>
-        </Space>
-      </div>
       {chat.error ? <Alert type="error" content={chat.error} className="tj-ai-alert" /> : null}
-      <div className="tj-ai-grid">
+      <div className="tj-ai-workbench-grid">
         <section className="tj-ai-chat-panel">
-          <div className="tj-ai-panel-head">
-            <IconRobot />
-            <div>
-              <b>AI 调度对话</b>
-              <span>通过 `/chat/sessions/*` 流式驱动，并由 React 状态管理。</span>
-            </div>
-          </div>
-          <ChatMessageList messages={chat.messages} />
-          <div className="tj-ai-composer">
+          <ChatMessageList messages={chat.messages} trace={chat.toolTrace} streaming={chat.streaming} />
+          <div className="tj-ai-composer-shell">
             <TextArea
               value={draft}
               onChange={setDraft}
-              autoSize={{ minRows: 3, maxRows: 6 }}
+              autoSize={{ minRows: 1, maxRows: 4 }}
               disabled={chat.committing}
-              placeholder="示例：在东部区域部署在线推理业务，P95 时延低于 80ms，总成本控制在 2 万以内。"
+              placeholder="请输入您的调度需求..."
               onPressEnter={(event) => {
                 if (!event.shiftKey) {
                   event.preventDefault();
@@ -67,12 +47,23 @@ export function AICopilotPanel() {
                 }
               }}
             />
-            <Button type="primary" icon={<IconSend />} loading={chat.streaming} disabled={!draft.trim() || chat.committing} onClick={submit}>发送</Button>
+            <Button className="tj-ai-send-button" type="text" icon={<IconSend />} loading={chat.streaming} disabled={!draft.trim() || chat.committing} onClick={submit} />
+            <div className="tj-ai-composer-tools">
+              <Button type="text" icon={<IconAttachment />} />
+              <Button type="text" icon={<IconSettings />} />
+              <Button type="text" icon={<IconStar />} />
+              <Button type="text" icon={<IconDelete />} onClick={chat.reset} disabled={chat.streaming || chat.committing}>清空对话</Button>
+            </div>
           </div>
         </section>
         <aside className="tj-ai-side-panel">
-          <PolicyWorkspace artifacts={chat.artifacts} commitPolicyId={chat.commitPolicyId} />
-          <ToolTraceTimeline trace={chat.toolTrace} />
+          <PolicyWorkspace
+            artifacts={chat.artifacts}
+            commitPolicyId={chat.commitPolicyId}
+            canCommit={canCommit && !chat.streaming && !chat.committing}
+            committing={chat.committing}
+            onCommit={() => setConfirmOpen(true)}
+          />
         </aside>
       </div>
       <CommitConfirmDialog

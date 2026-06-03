@@ -1,6 +1,5 @@
 import { Button, Layout, Menu, Space, Tag, Typography } from "@arco-design/web-react";
 import {
-  IconBranch,
   IconCodeSandbox,
   IconRefresh,
   IconRobot,
@@ -29,7 +28,7 @@ export function ConsoleLayout({ children }) {
           <span className="tj-brand-mark"><IconCodeSandbox /></span>
           <div>
             <Typography.Title heading={5}>天钧</Typography.Title>
-            <Typography.Text>算力控制</Typography.Text>
+            <Typography.Text>算力调度</Typography.Text>
           </div>
         </div>
         <Menu
@@ -54,13 +53,9 @@ export function ConsoleLayout({ children }) {
       <Layout className="tj-main-layout">
         <Header className="tj-header">
           <div className="tj-header-center">
-            <div className="tj-product-pill">
-              <IconBranch />
-              <span>算力网络资源调度智能体</span>
-            </div>
-            <div className="tj-console-title">
-              <IconCodeSandbox />
-              <span>企业控制台</span>
+            <div className="tj-header-title">
+              <span className="tj-header-title-main">天钧算力调度</span>
+              <span className="tj-header-title-sub">控制台</span>
             </div>
           </div>
           <Space size={8} className="tj-header-status">
