@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { commitChatSession, streamChatSession } from "../services/api.js";
 
 function parseEventBlock(block) {
@@ -69,17 +69,57 @@ function upsertToolTrace(trace, event) {
   ));
 }
 
-export function useChatStream({ onCommitted } = {}) {
+function loadSnapshot(storageKey) {
+  if (!storageKey || typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function useChatStream({ onCommitted, storageKey } = {}) {
   const abortRef = useRef(null);
-  const [sessionId, setSessionId] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [toolTrace, setToolTrace] = useState([]);
-  const [artifacts, setArtifacts] = useState({});
-  const [requiresUserButton, setRequiresUserButton] = useState(false);
-  const [commitPolicyId, setCommitPolicyId] = useState(null);
+  const snapshotRef = useRef(undefined);
+  if (snapshotRef.current === undefined) {
+    snapshotRef.current = loadSnapshot(storageKey);
+  }
+  const snapshot = snapshotRef.current;
+  const [sessionId, setSessionId] = useState(snapshot?.sessionId ?? null);
+  const [messages, setMessages] = useState(snapshot?.messages ?? []);
+  const [toolTrace, setToolTrace] = useState(snapshot?.toolTrace ?? []);
+  const [artifacts, setArtifacts] = useState(snapshot?.artifacts ?? {});
+  const [requiresUserButton, setRequiresUserButton] = useState(snapshot?.requiresUserButton ?? false);
+  const [commitPolicyId, setCommitPolicyId] = useState(snapshot?.commitPolicyId ?? null);
   const [streaming, setStreaming] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") return;
+    const isEmpty = (
+      !sessionId
+      && !messages.length
+      && !toolTrace.length
+      && !Object.keys(artifacts ?? {}).length
+      && !requiresUserButton
+      && !commitPolicyId
+    );
+    if (isEmpty) {
+      window.sessionStorage.removeItem(storageKey);
+      return;
+    }
+    const payload = {
+      sessionId,
+      messages,
+      toolTrace,
+      artifacts,
+      requiresUserButton,
+      commitPolicyId,
+    };
+    window.sessionStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [storageKey, sessionId, messages, toolTrace, artifacts, requiresUserButton, commitPolicyId]);
 
   const sendMessage = useCallback(async (text) => {
     const message = text.trim();

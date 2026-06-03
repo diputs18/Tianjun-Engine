@@ -3,5 +3,6 @@
 @import "./pages.css";
 @import "./overview.css";
 @import "./scheduling.css";
+@import "./workloads.css";
 @import "./infrastructure.css";
 @import "./model-policy.css";

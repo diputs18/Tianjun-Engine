@@ -1,0 +1,151 @@
+.tj-page-workloads {
+  max-width: 1500px;
+}
+
+.tj-page-workloads .tj-page-header {
+  margin-bottom: 24px;
+}
+
+.tj-workload-metric-row {
+  margin-bottom: 32px;
+}
+
+.tj-workload-metric {
+  min-height: 118px;
+  border: 1px solid #dce6f2;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--tj-card-shadow);
+}
+
+.tj-workload-metric .arco-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 24px 30px;
+}
+
+.tj-workload-metric span:not(.tj-workload-metric-icon) {
+  display: block;
+  color: #59677f;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.tj-workload-metric b {
+  display: block;
+  margin-top: 18px;
+  color: #07142d;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tj-workload-metric b em {
+  margin-left: 4px;
+  font-style: normal;
+}
+
+.tj-workload-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: 50%;
+  color: var(--tj-blue);
+  font-size: 34px;
+  background: #eaf3ff;
+}
+
+.tj-workload-metric.tone-green b,
+.tj-workload-metric.tone-green .tj-workload-metric-icon {
+  color: var(--tj-green);
+}
+
+.tj-workload-table-card {
+  min-height: 360px;
+  border-radius: 10px;
+}
+
+.tj-workload-table-card .arco-card-header {
+  height: 76px;
+  padding: 0 30px;
+}
+
+.tj-workload-table-card .arco-card-header-title {
+  color: #07142d;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.tj-workload-table-card .arco-card-body {
+  padding: 0;
+}
+
+.tj-workload-table .arco-table-container {
+  border: 0;
+}
+
+.tj-workload-table .arco-table-th {
+  height: 58px;
+  color: #6b778c;
+  font-size: 14px;
+  font-weight: 900;
+  background: #f7faff;
+}
+
+.tj-workload-table .arco-table-td {
+  height: 76px;
+  color: #17243a;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.tj-workload-table .arco-table-th,
+.tj-workload-table .arco-table-td {
+  padding-left: 30px;
+  padding-right: 30px;
+}
+
+.tj-workload-table .arco-tag {
+  min-width: 86px;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.tj-workload-progress {
+  display: grid;
+  grid-template-columns: 48px minmax(160px, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.tj-workload-progress span {
+  color: #17243a;
+  font-weight: 850;
+}
+
+.tj-workload-progress .arco-progress-line-wrapper {
+  width: 100%;
+}
+
+.tj-workload-progress .arco-progress-line {
+  height: 6px;
+}
+
+.tj-workload-table .arco-pagination {
+  justify-content: flex-end;
+  margin: 20px 30px 24px;
+}
+
+@media (max-width: 1100px) {
+  .tj-workload-metric-row {
+    display: block;
+  }
+
+  .tj-workload-metric-row .arco-col + .arco-col {
+    margin-top: 16px;
+  }
+}

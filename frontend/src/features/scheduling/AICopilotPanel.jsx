@@ -7,19 +7,16 @@ import {
   IconStar,
 } from "@arco-design/web-react/icon";
 import { useState } from "react";
-import { useChatStream } from "../../hooks/useChatStream.js";
-import { useControlPlaneContext } from "../../layout/ControlPlaneProvider.jsx";
 import { ChatMessageList } from "./ChatMessageList.jsx";
 import { CommitConfirmDialog } from "./CommitConfirmDialog.jsx";
 import { PolicyWorkspace } from "./PolicyWorkspace.jsx";
+import { useSchedulingSession } from "./SchedulingSessionProvider.jsx";
 
 const { TextArea } = Input;
 
 export function AICopilotPanel() {
-  const { refresh } = useControlPlaneContext();
-  const [draft, setDraft] = useState("");
+  const { chat, draft, setDraft } = useSchedulingSession();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const chat = useChatStream({ onCommitted: refresh });
   const canCommit = Boolean(chat.requiresUserButton && chat.commitPolicyId);
 
   const submit = () => {

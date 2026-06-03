@@ -156,6 +156,7 @@ export function ModelPolicyPage() {
             detail={loadedModels.join(" / ") || "lstm / gnn"}
             icon={<IconMindMapping />}
             tone="purple"
+            iconSide="right"
           />
         </Col>
         <Col span={6}>
