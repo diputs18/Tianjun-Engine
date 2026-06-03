@@ -1,0 +1,68 @@
+:root {
+  --tj-bg: #f7faff;
+  --tj-surface: rgba(255, 255, 255, 0.86);
+  --tj-ink: #0d1b36;
+  --tj-muted: #5e6d86;
+  --tj-line: #dbe4f0;
+  --tj-blue: #0f6fff;
+  --tj-blue-soft: #eaf3ff;
+  --tj-green: #13b467;
+  --tj-purple: #7b45d9;
+  --tj-red: #c33a32;
+  --tj-amber: #b7791f;
+  --tj-slate: #344054;
+  --tj-font-xs: 11px;
+  --tj-font-sm: 12px;
+  --tj-font-md: 13px;
+  --tj-font-lg: 15px;
+  --tj-font-xl: 20px;
+  --tj-font-page-title: 26px;
+  --tj-header-height: 64px;
+  --tj-sider-width: 240px;
+  --tj-nav-item-height: 44px;
+  --tj-radius-sm: 8px;
+  --tj-radius-md: 10px;
+  --tj-card-shadow: 0 14px 34px rgba(31, 67, 120, 0.07);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--tj-ink);
+  font-family: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 32% 0%, rgba(46, 125, 255, 0.07), transparent 30%),
+    radial-gradient(circle at 84% 12%, rgba(123, 69, 217, 0.07), transparent 26%),
+    linear-gradient(180deg, #fbfdff 0%, #f6f9fe 100%);
+}
+
+body::before {
+  display: none;
+}
+
+.arco-card {
+  border-radius: var(--tj-radius-md);
+}
+
+.arco-table-th {
+  background: #f3f6f5;
+}
+
+.arco-tag {
+  border-radius: 6px;
+}
+
+.arco-empty-description {
+  color: #6b778c;
+  font-size: var(--tj-font-md);
+}

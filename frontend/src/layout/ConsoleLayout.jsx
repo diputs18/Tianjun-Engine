@@ -24,7 +24,7 @@ export function ConsoleLayout({ children }) {
 
   return (
     <Layout className="tj-console">
-      <Sider className="tj-sider" width={260}>
+      <Sider className="tj-sider" width={240}>
         <div className="tj-brand">
           <span className="tj-brand-mark"><IconCodeSandbox /></span>
           <div>
