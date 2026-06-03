@@ -63,16 +63,18 @@ export function ConsoleLayout({ children }) {
               <span>企业控制台</span>
             </div>
           </div>
-          <Space size={14} className="tj-header-status">
-            <Tag color={error ? "red" : "green"} className={clsx("tj-status-tag", error && "is-error")}>
+          <Space size={8} className="tj-header-status">
+            <Tag color={error ? "red" : "green"} className={clsx("tj-state-pill", error && "is-error")}>
               <span className="tj-status-dot" />
-              {error ? "API 异常" : "API 正常"}
+              <span>{error ? "API 异常" : "API 正常"}</span>
             </Tag>
-            <Tag color={state.modelLoaded ? "purple" : "orangered"} className="tj-model-tag">
+            <Tag color={state.modelLoaded ? "purple" : "orangered"} className="tj-state-pill tj-model-pill">
               <IconRobot />
-              <span><b>模型 {state.modelLoaded ? "已加载" : state.model?.status ?? "未知"}</b><small>Hermes LLM</small></span>
+              <span>模型 {state.modelLoaded ? "已加载" : state.model?.status ?? "未知"}</span>
             </Tag>
-            <span className="tj-header-divider" />
+            <Tag color={state.llmEnabled ? "arcoblue" : "orange"} className="tj-state-pill tj-llm-pill">
+              <span>LLM {state.llmEnabled ? "Hermes" : "规则回退"}</span>
+            </Tag>
             <Button className="tj-sync-button" icon={<IconRefresh />} onClick={() => void refresh()}>
               同步 {shortTime(updatedAt)}
             </Button>

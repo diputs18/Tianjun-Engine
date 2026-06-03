@@ -92,21 +92,35 @@
   font-size: 14px;
   font-weight: 650;
   background: transparent;
+  transition: background 0.16s ease, color 0.16s ease, font-weight 0.16s ease, box-shadow 0.16s ease;
+}
+
+.tj-menu .arco-menu-item span {
+  font-weight: inherit;
 }
 
 .tj-menu .arco-menu-item svg {
   margin-right: 10px;
   color: #324765;
   font-size: 17px;
+  transition: color 0.16s ease, stroke-width 0.16s ease;
 }
 
-.tj-menu .arco-menu-selected {
+.tj-menu .arco-menu-selected,
+.tj-menu .arco-menu-selected:hover {
   color: var(--tj-blue);
+  font-weight: 800;
   background: linear-gradient(90deg, #eaf3ff 0%, #f2f7ff 100%);
+  box-shadow: inset 3px 0 0 var(--tj-blue);
+}
+
+.tj-menu .arco-menu-selected span {
+  font-weight: 800;
 }
 
 .tj-menu .arco-menu-selected svg {
   color: var(--tj-blue);
+  stroke-width: 4;
 }
 
 .tj-sider-collapse {
@@ -127,8 +141,8 @@
 }
 
 .tj-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   height: var(--tj-header-height);
   min-height: var(--tj-header-height);
@@ -141,9 +155,10 @@
 .tj-header-center {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   min-width: 0;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .tj-product-pill {
@@ -194,97 +209,82 @@
 
 .tj-header-status {
   display: flex;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-left: auto;
+  min-width: 0;
+  justify-self: end;
 }
 
-.tj-status-tag,
-.tj-model-tag,
+.tj-state-pill,
 .tj-sync-button {
-  min-height: 36px;
-  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  min-height: 34px;
+  max-width: 168px;
+  padding: 0 11px;
   border: 1px solid transparent;
   border-radius: var(--tj-radius-sm);
-  padding: 0 12px;
   color: var(--tj-ink);
-  font-size: var(--tj-font-md);
+  font-size: 13px;
+  font-weight: 750;
   line-height: 1;
+  white-space: nowrap;
   background: transparent;
 }
 
-.tj-status-tag {
-  display: inline-flex;
-  align-items: center;
+.tj-state-pill {
   gap: 7px;
-  font-weight: 700;
+}
+
+.tj-state-pill svg {
+  flex: 0 0 auto;
+  font-size: 16px;
+}
+
+.tj-state-pill span:not(.tj-status-dot) {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tj-status-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: var(--tj-green);
   box-shadow: 0 0 0 4px rgba(19, 180, 103, 0.1);
 }
 
-.tj-model-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 132px;
-  max-width: 160px;
-  padding: 5px 10px;
+.tj-model-pill {
+  color: var(--tj-purple);
   border-color: #e4d8fb;
   background: linear-gradient(180deg, #fbf8ff 0%, #f5efff 100%);
 }
 
-.tj-model-tag svg {
-  flex: 0 0 auto;
+.tj-model-pill svg {
   color: var(--tj-purple);
-  font-size: 18px;
 }
 
-.tj-model-tag > span {
-  display: block;
-  min-width: 0;
-}
-
-.tj-model-tag b,
-.tj-model-tag small {
-  display: block;
-  overflow: hidden;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tj-model-tag b {
-  color: var(--tj-purple);
-  font-size: var(--tj-font-md);
-  font-weight: 800;
-}
-
-.tj-model-tag small {
-  margin-top: 2px;
-  color: #4f5d75;
-  font-size: var(--tj-font-xs);
-}
-
-.tj-header-divider {
-  width: 1px;
-  height: 28px;
-  background: #d9e2ef;
+.tj-llm-pill {
+  max-width: 126px;
 }
 
 .tj-sync-button {
+  max-width: 156px;
   color: #1b2a44;
-  font-size: var(--tj-font-md);
+  font-size: 13px;
+  background: rgba(16, 24, 40, 0.04);
 }
 
 .tj-sync-button svg {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .tj-content {
@@ -330,6 +330,7 @@
   }
 
   .tj-header {
+    display: flex;
     align-items: flex-start;
     flex-direction: column;
     height: auto;
@@ -340,6 +341,15 @@
   .tj-header-status {
     width: 100%;
     margin-left: 0;
+  }
+
+  .tj-header-center {
+    justify-content: flex-start;
+  }
+
+  .tj-header-status {
+    justify-self: auto;
+    flex-wrap: wrap;
   }
 
   .tj-content {
