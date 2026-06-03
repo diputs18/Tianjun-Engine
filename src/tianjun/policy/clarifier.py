@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterable
 
 from ..core import UserRequirement
+from ..domain import Node
 
 
 FIELD_QUESTIONS: dict[str, str] = {
@@ -52,12 +53,22 @@ class RequirementSession:
         }
 
 
-def clarification_questions(requirement: UserRequirement) -> list[str]:
-    """Return deduplicated questions for multi-turn slot filling."""
+def clarification_questions(requirement: UserRequirement, nodes: Iterable[Node] | None = None) -> list[str]:
+    """Return deduplicated questions ordered by likely scheduling impact."""
     questions: list[str] = []
     workload_unspecified = bool(requirement.deployment.get("workload_type_unspecified"))
     additional_constraints_declined = bool(requirement.deployment.get("additional_constraints_declined"))
-    for field_name in requirement.missing_fields:
+    online_nodes = [node for node in (nodes or []) if node.online]
+    unavailable_regions = [
+        region
+        for region in requirement.region_preference
+        if online_nodes and not any(node.matches_deployment_region(region) for node in online_nodes)
+    ]
+    if unavailable_regions:
+        questions.append(
+            f"当前在线节点无法满足地域 {unavailable_regions}。是否允许放宽部署地域，或补充可接受的备选地域？"
+        )
+    for field_name in _rank_missing_fields(requirement):
         question = FIELD_QUESTIONS.get(field_name)
         if question and question not in questions:
             questions.append(question)
@@ -73,6 +84,25 @@ def clarification_questions(requirement: UserRequirement) -> list[str]:
     if not questions and requirement.priority == "balanced" and not additional_constraints_declined:
         questions.append("是否需要优先优化某个目标：时延、成本、服务质量或安全？")
     return questions
+
+
+def _rank_missing_fields(requirement: UserRequirement) -> list[str]:
+    impact = {
+        "workload_type": 0.82,
+        "region_preference": 0.90,
+        "latency_target_ms": 0.54,
+        "budget_limit": 0.50,
+        "security_level": 0.42,
+    }
+    vector = requirement.priority_vector
+    if requirement.workload_type in {"inference", "streaming"}:
+        impact["latency_target_ms"] += 0.28
+    if requirement.workload_type == "training":
+        impact["region_preference"] += 0.10
+    impact["latency_target_ms"] += vector.get("latency", 0.0) * 0.44
+    impact["budget_limit"] += vector.get("cost", 0.0) * 0.44
+    impact["security_level"] += vector.get("security", 0.0) * 0.44
+    return sorted(requirement.missing_fields, key=lambda field: (-impact.get(field, 0.0), field))
 
 
 def session_status(requirement: UserRequirement, questions: list[str]) -> str:

@@ -27,7 +27,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Starting Tianjun Engine full runtime...
+echo Starting Tianjun Engine control plane...
 echo Dashboard: %URL%
 
 echo Checking DeepSeek connection for Hermes...
@@ -39,7 +39,7 @@ if errorlevel 1 (
 )
 
 echo Starting control plane...
-start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --inventory "%INVENTORY%" --default-execution-mode simulation --host %HOST% --port %PORT%
+start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --default-execution-mode simulation --host %HOST% --port %PORT%
 
 echo Waiting for control plane health check...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -55,7 +55,6 @@ start "Tianjun Simulation Backend" cmd /k python -B main.py sim-backend --server
 
 echo Starting dashboard frontend...
 start "Tianjun Dashboard Frontend" cmd /k "cd /d ""%CD%\%FRONTEND_DIR%"" && npm install && npm run dev"
-
 start "" "%URL%"
 
 echo Tianjun Engine full runtime is starting in separate windows.
