@@ -83,6 +83,13 @@ function getDecisionCost(decision, policy) {
   );
 }
 
+function getPolicyStatus(artifacts, simulation, commitPolicyId) {
+  if (artifacts?.commit) return { color: "arcoblue", label: "已提交" };
+  if (simulation?.feasible === false) return { color: "red", label: "受阻" };
+  if (simulation?.feasible === true && commitPolicyId) return { color: "green", label: "可提交" };
+  return { color: "orange", label: "等待仿真" };
+}
+
 export function PolicyWorkspace({ artifacts, commitPolicyId }) {
   const policy = findPolicy(artifacts);
   const simulation = findSimulation(artifacts);
@@ -95,6 +102,7 @@ export function PolicyWorkspace({ artifacts, commitPolicyId }) {
   const latency = getDecisionLatency(decision, policy);
   const cost = getDecisionCost(decision, policy);
   const riskValue = simulation?.risk_summary ?? simulation?.risks ?? policy?.risk_summary ?? policy?.explanation?.risks ?? "-";
+  const status = getPolicyStatus(artifacts, simulation, commitPolicyId);
   return (
     <div className="tj-ai-policy">
       <div className="tj-ai-policy-head">
@@ -102,7 +110,7 @@ export function PolicyWorkspace({ artifacts, commitPolicyId }) {
           <span>策略工作区</span>
           <h3>{policy?.policy_id ?? commitPolicyId ?? "草案生成中"}</h3>
         </div>
-        <Tag color={simulation?.feasible === false ? "red" : "green"}>{simulation?.feasible === false ? "受阻" : "可提交"}</Tag>
+        <Tag color={status.color}>{status.label}</Tag>
       </div>
       <Progress percent={Math.round(score * 100)} size="small" />
       <Descriptions

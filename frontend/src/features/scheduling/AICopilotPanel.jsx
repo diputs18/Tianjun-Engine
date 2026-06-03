@@ -17,10 +17,11 @@ export function AICopilotPanel() {
   const chat = useChatStream({ onCommitted: refresh });
   const canCommit = Boolean(chat.requiresUserButton && chat.commitPolicyId);
   const status = useMemo(() => {
+    if (chat.committing) return "提交中";
     if (chat.streaming) return "生成中";
     if (canCommit) return "待确认";
     return "就绪";
-  }, [canCommit, chat.streaming]);
+  }, [canCommit, chat.committing, chat.streaming]);
 
   const submit = () => {
     void chat.sendMessage(draft);
@@ -37,8 +38,8 @@ export function AICopilotPanel() {
         </div>
         <Space>
           <Button onClick={chat.stop} disabled={!chat.streaming}>停止生成</Button>
-          <Button icon={<IconRefresh />} onClick={chat.reset} disabled={chat.streaming} />
-          <Button type="primary" icon={<IconCheckCircle />} disabled={!canCommit} onClick={() => setConfirmOpen(true)}>正式提交</Button>
+          <Button icon={<IconRefresh />} onClick={chat.reset} disabled={chat.streaming || chat.committing} />
+          <Button type="primary" icon={<IconCheckCircle />} disabled={!canCommit || chat.streaming || chat.committing} loading={chat.committing} onClick={() => setConfirmOpen(true)}>正式提交</Button>
         </Space>
       </div>
       {chat.error ? <Alert type="error" content={chat.error} className="tj-ai-alert" /> : null}
@@ -57,6 +58,7 @@ export function AICopilotPanel() {
               value={draft}
               onChange={setDraft}
               autoSize={{ minRows: 3, maxRows: 6 }}
+              disabled={chat.committing}
               placeholder="示例：在东部区域部署在线推理业务，P95 时延低于 80ms，总成本控制在 2 万以内。"
               onPressEnter={(event) => {
                 if (!event.shiftKey) {
@@ -65,7 +67,7 @@ export function AICopilotPanel() {
                 }
               }}
             />
-            <Button type="primary" icon={<IconSend />} loading={chat.streaming} disabled={!draft.trim()} onClick={submit}>发送</Button>
+            <Button type="primary" icon={<IconSend />} loading={chat.streaming} disabled={!draft.trim() || chat.committing} onClick={submit}>发送</Button>
           </div>
         </section>
         <aside className="tj-ai-side-panel">
@@ -76,7 +78,7 @@ export function AICopilotPanel() {
       <CommitConfirmDialog
         visible={confirmOpen}
         policyId={chat.commitPolicyId}
-        loading={chat.streaming}
+        loading={chat.committing}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={async () => {
           await chat.commitPolicy();

@@ -31,13 +31,14 @@ async function readEventStream(response, onEvent) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    let boundary = buffer.indexOf("\n\n");
+    let boundary = buffer.search(/\r?\n\r?\n/);
     while (boundary >= 0) {
       const block = buffer.slice(0, boundary).trim();
-      buffer = buffer.slice(boundary + 2);
+      const separator = buffer.slice(boundary).match(/^\r?\n\r?\n/)?.[0].length ?? 2;
+      buffer = buffer.slice(boundary + separator);
       const parsed = block ? parseEventBlock(block) : null;
       if (parsed) onEvent(parsed.payload.type ? parsed.payload : { ...parsed.payload, type: parsed.event });
-      boundary = buffer.indexOf("\n\n");
+      boundary = buffer.search(/\r?\n\r?\n/);
     }
   }
   const trailing = buffer.trim();
@@ -57,14 +58,17 @@ function appendAssistantDelta(messages, id, delta) {
   ));
 }
 
+function createTraceId(event) {
+  return event.id ?? event.trace_id ?? event.run_id ?? `${event.tool}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function upsertToolTrace(trace, event) {
-  const key = `${event.tool}-${trace.length}`;
   if (event.type === "tool_start") {
-    return [...trace, { id: key, tool: event.tool, label: event.label ?? event.tool, status: "running", summary: "执行中" }];
+    return [...trace, { id: createTraceId(event), tool: event.tool, label: event.label ?? event.tool, status: "running", summary: "执行中" }];
   }
   const index = trace.findLastIndex((item) => item.tool === event.tool && item.status === "running");
   if (index < 0) {
-    return [...trace, { id: key, tool: event.tool, label: event.label ?? event.tool, status: "done", summary: event.summary ?? "已完成" }];
+    return [...trace, { id: createTraceId(event), tool: event.tool, label: event.label ?? event.tool, status: "done", summary: event.summary ?? "已完成" }];
   }
   return trace.map((item, itemIndex) => (
     itemIndex === index ? { ...item, status: "done", summary: event.summary ?? "已完成" } : item
@@ -80,11 +84,12 @@ export function useChatStream({ onCommitted } = {}) {
   const [requiresUserButton, setRequiresUserButton] = useState(false);
   const [commitPolicyId, setCommitPolicyId] = useState(null);
   const [streaming, setStreaming] = useState(false);
+  const [committing, setCommitting] = useState(false);
   const [error, setError] = useState(null);
 
   const sendMessage = useCallback(async (text) => {
     const message = text.trim();
-    if (!message || streaming) return;
+    if (!message || streaming || committing) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -152,14 +157,15 @@ export function useChatStream({ onCommitted } = {}) {
         setMessages((current) => appendAssistantDelta(current, assistantId, `\n${nextError.message}`));
       }
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setStreaming(false);
     }
-  }, [sessionId, streaming]);
+  }, [committing, sessionId, streaming]);
 
   const commitPolicy = useCallback(async () => {
-    if (!sessionId || !commitPolicyId) return;
+    if (!sessionId || !commitPolicyId || committing || streaming) return;
     setError(null);
-    setStreaming(true);
+    setCommitting(true);
     try {
       const result = await commitChatSession(sessionId, { policy_id: commitPolicyId });
       setRequiresUserButton(false);
@@ -170,9 +176,9 @@ export function useChatStream({ onCommitted } = {}) {
     } catch (nextError) {
       setError(nextError.message);
     } finally {
-      setStreaming(false);
+      setCommitting(false);
     }
-  }, [commitPolicyId, onCommitted, sessionId]);
+  }, [commitPolicyId, committing, onCommitted, sessionId, streaming]);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
@@ -185,15 +191,18 @@ export function useChatStream({ onCommitted } = {}) {
     setCommitPolicyId(null);
     setError(null);
     setStreaming(false);
+    setCommitting(false);
   }, []);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    setStreaming(false);
   }, []);
 
   return {
     artifacts,
+    committing,
     commitPolicy,
     commitPolicyId,
     error,

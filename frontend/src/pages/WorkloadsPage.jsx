@@ -12,9 +12,9 @@ export function WorkloadsPage() {
   const active = report?.active_runs ?? [];
   const records = report?.recent_records ?? [];
   const rows = [
-    ...pending.map((task) => ({ key: task.task_id, task_id: task.task_id, type: task.task_type, status: "pending", node: "-", progress: 0 })),
-    ...active.map((run) => ({ key: run.task_id, task_id: run.task_id, type: run.task?.task_type, status: run.status, node: run.node_id, progress: Number(run.progress ?? 0) })),
-    ...records.map((record) => ({ key: `${record.task_id}-${record.node_id}`, task_id: record.task_id, type: record.task_type ?? "record", status: record.success ? "succeeded" : "failed", node: record.node_id, progress: 1 })),
+    ...pending.map((task) => ({ key: `pending-${task.task_id}`, task_id: task.task_id, type: task.task_type, status: "pending", node: "-", progress: 0 })),
+    ...active.map((run) => ({ key: `active-${run.task_id}-${run.node_id ?? "unassigned"}`, task_id: run.task_id, type: run.task?.task_type, status: run.status, node: run.node_id, progress: Number(run.progress ?? 0) })),
+    ...records.map((record) => ({ key: `record-${record.task_id}-${record.node_id ?? "unknown"}`, task_id: record.task_id, type: record.task_type ?? "record", status: record.success ? "succeeded" : "failed", node: record.node_id, progress: 1 })),
   ];
 
   return (
