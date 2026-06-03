@@ -11,7 +11,6 @@ export default defineConfig({
           react: ["react", "react-dom", "react-router-dom"],
           arco: ["@arco-design/web-react"],
           charts: ["echarts", "echarts-for-react"],
-          graph: ["@antv/g6"],
         },
       },
     },
