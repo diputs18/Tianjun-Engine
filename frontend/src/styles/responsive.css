@@ -1,10 +1,5 @@
 /* Global responsive page width strategy */
 
-/* Audit & Settings: standard width */
-.tj-page-audit-settings {
-  max-width: var(--tj-page-standard);
-}
-
 @media (min-width: 1600px) {
   .tj-page.page-standard,
   .tj-overview-page {

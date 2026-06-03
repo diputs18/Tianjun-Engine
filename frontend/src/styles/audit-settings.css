@@ -1,0 +1,228 @@
+.tj-page-audit-settings {
+  max-width: var(--tj-page-wide);
+}
+
+.tj-page-audit-settings .tj-page-header {
+  margin-bottom: 22px;
+}
+
+.tj-page-audit-settings .tj-page-header .arco-typography-paragraph {
+  display: block;
+  margin: 10px 0 0;
+  color: #5e6d86;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.tj-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.tj-audit-card {
+  min-height: 300px;
+  border-radius: 10px;
+}
+
+.tj-audit-card-tall {
+  min-height: 300px;
+}
+
+.tj-audit-card .arco-card-header {
+  height: 58px;
+  padding: 0 24px;
+}
+
+.tj-audit-card .arco-card-header-title {
+  color: #0d1b36;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.tj-audit-card .arco-card-body {
+  padding: 0 22px 22px;
+}
+
+/* 运行配置：双列表格 */
+.tj-audit-config-table {
+  overflow: hidden;
+  border: 1px solid #dce6f2;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.tj-audit-config-row {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 54px;
+  border-bottom: 1px solid #e2e9f2;
+}
+
+.tj-audit-config-row:last-child {
+  border-bottom: 0;
+}
+
+.tj-audit-config-label,
+.tj-audit-config-value {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 18px;
+  color: #24324c;
+  font-size: 14px;
+}
+
+.tj-audit-config-label {
+  border-right: 1px solid #e2e9f2;
+  background: rgba(247, 250, 255, 0.72);
+  font-weight: 850;
+}
+
+.tj-audit-config-value {
+  overflow: hidden;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 安全边界 */
+.tj-audit-guardrail-list {
+  overflow: hidden;
+  border: 1px solid #dce6f2;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.tj-audit-guardrail-item {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  min-height: 52px;
+  border-bottom: 1px solid #e2e9f2;
+}
+
+.tj-audit-guardrail-item:last-child {
+  border-bottom: 0;
+}
+
+.tj-audit-guardrail-item .arco-tag {
+  justify-self: center;
+  font-weight: 850;
+}
+
+.tj-audit-guardrail-item span {
+  min-width: 0;
+  padding: 0 16px;
+  color: #24324c;
+  font-size: 14px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 事件与反馈 */
+.tj-audit-empty {
+  display: grid;
+  place-items: center;
+  min-height: 210px;
+}
+
+.tj-audit-empty .arco-empty-image {
+  transform: scale(1.25);
+  opacity: 0.72;
+}
+
+.tj-audit-empty .arco-empty-description {
+  margin-top: 14px;
+  color: #7a8597;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.tj-audit-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tj-audit-event-item {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #e2e9f2;
+  border-radius: 8px;
+  background: rgba(247, 250, 255, 0.72);
+}
+
+.tj-audit-event-item .arco-tag {
+  justify-content: center;
+  font-weight: 850;
+}
+
+.tj-audit-event-item span {
+  min-width: 0;
+  overflow: hidden;
+  color: #24324c;
+  font-size: 13px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tj-audit-event-item em {
+  overflow: hidden;
+  color: #6b778c;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 响应式 */
+@media (max-width: 1180px) {
+  .tj-audit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tj-audit-card,
+  .tj-audit-card-tall {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .tj-audit-config-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tj-audit-config-label {
+    min-height: 42px;
+    border-right: 0;
+    border-bottom: 1px solid #e2e9f2;
+  }
+
+  .tj-audit-guardrail-item {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .tj-audit-guardrail-item .arco-tag {
+    justify-self: start;
+  }
+
+  .tj-audit-guardrail-item span {
+    padding: 0;
+    white-space: normal;
+  }
+
+  .tj-audit-event-item {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+}
