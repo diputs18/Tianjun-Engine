@@ -179,6 +179,7 @@ Windows 下可直接双击：
 
 - `start_tianjun.bat`：启动控制面、模拟后端和前端开发服务器
 - `restart_tianjun.bat`：安全停止并重启上述完整运行时
+- `stop_tianjun.bat`：停止 control plane、模拟后端和 Tianjun 前端开发服务器
 
 ## DCI 拓扑感知与模型
 

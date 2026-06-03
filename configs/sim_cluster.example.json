@@ -1,4 +1,4 @@
-﻿{
+{
   "cluster": {
     "name": "local-sim-multi-region",
     "description": "Config-driven simulation backend with diverse CPU/GPU/finance/RDMA nodes for local testing. Edit nodes and links to change behavior without code changes."

@@ -1,4 +1,4 @@
-﻿# Tianjun Engine example configuration.
+# Tianjun Engine example configuration.
 # Copy this file to ./tianjun.toml or set TIANJUN_CONFIG=/path/to/tianjun.toml.
 # ${TIANJUN_HOME} defaults to the project root and can be overridden for deployments.
 

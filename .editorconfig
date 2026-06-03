@@ -1,0 +1,34 @@
+root = true
+
+[*.{py,pyi,js,jsx,ts,tsx,css,html,md,txt,bat,ps1,sh,yml,yaml,json,toml}]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.env]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.env.*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.env]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.bat]
+end_of_line = crlf
+
+[README.md]
+charset = utf-8-bom
+
+[Makefile]
+trim_trailing_whitespace = false
