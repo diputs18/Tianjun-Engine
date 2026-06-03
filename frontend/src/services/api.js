@@ -39,7 +39,7 @@ export async function commitChatSession(sessionId, payload) {
   return readJson(`/chat/sessions/${encodeURIComponent(sessionId)}/commit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, confirmed_by_user_button: true }),
   });
 }
 

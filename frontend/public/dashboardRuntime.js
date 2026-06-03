@@ -661,7 +661,10 @@ async function commitHermesPolicyActual() {
     const res = await window.tianjunApi.fetchPath(`/chat/sessions/${encodeURIComponent(activeHermesSessionId)}/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ policy_id: activeHermesPolicyId })
+      body: JSON.stringify({
+        policy_id: activeHermesPolicyId,
+        confirmed_by_user_button: true
+      })
     });
     if (!res.ok) {
       const detail = await res.text();

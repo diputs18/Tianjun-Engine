@@ -194,6 +194,12 @@ def build_http_server(
                     return
                 if path.startswith("/chat/sessions/") and path.endswith("/commit"):
                     session_id = path.removeprefix("/chat/sessions/").removesuffix("/commit").strip("/")
+                    if not bool(payload.get("confirmed_by_user_button") or payload.get("confirmed")):
+                        self._write_json(
+                            403,
+                            {"error": "chat policy commit requires explicit user button confirmation"},
+                        )
+                        return
                     result = chat.commit_session(session_id, policy_id=payload.get("policy_id"))
                     result["dashboard_payload"] = self._dashboard_payload_from_chat_result(result)
                     self._write_json(200, result)
