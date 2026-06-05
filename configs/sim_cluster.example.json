@@ -1,0 +1,1341 @@
+{
+  "cluster": {
+    "name": "local-sim-multi-region",
+    "description": "Config-driven simulation backend with diverse CPU/GPU/finance/RDMA nodes for local testing. Edit nodes and links to change behavior without code changes."
+  },
+  "nodes": [
+    {
+      "node_id": "sh-a100-01",
+      "region": "shanghai",
+      "labels": [
+        "gpu",
+        "latency-sensitive",
+        "finance-zone"
+      ],
+      "capacity": {
+        "cpu": 64,
+        "memory": 512,
+        "gpu": 4,
+        "storage": 4000
+      },
+      "storage": {
+        "local_nvme_gb": 4000,
+        "shared_fs": "cpfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "prod-vpc-sh"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "a100",
+        "memory_gb": 80,
+        "count": 4,
+        "nvlink": true
+      },
+      "pricing": {
+        "on_demand_per_hour": 120,
+        "spot_per_hour": 62
+      },
+      "base_reliability": 0.985,
+      "performance_factors": {
+        "inference": 2.4,
+        "training": 2.1
+      }
+    },
+    {
+      "node_id": "sh-a100-02",
+      "region": "shanghai",
+      "labels": [
+        "gpu",
+        "latency-sensitive",
+        "finance-zone",
+        "lustre"
+      ],
+      "capacity": {
+        "cpu": 96,
+        "memory": 768,
+        "gpu": 8,
+        "storage": 6000
+      },
+      "storage": {
+        "local_nvme_gb": 6000,
+        "shared_fs": "cpfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "prod-vpc-sh"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "a100",
+        "memory_gb": 80,
+        "count": 8,
+        "nvlink": true
+      },
+      "pricing": {
+        "on_demand_per_hour": 220,
+        "spot_per_hour": 118
+      },
+      "base_reliability": 0.982,
+      "performance_factors": {
+        "inference": 2.8,
+        "training": 2.4
+      }
+    },
+    {
+      "node_id": "sh-h800-01",
+      "region": "shanghai",
+      "labels": [
+        "gpu",
+        "h800",
+        "rdma",
+        "latency-sensitive",
+        "finance-zone"
+      ],
+      "capacity": {
+        "cpu": 128,
+        "memory": 1024,
+        "gpu": 8,
+        "storage": 8000
+      },
+      "storage": {
+        "local_nvme_gb": 8000,
+        "shared_fs": "lustre"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "prod-vpc-sh"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "h800",
+        "memory_gb": 80,
+        "count": 8,
+        "nvlink": true
+      },
+      "pricing": {
+        "on_demand_per_hour": 330,
+        "spot_per_hour": 180
+      },
+      "base_reliability": 0.986,
+      "performance_factors": {
+        "inference": 3.0,
+        "training": 3.4
+      }
+    },
+    {
+      "node_id": "sh-cpu-01",
+      "region": "shanghai",
+      "labels": [
+        "cpu",
+        "general",
+        "batch"
+      ],
+      "capacity": {
+        "cpu": 64,
+        "memory": 256,
+        "gpu": 0,
+        "storage": 1200
+      },
+      "storage": {
+        "local_nvme_gb": 600,
+        "shared_fs": "nfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "prod-vpc-sh"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3"
+        ],
+        "encrypted_transport": true,
+        "crypto": "tls",
+        "kms": true,
+        "audit_log": true
+      },
+      "accelerator": {
+        "vendor": "",
+        "model": "",
+        "memory_gb": 0,
+        "count": 0,
+        "nvlink": false
+      },
+      "pricing": {
+        "on_demand_per_hour": 18,
+        "spot_per_hour": 8
+      },
+      "base_reliability": 0.972,
+      "performance_factors": {
+        "batch": 1.8,
+        "analysis": 1.5,
+        "inference": 0.8
+      }
+    },
+    {
+      "node_id": "sh-mem-01",
+      "region": "shanghai",
+      "labels": [
+        "cpu",
+        "memory-optimized",
+        "analysis"
+      ],
+      "capacity": {
+        "cpu": 96,
+        "memory": 1536,
+        "gpu": 0,
+        "storage": 2000
+      },
+      "storage": {
+        "local_nvme_gb": 1000,
+        "shared_fs": "nfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "prod-vpc-sh"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3"
+        ],
+        "encrypted_transport": true,
+        "crypto": "tls",
+        "kms": true,
+        "audit_log": true
+      },
+      "accelerator": {
+        "vendor": "",
+        "model": "",
+        "memory_gb": 0,
+        "count": 0,
+        "nvlink": false
+      },
+      "pricing": {
+        "on_demand_per_hour": 36,
+        "spot_per_hour": 16
+      },
+      "base_reliability": 0.978,
+      "performance_factors": {
+        "analysis": 2.2,
+        "batch": 1.4
+      }
+    },
+    {
+      "node_id": "sz-h800-01",
+      "region": "shenzhen",
+      "labels": [
+        "gpu",
+        "h800",
+        "rdma",
+        "finance-zone",
+        "latency-sensitive"
+      ],
+      "capacity": {
+        "cpu": 128,
+        "memory": 1024,
+        "gpu": 8,
+        "storage": 9000
+      },
+      "storage": {
+        "local_nvme_gb": 9000,
+        "shared_fs": "cpfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "finance-vpc-sz"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "h800",
+        "memory_gb": 80,
+        "count": 8,
+        "nvlink": true
+      },
+      "pricing": {
+        "on_demand_per_hour": 360,
+        "spot_per_hour": 190
+      },
+      "base_reliability": 0.987,
+      "performance_factors": {
+        "training": 3.5,
+        "inference": 3.0
+      }
+    },
+    {
+      "node_id": "sz-a100-01",
+      "region": "shenzhen",
+      "labels": [
+        "gpu",
+        "a100",
+        "rdma",
+        "finance-zone"
+      ],
+      "capacity": {
+        "cpu": 96,
+        "memory": 768,
+        "gpu": 8,
+        "storage": 7000
+      },
+      "storage": {
+        "local_nvme_gb": 7000,
+        "shared_fs": "cpfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "finance-vpc-sz"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "a100",
+        "memory_gb": 80,
+        "count": 8,
+        "nvlink": true
+      },
+      "pricing": {
+        "on_demand_per_hour": 230,
+        "spot_per_hour": 120
+      },
+      "base_reliability": 0.981,
+      "performance_factors": {
+        "training": 2.5,
+        "inference": 2.7
+      }
+    },
+    {
+      "node_id": "sz-cpu-01",
+      "region": "shenzhen",
+      "labels": [
+        "cpu",
+        "general",
+        "batch"
+      ],
+      "capacity": {
+        "cpu": 32,
+        "memory": 128,
+        "gpu": 0,
+        "storage": 600
+      },
+      "storage": {
+        "local_nvme_gb": 300,
+        "shared_fs": "nfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "finance-vpc-sz"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "",
+        "model": "",
+        "memory_gb": 0,
+        "count": 0,
+        "nvlink": false
+      },
+      "pricing": {
+        "on_demand_per_hour": 12,
+        "spot_per_hour": 5
+      },
+      "base_reliability": 0.965,
+      "performance_factors": {
+        "batch": 1.4,
+        "inference": 0.7
+      }
+    },
+    {
+      "node_id": "gz-h100-01",
+      "region": "guangzhou",
+      "labels": [
+        "gpu",
+        "h100",
+        "rdma",
+        "finance-zone",
+        "lossless-network"
+      ],
+      "capacity": {
+        "cpu": 128,
+        "memory": 1024,
+        "gpu": 8,
+        "storage": 9000
+      },
+      "storage": {
+        "local_nvme_gb": 9000,
+        "shared_fs": "lustre"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "finance-vpc-gz"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "h100",
+        "memory_gb": 80,
+        "count": 8,
+        "nvlink": true
+      },
+      "pricing": {
+        "on_demand_per_hour": 390,
+        "spot_per_hour": 210
+      },
+      "base_reliability": 0.986,
+      "performance_factors": {
+        "training": 3.7,
+        "inference": 3.2
+      }
+    },
+    {
+      "node_id": "gz-a100-01",
+      "region": "guangzhou",
+      "labels": [
+        "gpu",
+        "a100",
+        "rdma",
+        "finance-zone"
+      ],
+      "capacity": {
+        "cpu": 96,
+        "memory": 768,
+        "gpu": 4,
+        "storage": 5000
+      },
+      "storage": {
+        "local_nvme_gb": 5000,
+        "shared_fs": "cpfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "finance-vpc-gz"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "a100",
+        "memory_gb": 80,
+        "count": 4,
+        "nvlink": true
+      },
+      "pricing": {
+        "on_demand_per_hour": 145,
+        "spot_per_hour": 78
+      },
+      "base_reliability": 0.976,
+      "performance_factors": {
+        "training": 2.2,
+        "inference": 2.5
+      }
+    },
+    {
+      "node_id": "dg-cpu-01",
+      "region": "dongguan",
+      "labels": [
+        "cpu",
+        "edge",
+        "batch"
+      ],
+      "capacity": {
+        "cpu": 48,
+        "memory": 192,
+        "gpu": 0,
+        "storage": 1000
+      },
+      "storage": {
+        "local_nvme_gb": 500,
+        "shared_fs": "nfs"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "finance-vpc-dg"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3",
+          "finance"
+        ],
+        "encrypted_transport": true,
+        "crypto": "sm4",
+        "kms": true,
+        "audit_log": true,
+        "sm2": true
+      },
+      "accelerator": {
+        "vendor": "",
+        "model": "",
+        "memory_gb": 0,
+        "count": 0,
+        "nvlink": false
+      },
+      "pricing": {
+        "on_demand_per_hour": 14,
+        "spot_per_hour": 7
+      },
+      "base_reliability": 0.958,
+      "performance_factors": {
+        "batch": 1.2
+      }
+    },
+    {
+      "node_id": "bj-t4-01",
+      "region": "beijing",
+      "labels": [
+        "gpu",
+        "t4"
+      ],
+      "capacity": {
+        "cpu": 32,
+        "memory": 128,
+        "gpu": 2,
+        "storage": 1000
+      },
+      "storage": {
+        "local_nvme_gb": 1000,
+        "shared_fs": "nfs"
+      },
+      "network": {
+        "public_ip": true,
+        "allowed_ingress_ports": [
+          22,
+          443
+        ]
+      },
+      "compliance": {
+        "profiles": [],
+        "encrypted_transport": true,
+        "crypto": "tls",
+        "kms": false,
+        "audit_log": false
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "t4",
+        "memory_gb": 16,
+        "count": 2,
+        "nvlink": false
+      },
+      "pricing": {
+        "on_demand_per_hour": 26,
+        "spot_per_hour": 11
+      },
+      "base_reliability": 0.94,
+      "performance_factors": {
+        "inference": 1.1
+      }
+    },
+    {
+      "node_id": "bj-cpu-01",
+      "region": "beijing",
+      "labels": [
+        "cpu",
+        "general",
+        "batch"
+      ],
+      "capacity": {
+        "cpu": 64,
+        "memory": 256,
+        "gpu": 0,
+        "storage": 1000
+      },
+      "storage": {
+        "local_nvme_gb": 500,
+        "shared_fs": "nfs"
+      },
+      "network": {
+        "public_ip": true,
+        "allowed_ingress_ports": [
+          22,
+          443
+        ]
+      },
+      "compliance": {
+        "profiles": [],
+        "encrypted_transport": true,
+        "crypto": "tls",
+        "kms": false,
+        "audit_log": false
+      },
+      "accelerator": {
+        "vendor": "",
+        "model": "",
+        "memory_gb": 0,
+        "count": 0,
+        "nvlink": false
+      },
+      "pricing": {
+        "on_demand_per_hour": 16,
+        "spot_per_hour": 6
+      },
+      "base_reliability": 0.955,
+      "performance_factors": {
+        "batch": 1.2
+      }
+    },
+    {
+      "node_id": "hz-a10-01",
+      "region": "hangzhou",
+      "labels": [
+        "gpu",
+        "a10",
+        "inference"
+      ],
+      "capacity": {
+        "cpu": 48,
+        "memory": 192,
+        "gpu": 4,
+        "storage": 1600
+      },
+      "storage": {
+        "local_nvme_gb": 1600,
+        "shared_fs": "nfs"
+      },
+      "network": {
+        "public_ip": true,
+        "allowed_ingress_ports": [
+          22,
+          443
+        ]
+      },
+      "compliance": {
+        "profiles": [],
+        "encrypted_transport": true,
+        "crypto": "tls",
+        "kms": false,
+        "audit_log": false
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "a10",
+        "memory_gb": 24,
+        "count": 4,
+        "nvlink": false
+      },
+      "pricing": {
+        "on_demand_per_hour": 45,
+        "spot_per_hour": 22
+      },
+      "base_reliability": 0.963,
+      "performance_factors": {
+        "inference": 1.8
+      }
+    },
+    {
+      "node_id": "cd-a100-01",
+      "region": "chengdu",
+      "labels": [
+        "gpu",
+        "a100",
+        "training"
+      ],
+      "capacity": {
+        "cpu": 96,
+        "memory": 512,
+        "gpu": 4,
+        "storage": 5000
+      },
+      "storage": {
+        "local_nvme_gb": 5000,
+        "shared_fs": "lustre"
+      },
+      "network": {
+        "public_ip": false,
+        "allowed_ingress_ports": [
+          443
+        ],
+        "vpc": "prod-vpc-cd"
+      },
+      "compliance": {
+        "profiles": [
+          "mlps3"
+        ],
+        "encrypted_transport": true,
+        "crypto": "tls",
+        "kms": true,
+        "audit_log": true
+      },
+      "accelerator": {
+        "vendor": "nvidia",
+        "model": "a100",
+        "memory_gb": 80,
+        "count": 4,
+        "nvlink": true
+      },
+      "pricing": {
+        "on_demand_per_hour": 130,
+        "spot_per_hour": 65
+      },
+      "base_reliability": 0.973,
+      "performance_factors": {
+        "training": 2.3,
+        "inference": 2.2
+      }
+    },
+    {
+      "node_id": "wh-cpu-01",
+      "region": "wuhan",
+      "labels": [
+        "cpu",
+        "analysis",
+        "batch"
+      ],
+      "capacity": {
+        "cpu": 96,
+        "memory": 512,
+        "gpu": 0,
+        "storage": 1800
+      },
+      "storage": {
+        "local_nvme_gb": 900,
+        "shared_fs": "nfs"
+      },
+      "network": {
+        "public_ip": true,
+        "allowed_ingress_ports": [
+          22,
+          443
+        ]
+      },
+      "compliance": {
+        "profiles": [],
+        "encrypted_transport": true,
+        "crypto": "tls",
+        "kms": false,
+        "audit_log": false
+      },
+      "accelerator": {
+        "vendor": "",
+        "model": "",
+        "memory_gb": 0,
+        "count": 0,
+        "nvlink": false
+      },
+      "pricing": {
+        "on_demand_per_hour": 22,
+        "spot_per_hour": 10
+      },
+      "base_reliability": 0.961,
+      "performance_factors": {
+        "analysis": 1.7,
+        "batch": 1.6
+      }
+    }
+  ],
+  "links": [
+    {
+      "source_region": "beijing",
+      "target_region": "beijing",
+      "latency_ms": {
+        "p50": 7,
+        "p95": 10,
+        "p99": 18
+      },
+      "bandwidth_mbps": {
+        "min": 900,
+        "p50": 1600
+      },
+      "packet_loss": 0.001,
+      "path_reliability": 0.997
+    },
+    {
+      "source_region": "chengdu",
+      "target_region": "chengdu",
+      "latency_ms": {
+        "p50": 7,
+        "p95": 10,
+        "p99": 18
+      },
+      "bandwidth_mbps": {
+        "min": 900,
+        "p50": 1600
+      },
+      "packet_loss": 0.001,
+      "path_reliability": 0.997
+    },
+    {
+      "source_region": "dongguan",
+      "target_region": "dongguan",
+      "latency_ms": {
+        "p50": 7,
+        "p95": 10,
+        "p99": 18
+      },
+      "bandwidth_mbps": {
+        "min": 900,
+        "p50": 1600
+      },
+      "packet_loss": 0.001,
+      "path_reliability": 0.997
+    },
+    {
+      "source_region": "guangzhou",
+      "target_region": "guangzhou",
+      "latency_ms": {
+        "p50": 4,
+        "p95": 10,
+        "p99": 18
+      },
+      "bandwidth_mbps": {
+        "min": 900,
+        "p50": 1600
+      },
+      "packet_loss": 0.001,
+      "path_reliability": 0.997
+    },
+    {
+      "source_region": "hangzhou",
+      "target_region": "hangzhou",
+      "latency_ms": {
+        "p50": 7,
+        "p95": 10,
+        "p99": 18
+      },
+      "bandwidth_mbps": {
+        "min": 900,
+        "p50": 1600
+      },
+      "packet_loss": 0.001,
+      "path_reliability": 0.997
+    },
+    {
+      "source_region": "shanghai",
+      "target_region": "shanghai",
+      "latency_ms": {
+        "p50": 4,
+        "p95": 10,
+        "p99": 18
+      },
+      "bandwidth_mbps": {
+        "min": 900,
+        "p50": 1600
+      },
+      "packet_loss": 0.001,
+      "path_reliability": 0.997
+    },
+    {
+      "source_region": "shenzhen",
+      "target_region": "shenzhen",
+      "latency_ms": {
+        "p50": 4,
+        "p95": 10,
+        "p99": 18
+      },
+      "bandwidth_mbps": {
+        "min": 900,
+        "p50": 1600
+      },
+      "packet_loss": 0.001,
+      "path_reliability": 0.997
+    },
+    {
+      "source_region": "wuhan",
+      "target_region": "wuhan",
+      "latency_ms": {
+        "p50": 7,
+        "p95": 10,
+        "p99": 18
+      },
+      "bandwidth_mbps": {
+        "min": 900,
+        "p50": 1600
+      },
+      "packet_loss": 0.001,
+      "path_reliability": 0.997
+    },
+    {
+      "source_region": "shenzhen",
+      "target_region": "guangzhou",
+      "latency_ms": {
+        "p50": 8,
+        "p95": 12.8,
+        "p99": 17.6
+      },
+      "bandwidth_mbps": {
+        "min": 1100,
+        "p50": 1650.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "guangzhou",
+      "target_region": "shenzhen",
+      "latency_ms": {
+        "p50": 8,
+        "p95": 12.8,
+        "p99": 17.6
+      },
+      "bandwidth_mbps": {
+        "min": 1100,
+        "p50": 1650.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "shenzhen",
+      "target_region": "dongguan",
+      "latency_ms": {
+        "p50": 7,
+        "p95": 11.200000000000001,
+        "p99": 15.400000000000002
+      },
+      "bandwidth_mbps": {
+        "min": 1000,
+        "p50": 1500.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "dongguan",
+      "target_region": "shenzhen",
+      "latency_ms": {
+        "p50": 7,
+        "p95": 11.200000000000001,
+        "p99": 15.400000000000002
+      },
+      "bandwidth_mbps": {
+        "min": 1000,
+        "p50": 1500.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "shanghai",
+      "target_region": "shenzhen",
+      "latency_ms": {
+        "p50": 30,
+        "p95": 48.0,
+        "p99": 66.0
+      },
+      "bandwidth_mbps": {
+        "min": 500,
+        "p50": 750.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "shenzhen",
+      "target_region": "shanghai",
+      "latency_ms": {
+        "p50": 30,
+        "p95": 48.0,
+        "p99": 66.0
+      },
+      "bandwidth_mbps": {
+        "min": 500,
+        "p50": 750.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "beijing",
+      "target_region": "shanghai",
+      "latency_ms": {
+        "p50": 28,
+        "p95": 44.800000000000004,
+        "p99": 61.60000000000001
+      },
+      "bandwidth_mbps": {
+        "min": 380,
+        "p50": 570.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "shanghai",
+      "target_region": "beijing",
+      "latency_ms": {
+        "p50": 28,
+        "p95": 44.800000000000004,
+        "p99": 61.60000000000001
+      },
+      "bandwidth_mbps": {
+        "min": 380,
+        "p50": 570.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "hangzhou",
+      "target_region": "shanghai",
+      "latency_ms": {
+        "p50": 12,
+        "p95": 19.200000000000003,
+        "p99": 26.400000000000002
+      },
+      "bandwidth_mbps": {
+        "min": 700,
+        "p50": 1050.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "shanghai",
+      "target_region": "hangzhou",
+      "latency_ms": {
+        "p50": 12,
+        "p95": 19.200000000000003,
+        "p99": 26.400000000000002
+      },
+      "bandwidth_mbps": {
+        "min": 700,
+        "p50": 1050.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "chengdu",
+      "target_region": "shanghai",
+      "latency_ms": {
+        "p50": 42,
+        "p95": 67.2,
+        "p99": 92.4
+      },
+      "bandwidth_mbps": {
+        "min": 360,
+        "p50": 540.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    },
+    {
+      "source_region": "wuhan",
+      "target_region": "shanghai",
+      "latency_ms": {
+        "p50": 24,
+        "p95": 38.400000000000006,
+        "p99": 52.800000000000004
+      },
+      "bandwidth_mbps": {
+        "min": 520,
+        "p50": 780.0
+      },
+      "packet_loss": 0.003,
+      "path_reliability": 0.985
+    }
+  ],
+  "workload_profiles": {
+    "default": {
+      "model_load_seconds": {
+        "mean": 10,
+        "stddev": 2
+      },
+      "warmup_seconds": {
+        "min": 3,
+        "max": 8
+      },
+      "latency_ms": {
+        "base_p50": 120,
+        "base_p95": 260,
+        "base_p99": 420,
+        "per_qps_penalty": 0.2
+      },
+      "capacity": {
+        "qps_per_gpu": 120,
+        "qps_per_cpu": 8
+      },
+      "failure": {
+        "image_pull_failure_rate": 0.0,
+        "model_load_failure_rate": 0.0,
+        "oom_failure_rate": 0.0
+      },
+      "pricing": {
+        "on_demand_per_hour": 60,
+        "spot_per_hour": 32
+      },
+      "provisioning_seconds": 2,
+      "load_test_seconds": 2,
+      "execution_time": {
+        "base_seconds": 4,
+        "per_cpu_second": 0.6,
+        "per_gpu_second": 1.5,
+        "per_memory_gb_second": 0.03,
+        "per_storage_gb_second": 0.01,
+        "per_input_gb_second": 0.2,
+        "minimum_seconds": 2,
+        "maximum_seconds": 120
+      }
+    },
+    "text_to_image_a100": {
+      "provisioning_seconds": 14,
+      "model_load_seconds": {
+        "mean": 35,
+        "stddev": 8
+      },
+      "warmup_seconds": {
+        "min": 10,
+        "max": 25
+      },
+      "load_test_seconds": 20,
+      "latency_ms": {
+        "base_p50": 310,
+        "base_p95": 610,
+        "base_p99": 760,
+        "per_qps_penalty": 0.35,
+        "cold_start_penalty": 120
+      },
+      "capacity": {
+        "qps_per_gpu": 155,
+        "qps_per_cpu": 2,
+        "max_batch_size": 8
+      },
+      "failure": {
+        "image_pull_failure_rate": 0.0,
+        "model_load_failure_rate": 0.0,
+        "oom_failure_rate": 0.0
+      },
+      "pricing": {
+        "on_demand_per_hour": 120,
+        "spot_per_hour": 62
+      }
+    },
+    "batch": {
+      "provisioning_seconds": 1.5,
+      "execution_time": {
+        "base_seconds": 3,
+        "per_cpu_second": 0.5,
+        "per_memory_gb_second": 0.02,
+        "per_input_gb_second": 0.3,
+        "minimum_seconds": 2,
+        "maximum_seconds": 90
+      },
+      "latency_ms": {
+        "base_p50": 150,
+        "base_p95": 260,
+        "base_p99": 360,
+        "per_qps_penalty": 0.05
+      },
+      "capacity": {
+        "qps_per_cpu": 10,
+        "qps_per_gpu": 0
+      },
+      "failure": {
+        "image_pull_failure_rate": 0,
+        "model_load_failure_rate": 0,
+        "oom_failure_rate": 0
+      },
+      "pricing": {
+        "on_demand_per_hour": 8,
+        "spot_per_hour": 4
+      }
+    },
+    "training": {
+      "provisioning_seconds": 3,
+      "model_load_seconds": {
+        "mean": 0,
+        "stddev": 0
+      },
+      "warmup_seconds": {
+        "min": 1,
+        "max": 2
+      },
+      "load_test_seconds": 2,
+      "execution_time": {
+        "base_seconds": 8,
+        "per_cpu_second": 1.2,
+        "per_gpu_second": 8,
+        "per_memory_gb_second": 0.05,
+        "per_storage_gb_second": 0.015,
+        "per_input_gb_second": 0.5,
+        "minimum_seconds": 6,
+        "maximum_seconds": 240
+      },
+      "latency_ms": {
+        "base_p50": 160,
+        "base_p95": 320,
+        "base_p99": 520,
+        "per_qps_penalty": 0.1
+      },
+      "capacity": {
+        "qps_per_gpu": 80,
+        "qps_per_cpu": 6
+      },
+      "failure": {
+        "image_pull_failure_rate": 0,
+        "model_load_failure_rate": 0,
+        "oom_failure_rate": 0
+      },
+      "pricing": {
+        "on_demand_per_hour": 60,
+        "spot_per_hour": 32
+      }
+    },
+    "inference": {
+      "provisioning_seconds": 4,
+      "model_load_seconds": {
+        "mean": 4,
+        "stddev": 1
+      },
+      "warmup_seconds": {
+        "min": 2,
+        "max": 4
+      },
+      "load_test_seconds": 4,
+      "execution_time": {
+        "base_seconds": 4,
+        "per_cpu_second": 0.5,
+        "per_gpu_second": 2,
+        "minimum_seconds": 3,
+        "maximum_seconds": 120
+      },
+      "latency_ms": {
+        "base_p50": 90,
+        "base_p95": 180,
+        "base_p99": 300,
+        "per_qps_penalty": 0.2
+      },
+      "capacity": {
+        "qps_per_gpu": 120,
+        "qps_per_cpu": 10
+      },
+      "failure": {
+        "image_pull_failure_rate": 0,
+        "model_load_failure_rate": 0,
+        "oom_failure_rate": 0
+      },
+      "pricing": {
+        "on_demand_per_hour": 40,
+        "spot_per_hour": 22
+      }
+    }
+  },
+  "compliance_profiles": {
+    "mlps3_finance": {
+      "required_labels": [
+        "mlps3",
+        "finance",
+        "sm4",
+        "kms"
+      ],
+      "allowed_ingress_ports": [
+        443
+      ],
+      "public_ip": false
+    }
+  },
+  "time_scale": 0.5
+}
