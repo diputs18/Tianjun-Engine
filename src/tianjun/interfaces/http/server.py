@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,7 +12,13 @@ from urllib.parse import urlparse
 from ...application.control_plane import CentralControlPlane
 from ...chat import ChatRuntime
 from ...scenarios import node_from_dict, task_from_dict
-from ..dashboard.page import render_dashboard_html
+
+
+DEFAULT_CORS_ALLOW_ORIGIN = "http://127.0.0.1:5173"
+
+
+def cors_allow_origin() -> str:
+    return os.environ.get("TIANJUN_CORS_ALLOW_ORIGIN", DEFAULT_CORS_ALLOW_ORIGIN)
 
 STATIC_DASHBOARD_DIR = Path(__file__).resolve().parents[1] / "dashboard" / "static"
 
@@ -27,11 +34,17 @@ def build_http_server(
     class ControlPlaneHandler(BaseHTTPRequestHandler):
         server_version = "TianjunControlPlane/0.2"
 
+        def do_OPTIONS(self) -> None:  # noqa: N802
+            self.send_response(204)
+            self._send_cors_headers()
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def do_GET(self) -> None:  # noqa: N802
             path = urlparse(self.path).path
             try:
-                if path in {"/", "/dashboard"}:
-                    self._write_html(200, render_dashboard_html())
+                if path == "/":
+                    self._write_json(200, {"name": "Tianjun Engine API", "status": "ok"})
                     return
                 if self._write_dashboard_static(path):
                     return
@@ -45,6 +58,7 @@ def build_http_server(
                             "status": "ok",
                             "model_runtime": control_plane.scheduler.model_runtime.describe(),
                             "chat_runtime": chat.describe(),
+                            "cors_allow_origin": cors_allow_origin(),
                         },
                     )
                     return
@@ -187,6 +201,12 @@ def build_http_server(
                     return
                 if path.startswith("/chat/sessions/") and path.endswith("/commit"):
                     session_id = path.removeprefix("/chat/sessions/").removesuffix("/commit").strip("/")
+                    if not bool(payload.get("confirmed_by_user_button") or payload.get("confirmed")):
+                        self._write_json(
+                            403,
+                            {"error": "chat policy commit requires explicit user button confirmation"},
+                        )
+                        return
                     result = chat.commit_session(session_id, policy_id=payload.get("policy_id"))
                     result["dashboard_payload"] = self._dashboard_payload_from_chat_result(result)
                     self._write_json(200, result)
@@ -316,6 +336,7 @@ def build_http_server(
         def _write_json(self, status: int, payload: Any) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
+            self._send_cors_headers()
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -338,6 +359,11 @@ def build_http_server(
             self.end_headers()
             self.wfile.write(body)
             return True
+
+        def _send_cors_headers(self) -> None:
+            self.send_header("Access-Control-Allow-Origin", cors_allow_origin())
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
         def _schedule_cloudsim_task(self, payload: dict[str, Any], *, commit: bool) -> dict[str, Any]:
             task = task_from_dict(payload)
@@ -385,7 +411,7 @@ def build_http_server(
                 status = committed.get("status", "committed")
             return {
                 "status": status,
-                "mode": "optimized_legacy_dashboard_gateway",
+                "mode": "optimized_intent_gateway",
                 "interpretation": {
                     "requirement": requirement,
                     "policy_id": policy_id,
@@ -425,6 +451,7 @@ def build_http_server(
 
         def _write_chat_event_stream(self, runner) -> None:
             self.send_response(200)
+            self._send_cors_headers()
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
             self.send_header("Cache-Control", "no-cache, no-transform")
             self.send_header("Connection", "close")
@@ -447,6 +474,7 @@ def build_http_server(
 
         def _write_legacy_hermes_stream(self, message: str, *, session_id: Any = None) -> None:
             self.send_response(200)
+            self._send_cors_headers()
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
             self.send_header("Cache-Control", "no-cache, no-transform")
             self.send_header("Connection", "close")
@@ -504,13 +532,5 @@ def build_http_server(
                 send({"type": "error", "error": str(exc)})
                 send({"type": "done"})
                 self.close_connection = True
-
-        def _write_html(self, status: int, payload: str) -> None:
-            body = payload.encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
 
     return ThreadingHTTPServer((host, port), ControlPlaneHandler)

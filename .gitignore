@@ -1,3 +1,4 @@
+# Python
 .venv/
 __pycache__/
 *.py[cod]
@@ -5,13 +6,35 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+build/
+dist/
 
+# Secrets & config
 .env
 configs/secrets.toml
 tianjun.toml
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Logs & data
 *.log
 *.db
 *.sqlite
-
 data/alibaba_microservices_v2022/
 runtime_report.json
+
+# Node & build output
+node_modules/
+frontend/dist/
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+CLAUDE.md
+.cursorrules

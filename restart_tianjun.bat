@@ -5,8 +5,23 @@ cd /d "%~dp0"
 
 set "HOST=127.0.0.1"
 set "PORT=8024"
-set "URL=http://%HOST%:%PORT%/dashboard"
+set "FRONTEND_PORT=5173"
+set "URL=http://127.0.0.1:%FRONTEND_PORT%"
 set "CONFIG=configs\tianjun.example.toml"
+set "INVENTORY=configs\sim_cluster.example.json"
+set "FRONTEND_DIR=frontend"
+set "FRONTEND_STATE="
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$conn = Get-NetTCPConnection -LocalPort %FRONTEND_PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $conn) { exit 0 }; $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $conn.OwningProcess) -ErrorAction SilentlyContinue; $cmd = [string]$process.CommandLine; if ($cmd -match [regex]::Escape('%FRONTEND_DIR%') -and ($cmd -match 'vite' -or $cmd -match 'npm(\.cmd)?\s+run\s+dev')) { exit 1 } else { exit 2 }"
+if errorlevel 2 (
+  echo Port %FRONTEND_PORT% is occupied by another process. Please free the port or update the frontend port before restarting Tianjun.
+  pause
+  exit /b 1
+)
+if errorlevel 1 (
+  set "FRONTEND_STATE=running"
+)
 
 where python >nul 2>nul
 if errorlevel 1 (
@@ -26,6 +41,15 @@ if errorlevel 1 (
 echo Restarting Tianjun Engine on %HOST%:%PORT%...
 echo Note: active in-memory CloudSim task state will be reset by this restart.
 
+echo Stopping Tianjun simulation backend processes...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -in @('python.exe', 'pythonw.exe') }; foreach ($process in $procs) { $cmd = [string]$process.CommandLine; if ($cmd -match 'main\.py\s+sim-backend' -and $cmd -match [regex]::Escape('http://%HOST%:%PORT%')) { Write-Host ('Stopping Tianjun simulation backend ' + $process.ProcessId + '...'); Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop } }"
+if errorlevel 1 (
+  echo Tianjun simulation backend could not be stopped safely.
+  pause
+  exit /b 1
+)
+
 echo Stopping Tianjun control plane...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$port = %PORT%; $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue); foreach ($listener in $listeners) { $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $listener.OwningProcess) -ErrorAction SilentlyContinue; if (-not $process) { continue }; $cmd = [string]$process.CommandLine; if ($cmd -match 'main\.py\s+serve' -and $cmd -match ('--port\s+' + $port)) { Write-Host ('Stopping Tianjun process ' + $process.ProcessId + '...'); Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop } else { Write-Error ('Port ' + $port + ' is occupied by another process: ' + $process.Name + ' (' + $process.ProcessId + ').'); exit 2 } }; $limit = (Get-Date).AddSeconds(8); do { $busy = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if (-not $busy) { exit 0 }; Start-Sleep -Milliseconds 200 } while ((Get-Date) -lt $limit); Write-Error ('Port ' + $port + ' did not become available in time.'); exit 3"
@@ -38,7 +62,7 @@ if errorlevel 1 (
 echo Starting Tianjun Engine control plane...
 echo Dashboard: %URL%
 echo Starting control plane...
-start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --default-execution-mode simulation --host %HOST% --port %PORT%
+start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --inventory "%INVENTORY%" --default-execution-mode simulation --host %HOST% --port %PORT%
 
 echo Waiting for control plane health check...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -49,9 +73,22 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo Starting simulation backend...
+start "Tianjun Simulation Backend" cmd /k python -B main.py sim-backend --server http://%HOST%:%PORT% --inventory "%INVENTORY%" --verbose
+
+if defined FRONTEND_STATE (
+  echo Reusing existing dashboard frontend: %URL%
+  start "" "%URL%"
+  echo Tianjun Engine full runtime is starting in separate windows.
+  echo Close the Control Plane and Simulation Backend windows to stop it.
+  pause
+  exit /b 0
+)
+
+echo Starting dashboard frontend...
+start "Tianjun Dashboard Frontend" cmd /k "cd /d ""%CD%\%FRONTEND_DIR%"" && npm install && npm run dev"
 start "" "%URL%"
 
-echo Tianjun Engine control plane is running in a separate window.
-echo No simulated nodes are started automatically.
-echo Start CloudSim Plus, sim-backend, or a node agent manually when you want nodes to appear.
+echo Tianjun Engine full runtime is starting in separate windows.
+echo Close the Control Plane and Simulation Backend windows to stop it.
 pause

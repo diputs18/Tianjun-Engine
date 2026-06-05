@@ -1,0 +1,355 @@
+.tj-page-model-policy {
+  max-width: var(--tj-page-wide);
+}
+
+.tj-model-metric-row {
+  margin-bottom: 22px;
+}
+
+.tj-model-metric {
+  min-height: 102px;
+  border: 1px solid var(--tj-line);
+  border-radius: 10px;
+  background: var(--tj-surface);
+  box-shadow: var(--tj-card-shadow);
+}
+
+.tj-model-metric .arco-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  height: 100%;
+  padding: 18px 22px;
+}
+
+.tj-model-metric.icon-left .arco-card-body {
+  justify-content: space-between;
+}
+
+.tj-model-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--tj-blue);
+  font-size: 26px;
+  background: var(--tj-blue-soft);
+}
+
+.tj-model-metric.tone-purple .tj-model-metric-icon {
+  color: var(--tj-purple);
+  background: var(--tj-purple-soft);
+}
+
+.tj-model-metric span:not(.tj-model-metric-icon) {
+  display: block;
+  color: var(--tj-text-secondary);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.tj-model-metric b {
+  display: block;
+  margin-top: 8px;
+  color: var(--tj-text);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tj-model-metric-inline-detail {
+  margin-left: 8px;
+  color: var(--tj-text-secondary);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.tj-model-metric.tone-purple b {
+  color: var(--tj-purple);
+}
+
+.tj-model-metric small {
+  display: block;
+  margin-top: 6px;
+  color: var(--tj-text-secondary);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.tj-model-main-grid,
+.tj-model-bottom-grid {
+  display: grid;
+  gap: 22px;
+}
+
+.tj-model-main-grid {
+  grid-template-columns: minmax(500px, 1fr) minmax(500px, 0.96fr);
+  margin-top: 4px;
+}
+
+.tj-model-bottom-grid {
+  grid-template-columns: minmax(620px, 1.28fr) minmax(380px, 0.72fr);
+  margin-top: 20px;
+}
+
+.tj-model-panel {
+  border: 1px solid var(--tj-line);
+  border-radius: 10px;
+  background: var(--tj-surface);
+}
+
+.tj-model-panel .arco-card-header {
+  height: 50px;
+  padding: 0 22px;
+}
+
+.tj-model-panel .arco-card-header-title {
+  color: var(--tj-text);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.tj-model-panel .arco-card-body {
+  padding: 0 20px 16px;
+}
+
+.tj-weight-card,
+.tj-explain-card {
+  min-height: 326px;
+}
+
+.tj-weight-list {
+  overflow: hidden;
+  border: 1px solid var(--tj-line-soft);
+  border-radius: 12px;
+  background: var(--tj-surface-solid);
+}
+
+.tj-weight-row.detailed {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 112px;
+  align-items: center;
+  min-height: 58px;
+  padding: 0 14px 0 0;
+  border-bottom: 1px solid var(--tj-line-soft);
+  color: var(--tj-text);
+}
+
+.tj-weight-row.detailed:last-child {
+  border-bottom: 0;
+}
+
+.tj-weight-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  color: var(--tj-purple);
+}
+
+.tj-weight-icon svg {
+  width: 16px;
+  height: 16px;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--tj-purple-soft);
+}
+
+.tj-weight-main {
+  min-width: 0;
+}
+
+.tj-weight-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tj-weight-name {
+  overflow: hidden;
+  color: var(--tj-text);
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tj-weight-meta code {
+  color: var(--tj-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  background: transparent;
+}
+
+.tj-weight-bar {
+  height: 7px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--tj-bg-soft);
+}
+
+.tj-weight-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--tj-purple), var(--tj-blue));
+}
+
+.tj-weight-side {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+}
+
+.tj-weight-side b {
+  color: var(--tj-text);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tj-weight-side .arco-tag {
+  min-width: 62px;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.tj-model-empty {
+  display: grid;
+  place-items: center;
+  min-height: 248px;
+}
+
+.tj-model-empty .arco-empty-image {
+  transform: scale(1.35);
+  opacity: 0.72;
+}
+
+.tj-model-empty .arco-empty-description {
+  margin-top: 18px;
+  color: var(--tj-text-muted);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.tj-weight-empty {
+  min-height: 240px;
+}
+
+.tj-draft-card {
+  min-height: 282px;
+}
+
+.tj-history-card {
+  min-height: 282px;
+}
+
+.tj-policy-table .arco-table-container {
+  border: 0;
+}
+
+.tj-policy-table .arco-table-th {
+  height: 42px;
+  color: var(--tj-text-muted);
+  font-size: 13px;
+  font-weight: 900;
+  background: var(--tj-surface-muted);
+}
+
+.tj-policy-table .arco-table-td {
+  height: 50px;
+  color: var(--tj-text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.tj-policy-table .arco-table-th,
+.tj-policy-table .arco-table-td,
+.tj-policy-table .arco-table-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tj-policy-table .arco-tag {
+  min-width: 78px;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.tj-history-empty {
+  min-height: 206px;
+  border-radius: 8px;
+  background: var(--tj-surface-muted);
+}
+
+.tj-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tj-history-list div {
+  padding: 12px 14px;
+  border: 1px solid var(--tj-line-soft);
+  border-radius: 8px;
+  background: var(--tj-surface-muted);
+}
+
+.tj-history-list span {
+  color: var(--tj-text-secondary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tj-history-list p {
+  margin: 6px 0 0;
+  color: var(--tj-text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+@media (max-width: 1366px) {
+  .tj-model-metric {
+    min-height: 96px;
+  }
+
+  .tj-model-metric .arco-card-body {
+    padding: 17px 20px;
+  }
+
+  .tj-model-metric-icon {
+    width: 48px;
+    height: 48px;
+    font-size: 27px;
+  }
+
+  .tj-model-metric b {
+    font-size: 26px;
+  }
+
+  .tj-weight-card,
+  .tj-explain-card {
+    min-height: 316px;
+  }
+
+  .tj-weight-row.detailed {
+    min-height: 58px;
+  }
+
+  .tj-model-empty {
+    min-height: 238px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .tj-model-main-grid,
+  .tj-model-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
