@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
-import mimetypes
 import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -19,8 +17,6 @@ DEFAULT_CORS_ALLOW_ORIGIN = "http://127.0.0.1:5173"
 
 def cors_allow_origin() -> str:
     return os.environ.get("TIANJUN_CORS_ALLOW_ORIGIN", DEFAULT_CORS_ALLOW_ORIGIN)
-
-STATIC_DASHBOARD_DIR = Path(__file__).resolve().parents[1] / "dashboard" / "static"
 
 
 def build_http_server(
@@ -45,8 +41,6 @@ def build_http_server(
             try:
                 if path == "/":
                     self._write_json(200, {"name": "Tianjun Engine API", "status": "ok"})
-                    return
-                if self._write_dashboard_static(path):
                     return
                 if path == "/report":
                     self._write_json(200, control_plane.build_report())
@@ -341,24 +335,6 @@ def build_http_server(
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-
-        def _write_dashboard_static(self, path: str) -> bool:
-            if not (path.startswith("/css/") or path.startswith("/js/")):
-                return False
-            target = (STATIC_DASHBOARD_DIR / path.lstrip("/")).resolve()
-            if not target.is_file() or STATIC_DASHBOARD_DIR not in target.parents:
-                self._write_json(404, {"error": "not_found"})
-                return True
-            body = target.read_bytes()
-            content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
-            if target.suffix == ".js":
-                content_type = "text/javascript"
-            self.send_response(200)
-            self.send_header("Content-Type", f"{content_type}; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return True
 
         def _send_cors_headers(self) -> None:
             self.send_header("Access-Control-Allow-Origin", cors_allow_origin())
