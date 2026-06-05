@@ -74,10 +74,10 @@ class TianjunConfig:
 def _read_config(path: Path) -> dict[str, Any]:
     suffix = path.suffix.lower()
     if suffix == ".toml":
-        return tomllib.loads(path.read_text(encoding="utf-8"))
+        return tomllib.loads(path.read_text(encoding="utf-8-sig"))
     if suffix == ".json":
         # Legacy compatibility only; new projects should use TOML.
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     raise ValueError(f"Unsupported config file type {suffix!r}; use .toml")
 
 
@@ -113,7 +113,7 @@ def load_env_file(path: str | Path, *, override: bool = False) -> dict[str, str]
     loaded: dict[str, str] = {}
     if not env_path.exists() or not env_path.is_file():
         return loaded
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+    for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

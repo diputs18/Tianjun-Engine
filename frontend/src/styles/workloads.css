@@ -1,0 +1,168 @@
+.tj-page-workloads {
+  max-width: var(--tj-page-wide);
+}
+
+@media (min-width: 1800px) {
+  .tj-page-workloads {
+    max-width: none;
+  }
+}
+
+.tj-page-workloads .tj-page-header {
+  margin-bottom: 24px;
+}
+
+.tj-workload-content {
+  display: grid;
+  gap: 32px;
+}
+
+.tj-workload-metric-row {
+  margin-bottom: 0;
+}
+
+.tj-workload-metric {
+  min-height: 118px;
+  border: 1px solid var(--tj-line);
+  border-radius: 10px;
+  background: var(--tj-surface);
+  box-shadow: var(--tj-card-shadow);
+}
+
+.tj-workload-metric .arco-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 24px 30px;
+}
+
+.tj-workload-metric span:not(.tj-workload-metric-icon) {
+  display: block;
+  color: var(--tj-text-secondary);
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.tj-workload-metric b {
+  display: block;
+  margin-top: 18px;
+  color: var(--tj-text);
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tj-workload-metric b em {
+  margin-left: 4px;
+  font-style: normal;
+}
+
+.tj-workload-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: 50%;
+  color: var(--tj-blue);
+  font-size: 34px;
+  background: var(--tj-blue-soft);
+}
+
+.tj-workload-metric.tone-green b,
+.tj-workload-metric.tone-green .tj-workload-metric-icon {
+  color: var(--tj-green);
+}
+
+.tj-workload-table-card {
+  min-height: 360px;
+  border-radius: 10px;
+}
+
+.tj-workload-table-card .arco-card-header {
+  height: 76px;
+  padding: 0 30px;
+}
+
+.tj-workload-table-card .arco-card-header-title {
+  color: var(--tj-text);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.tj-workload-table-card .arco-card-body {
+  padding: 0;
+}
+
+.tj-workload-table-card .tj-empty {
+  min-height: 300px;
+  display: grid;
+  place-items: center;
+}
+
+.tj-workload-table .arco-table-container {
+  border: 0;
+}
+
+.tj-workload-table .arco-table-th {
+  height: 58px;
+  color: var(--tj-text-muted);
+  font-size: 14px;
+  font-weight: 900;
+  background: var(--tj-surface-muted);
+}
+
+.tj-workload-table .arco-table-td {
+  height: 76px;
+  color: var(--tj-text);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.tj-workload-table .arco-table-th,
+.tj-workload-table .arco-table-td {
+  padding-left: 30px;
+  padding-right: 30px;
+}
+
+.tj-workload-table .arco-tag {
+  min-width: 86px;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.tj-workload-progress {
+  display: grid;
+  grid-template-columns: 48px minmax(160px, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.tj-workload-progress span {
+  color: var(--tj-text);
+  font-weight: 850;
+}
+
+.tj-workload-progress .arco-progress-line-wrapper {
+  width: 100%;
+}
+
+.tj-workload-progress .arco-progress-line {
+  height: 6px;
+}
+
+.tj-workload-table .arco-pagination {
+  justify-content: flex-end;
+  margin: 20px 30px 24px;
+}
+
+@media (max-width: 1100px) {
+  .tj-workload-metric-row {
+    display: block;
+  }
+
+  .tj-workload-metric-row .arco-col + .arco-col {
+    margin-top: 16px;
+  }
+}

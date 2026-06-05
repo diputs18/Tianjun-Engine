@@ -1,0 +1,32 @@
+/* Global responsive page width strategy */
+
+@media (min-width: 1600px) {
+  .tj-page.page-standard,
+  .tj-overview-page {
+    max-width: var(--tj-page-standard);
+  }
+
+  .tj-page.page-wide,
+  .tj-page-scheduling,
+  .tj-page-workloads,
+  .tj-page-model-policy {
+    max-width: var(--tj-page-wide);
+  }
+
+  .tj-page-infrastructure {
+    max-width: none;
+  }
+}
+
+@media (min-width: 1800px) {
+  .tj-page-workloads,
+  .tj-page-infrastructure {
+    max-width: none;
+  }
+}
+
+@media (max-width: 1366px) {
+  .tj-page {
+    max-width: 100%;
+  }
+}

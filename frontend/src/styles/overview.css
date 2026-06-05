@@ -1,0 +1,387 @@
+.tj-overview-page {
+  max-width: var(--tj-page-standard);
+}
+
+.tj-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  gap: var(--tj-grid-gap-lg);
+  align-items: stretch;
+}
+
+/* Row 1: 3 hero metrics */
+.tj-overview-grid > .tj-hero-metric:nth-of-type(1) { grid-column: span 4; }
+.tj-overview-grid > .tj-hero-metric:nth-of-type(2) { grid-column: span 4; }
+.tj-overview-grid > .tj-hero-metric:nth-of-type(3) { grid-column: span 4; }
+
+/* Row 2: task + chart */
+.tj-overview-task  { grid-column: span 5; }
+.tj-overview-chart { grid-column: span 7; }
+
+/* Row 3: summary + decisions */
+.tj-overview-summary   { grid-column: span 5; }
+.tj-overview-decisions { grid-column: span 7; }
+
+/* Unified row heights */
+.tj-overview-task,
+.tj-overview-chart {
+  min-height: 220px;
+}
+
+.tj-overview-summary,
+.tj-overview-decisions {
+  min-height: 260px;
+}
+
+/* Fill card height inside grid */
+.tj-overview-grid .arco-card {
+  height: 100%;
+}
+
+.tj-overview-task .arco-card-body {
+  height: 100%;
+}
+
+.tj-overview-chart .arco-card-body,
+.tj-overview-summary .arco-card-body,
+.tj-overview-decisions .arco-card-body {
+  height: calc(100% - 46px);
+}
+
+.tj-hero-metric {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 104px;
+  padding: 20px 22px;
+  overflow: hidden;
+}
+
+.tj-hero-metric::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+}
+
+.tj-hero-metric.tone-green::before {
+  background: linear-gradient(110deg, rgba(19, 180, 103, 0.08), var(--tj-surface));
+}
+
+.tj-hero-metric.tone-blue::before {
+  background: linear-gradient(110deg, rgba(15, 111, 255, 0.08), var(--tj-surface));
+}
+
+.tj-hero-metric.tone-purple::before {
+  background: linear-gradient(110deg, rgba(123, 69, 217, 0.1), var(--tj-surface));
+}
+
+.tj-hero-metric > * {
+  position: relative;
+  z-index: 1;
+}
+
+.tj-hero-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  font-size: 30px;
+}
+
+.tone-green .tj-hero-icon {
+  color: var(--tj-green);
+  background: var(--tj-green-soft);
+}
+
+.tone-blue .tj-hero-icon {
+  color: var(--tj-blue);
+  background: var(--tj-blue-soft);
+}
+
+.tone-purple .tj-hero-icon {
+  color: var(--tj-purple);
+  background: var(--tj-purple-soft);
+}
+
+.tj-hero-metric label {
+  display: block;
+  color: var(--tj-text);
+  font-size: var(--tj-font-md);
+  font-weight: 700;
+}
+
+.tj-hero-metric b {
+  display: block;
+  margin-top: 5px;
+  color: var(--tj-blue);
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tone-green b {
+  color: var(--tj-green);
+}
+
+.tone-purple b {
+  color: var(--tj-purple);
+}
+
+.tj-hero-metric p {
+  margin: 6px 0 0;
+  color: var(--tj-text-secondary);
+  font-size: var(--tj-font-md);
+}
+
+.tj-task-card {
+  min-height: 170px;
+}
+
+.tj-task-card .arco-card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 170px;
+  padding: 18px;
+}
+
+.tj-overview-grid .tj-task-card .arco-card-body {
+  min-height: auto;
+}
+
+.tj-task-card h3,
+.tj-task-card p,
+.tj-task-card strong {
+  margin: 0;
+}
+
+.tj-task-card h3 {
+  color: var(--tj-text);
+  font-size: var(--tj-font-lg);
+}
+
+.tj-task-card strong {
+  display: block;
+  margin-top: 18px;
+  color: var(--tj-text);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.tj-task-card p {
+  margin-top: 12px;
+  color: var(--tj-text-secondary);
+  font-size: 15px;
+}
+
+.tj-task-card svg {
+  color: var(--tj-blue-soft);
+  font-size: 70px;
+}
+
+.tj-chart-card {
+  min-height: 170px;
+}
+
+.tj-chart-card .arco-card-body {
+  padding-top: 0;
+}
+
+.tj-summary-card,
+.tj-decisions-card {
+  min-height: 246px;
+}
+
+.tj-summary-top {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--tj-line-soft);
+}
+
+.tj-summary-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.tj-summary-item > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--tj-blue);
+  background: var(--tj-blue-soft);
+  font-size: 19px;
+}
+
+.tj-summary-item:nth-child(1) > span {
+  color: var(--tj-green);
+  background: var(--tj-green-soft);
+}
+
+.tj-summary-item:nth-child(2) > span {
+  color: var(--tj-purple);
+  background: var(--tj-purple-soft);
+}
+
+.tj-summary-item b {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--tj-text);
+  font-size: 14px;
+}
+
+.tj-summary-item p {
+  margin: 5px 0 0;
+  color: var(--tj-text-secondary);
+}
+
+.tj-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-top: 20px;
+}
+
+.tj-summary-metrics div {
+  min-height: 56px;
+  padding: 0 16px;
+  border-right: 1px solid var(--tj-line-soft);
+}
+
+.tj-summary-metrics div:first-child {
+  padding-left: 0;
+}
+
+.tj-summary-metrics div:last-child {
+  border-right: 0;
+}
+
+.tj-summary-metrics span {
+  display: block;
+  color: var(--tj-text-muted);
+  font-size: 13px;
+}
+
+.tj-summary-metrics b {
+  display: block;
+  margin-top: 10px;
+  color: var(--tj-text);
+  font-size: 17px;
+}
+
+.tj-decisions-card .arco-card-body {
+  display: grid;
+  place-items: center;
+  min-height: 188px;
+}
+
+.tj-decision-list-modern {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+}
+
+.tj-decision-list-modern div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--tj-line);
+  border-radius: var(--tj-radius-md);
+  background: var(--tj-surface-muted);
+}
+
+.tj-decision-list-modern svg {
+  color: var(--tj-green);
+}
+
+.tj-decision-list-modern b {
+  overflow: hidden;
+  color: var(--tj-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tj-decision-list-modern span {
+  color: var(--tj-text-secondary);
+}
+
+@media (max-width: 1366px) {
+  .tj-overview-grid {
+    gap: 18px;
+  }
+
+  .tj-overview-grid > .tj-hero-metric:nth-of-type(1),
+  .tj-overview-grid > .tj-hero-metric:nth-of-type(2),
+  .tj-overview-grid > .tj-hero-metric:nth-of-type(3) {
+    grid-column: span 4;
+  }
+
+  .tj-overview-task,
+  .tj-overview-summary {
+    grid-column: span 5;
+  }
+
+  .tj-overview-chart,
+  .tj-overview-decisions {
+    grid-column: span 7;
+  }
+
+  .tj-hero-metric {
+    min-height: 96px;
+    padding: 18px 20px;
+  }
+
+  .tj-hero-icon {
+    width: 52px;
+    height: 52px;
+    font-size: 28px;
+  }
+
+  .tj-hero-metric b {
+    font-size: 22px;
+  }
+
+  .tj-hero-metric p,
+  .tj-hero-metric label {
+    font-size: var(--tj-font-sm);
+  }
+}
+
+@media (max-width: 1100px) {
+  .tj-overview-grid > .tj-hero-metric:nth-of-type(1),
+  .tj-overview-grid > .tj-hero-metric:nth-of-type(2),
+  .tj-overview-grid > .tj-hero-metric:nth-of-type(3) {
+    grid-column: span 12;
+  }
+
+  .tj-overview-task,
+  .tj-overview-chart,
+  .tj-overview-summary,
+  .tj-overview-decisions {
+    grid-column: span 12;
+  }
+}
+
+@media (max-width: 1180px) and (min-width: 721px) {
+  .tj-summary-top,
+  .tj-summary-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .tj-summary-metrics div {
+    padding: 12px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--tj-line-soft);
+  }
+}

@@ -5,12 +5,12 @@
 [server]
 host = "127.0.0.1"
 port = 8024
-# state_db = "${TIANJUN_STATE_DIR}/state.db"  # 可选：显式开启持久化
+# state_db = "${TIANJUN_STATE_DIR}/state.db"  # 鍙€夛細鏄惧紡寮€鍚寔涔呭寲
 heartbeat_timeout_seconds = 15
 policy_update_interval = 2
 
 [scenario]
-# path = "${TIANJUN_HOME}/examples/runtime_scenario.json"  # 可选：显式加载 demo 场景
+# path = "${TIANJUN_HOME}/examples/runtime_scenario.json"  # 鍙€夛細鏄惧紡鍔犺浇 demo 鍦烘櫙
 
 [model]
 dir = "${TIANJUN_HOME}/data/trained_models"
