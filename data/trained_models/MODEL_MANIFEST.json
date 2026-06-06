@@ -3,15 +3,18 @@
     "graphsage_stability_model.pt": {
       "sha256": "5bc900f7af3d82cdcc857672bd8ed27c17c76cb8d1c42c51c3b03d22a003f265",
       "runtime_name": "gnn",
+      "purpose": "Optional topology stability scoring for the scheduler model runtime.",
       "source_upload_name": "data/trained_models/dci_reference/graphsage_stability_model.pt",
       "training_profile": "dci_reference_three_access_points"
     },
     "lstm_latency_model.pt": {
       "sha256": "d121d815a5eb607efd00b69e9a4958c4a5edbbcce29a26a31499e9714f81359d",
       "runtime_name": "lstm",
+      "purpose": "Optional latency prediction for scheduler model runtime.",
       "source_upload_name": "lstm_latency_model.pt"
     }
   },
+  "asset_policy": "Keep compact runtime artifacts and this manifest in the repository. Move larger checkpoints, expanded datasets, and report archives to release artifacts or external storage.",
   "loading_policy": "Runtime loads checkpoint tensors using torch.load(..., weights_only=True).",
   "note": "Verify the SHA-256 values again after replacing or retraining model artifacts."
 }

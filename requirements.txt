@@ -1,6 +1,7 @@
-# Minimal runtime on Python 3.11+ uses only the standard library.
-# Optional verification:
-pytest>=8.0
-
-# Optional model runtime:
-# torch>=2.1,<3
+# Dependencies are declared in pyproject.toml.
+#
+# Minimal runtime:
+#   python -m pip install -e .
+#
+# Development and optional integrations:
+#   python -m pip install -e ".[dev,mcp,ml-runtime]"

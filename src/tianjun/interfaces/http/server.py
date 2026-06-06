@@ -12,6 +12,7 @@ from ...application.control_plane import CentralControlPlane
 from ...chat import ChatRuntime
 from ...scenarios import node_from_dict, task_from_dict
 from ..dashboard.page import render_dashboard_html
+from .legacy_routes import handle_legacy_get, handle_legacy_post
 
 STATIC_DASHBOARD_DIR = Path(__file__).resolve().parents[1] / "dashboard" / "static"
 
@@ -48,16 +49,7 @@ def build_http_server(
                         },
                     )
                     return
-                if path == "/hermes/status":
-                    self._write_json(
-                        200,
-                        {
-                            "status": "ok",
-                            "mode": "optimized_chat_runtime",
-                            "chat_runtime": chat.describe(),
-                            "model_runtime": control_plane.scheduler.model_runtime.describe(),
-                        },
-                    )
+                if handle_legacy_get(self, path, control_plane, chat):
                     return
                 if path.startswith("/policies/"):
                     policy_id = path.removeprefix("/policies/").strip("/")
@@ -127,9 +119,7 @@ def build_http_server(
                     )
                     self._write_json(200, result)
                     return
-                if path == "/intent":
-                    result = self._legacy_intent(payload)
-                    self._write_json(200, result)
+                if handle_legacy_post(self, path, payload, control_plane, chat):
                     return
                 if path == "/conversations/start":
                     result = control_plane.start_requirement_session(
@@ -146,40 +136,18 @@ def build_http_server(
                     else:
                         self._write_chat_event_stream(lambda emit: chat.start(message, stream_emit=emit))
                     return
-                if path == "/hermes/chat/stream":
-                    message = str(payload.get("message", "")).strip()
-                    if not message:
-                        self._write_json(400, {"error": "message is required"})
-                        return
-                    self._write_legacy_hermes_stream(message, session_id=payload.get("session_id"))
-                    return
                 if path.startswith("/chat/sessions/") and path.endswith("/messages/stream"):
                     session_id = path.removeprefix("/chat/sessions/").removesuffix("/messages/stream").strip("/")
                     message = str(payload.get("message", ""))
                     self._write_chat_event_stream(lambda emit: chat.continue_session(session_id, message, stream_emit=emit))
                     return
-                if path in {"/chat", "/chat/sessions"}:
+                if path == "/chat/sessions":
                     session_id = payload.get("session_id")
                     if session_id:
                         result = chat.continue_session(str(session_id), str(payload.get("message", "")))
                     else:
                         result = chat.start(str(payload.get("message", "")))
                     self._write_json(200, result)
-                    return
-                if path == "/hermes/chat":
-                    message = str(payload.get("message", "")).strip()
-                    if not message:
-                        self._write_json(400, {"error": "message is required"})
-                        return
-                    result = chat.start(message)
-                    self._write_json(
-                        200,
-                        {
-                            "status": "ok",
-                            "reply": result.get("message", ""),
-                            "raw": result,
-                        },
-                    )
                     return
                 if path.startswith("/chat/sessions/") and path.endswith("/messages"):
                     session_id = path.removeprefix("/chat/sessions/").removesuffix("/messages").strip("/")

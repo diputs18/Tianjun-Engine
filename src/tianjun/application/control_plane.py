@@ -18,6 +18,10 @@ from ..storage.sqlite_state_store import SQLiteStateStore
 from ..scheduling.engine import ClosedLoopAdaptiveScheduler
 from ..ml.runtime import TrainedModelRuntime
 from ..scenarios import execution_from_dict, node_from_dict, task_from_dict
+from .node_registry import NodeRegistry
+from .policy_workflow import PolicyWorkflowService
+from .requirement_dialogue import RequirementDialogueService
+from .task_lease_service import TaskLeaseService
 
 
 def _truncate(text: str, limit: int = 400) -> str:
@@ -87,6 +91,10 @@ class CentralControlPlane:
         self.user_feedback: list[UserFeedback] = []
         self.requirement_sessions: dict[str, RequirementSession] = {}
         self.physical_topology: PhysicalTopology | None = None
+        self.node_registry = NodeRegistry(self)
+        self.task_lease_service = TaskLeaseService(self)
+        self.policy_workflow = PolicyWorkflowService(self)
+        self.requirement_dialogue = RequirementDialogueService(self)
 
         if self.state_store is not None:
             self._restore_from_store()

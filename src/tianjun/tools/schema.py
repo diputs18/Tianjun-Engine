@@ -4,7 +4,6 @@ from typing import Any
 
 TOOL_NAMES = [
     "get_cluster_state",
-    "analyze_user_intent",
     "start_requirement_dialogue",
     "continue_requirement_dialogue",
     "draft_compute_network_policy",
@@ -26,7 +25,6 @@ CHAT_TOOL_NAMES = [
 MCP_TOOL_NAMES = [
     "get_cluster_state",
     *CHAT_TOOL_NAMES,
-    "analyze_user_intent",
     "start_requirement_dialogue",
     "continue_requirement_dialogue",
     "draft_compute_network_policy",
@@ -46,6 +44,9 @@ def tianjun_tool_contract() -> dict[str, Any]:
         "contract": "tianjun.tools.v2",
         "return_format": "structured_json",
         "tools": list(TOOL_NAMES),
+        "chat_tools": list(CHAT_TOOL_NAMES),
+        "mcp_tools": list(MCP_TOOL_NAMES),
+        "internal_tools": ["analyze_user_intent"],
         "policy": {
             "llm_may_explain": True,
             "llm_may_commit_without_tool": False,

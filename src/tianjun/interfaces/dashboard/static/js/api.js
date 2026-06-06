@@ -20,7 +20,6 @@ export async function commitHermesPolicy(sessionId, payload) {
   return _post(`/chat/sessions/${encodeURIComponent(sessionId)}/commit`, payload);
 }
 
-export async function submitIntent(payload) { return _post("/intent", payload); }
 export async function submitFeedback(payload) { return _post("/feedback", payload); }
 export async function commitPolicy(payload) { return _post("/policies/commit", payload); }
 export async function updatePolicyWeights(payload) { return _post("/policy-weights", payload); }
