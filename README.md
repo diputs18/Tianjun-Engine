@@ -1,12 +1,12 @@
 # Tianjun Engine
 
-Tianjun Engine is a local-first compute-network scheduling control plane. It connects natural-language requirement dialogue, deterministic multi-objective scheduling, optional ML-assisted prediction, execution feedback, MCP tools, and a static Dashboard into one runnable prototype.
+Tianjun Engine 是一个以本地优先的算网调度控制平面。它将自然语言需求对话、确定性多目标调度、可选的 ML 辅助预测、执行反馈、MCP 工具以及静态 Dashboard 整合为一个可运行的原型。
 
-The project is intended for research, demos, and architecture experiments. It is not a production cloud platform. Inventory, pricing, topology, and execution facts must come from registered nodes, simulation backends, CloudSimPlus bridges, or real node agents; the LLM layer may explain and help parse intent, but it must not invent control-plane facts or commit work without an explicit confirmation path.
+本项目用于研究、演示和架构实验，并非生产级云平台。资源清单、定价、拓扑和执行事实必须来自已注册的节点、仿真后端、CloudSimPlus 桥接器或真实节点代理；LLM 层可以进行解释和帮助解析意图，但不得在没有明确确认路径的情况下捏造控制平面事实或提交工作。
 
-## Quick Start
+## 快速开始
 
-Requires Python 3.10 or newer.
+需要 Python 3.10 或更新版本。
 
 ```powershell
 python -m venv .venv
@@ -15,7 +15,7 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev,mcp,ml-runtime]"
 ```
 
-Run the control plane without an LLM:
+在不使用 LLM 的情况下运行控制平面：
 
 ```powershell
 python -B main.py serve `
@@ -26,27 +26,27 @@ python -B main.py serve `
   --port 8024
 ```
 
-Open the Dashboard:
+打开 Dashboard：
 
 ```text
 http://127.0.0.1:8024/dashboard
 ```
 
-Verify the service:
+验证服务：
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8024/health
 Invoke-RestMethod http://127.0.0.1:8024/report
 ```
 
-Run tests:
+运行测试：
 
 ```powershell
 python -m pytest
 python scripts\smoke_test.py
 ```
 
-Windows users can also use the converged script entry:
+Windows 用户也可以使用统一脚本入口：
 
 ```cmd
 tianjun.bat start
@@ -55,20 +55,20 @@ tianjun.bat stop
 tianjun.bat open
 ```
 
-The legacy `start_tianjun.bat` and `restart_tianjun.bat` wrappers remain for compatibility.
+旧版 `start_tianjun.bat` 和 `restart_tianjun.bat` 包装脚本保留用于兼容。
 
-## LLM Configuration
+## LLM 配置
 
-Offline mode is the safest default for local verification. To enable the OpenAI-compatible Hermes chat layer, store the API key outside the repository:
+离线模式是本地验证最安全的默认选项。要启用 OpenAI 兼容的 Hermes 聊天层，请将 API 密钥存储在仓库之外：
 
 ```powershell
 python -B main.py secrets --config configs\tianjun.example.toml set deepseek --api-key "your_api_key_here"
 python -B main.py llm-check --config configs\tianjun.example.toml
 ```
 
-Project `.env` and `DEEPSEEK_API_KEY` are also supported, but local secrets are preferred for desktop use.
+项目 `.env` 和 `DEEPSEEK_API_KEY` 也受支持，但桌面使用推荐使用本地密钥。
 
-## Architecture At A Glance
+## 架构概览
 
 ```mermaid
 flowchart LR
@@ -87,46 +87,46 @@ flowchart LR
     Results --> CP
 ```
 
-Core entry points:
+核心入口：
 
-- CLI: `main.py` or installed `tianjun`
-- HTTP server: `src/tianjun/interfaces/http/server.py`
-- Dashboard assets: `src/tianjun/interfaces/dashboard/static/`
-- Control-plane facade: `src/tianjun/application/control_plane.py`
-- MCP adapter: `src/tianjun/integrations/mcp_server.py`
+- CLI：`main.py` 或已安装的 `tianjun`
+- HTTP 服务器：`src/tianjun/interfaces/http/server.py`
+- Dashboard 资源：`src/tianjun/interfaces/dashboard/static/`
+- 控制平面门面：`src/tianjun/application/control_plane.py`
+- MCP 适配器：`src/tianjun/integrations/mcp_server.py`
 
-## Documentation
+## 文档
 
-- [Architecture](docs/architecture.md)
+- [架构](docs/architecture.md)
 - [HTTP API](docs/api.md)
-- [Deprecation and legacy routes](docs/deprecation.md)
-- [Security boundary](docs/security-boundary.md)
-- [DCI experiments and model assets](docs/experiments-dci.md)
-- [Dashboard validation checklist](docs/dashboard-test-checklist.md)
-- [Documentation index](docs/README.md)
+- [弃用与遗留路由](docs/deprecation.md)
+- [安全边界](docs/security-boundary.md)
+- [DCI 实验与模型资产](docs/experiments-dci.md)
+- [Dashboard 验证清单](docs/dashboard-test-checklist.md)
+- [文档索引](docs/README.md)
 
-## Repository Layout
+## 仓库布局
 
 ```text
-main.py                         CLI shim for local source checkout
-pyproject.toml                  package metadata and dependency extras
-configs/                        minimal runnable configuration templates
-scripts/                        smoke tests, training helpers, Windows helpers
-src/tianjun/application/        control-plane facade and application services
-src/tianjun/chat/               Hermes-style chat runtime
-src/tianjun/interfaces/http/    HTTP server and legacy route adapter
+main.py                         本地源码检出用 CLI 入口
+pyproject.toml                  包元数据和依赖项扩展
+configs/                        最小可运行配置模板
+scripts/                        冒烟测试、训练辅助、Windows 辅助脚本
+src/tianjun/application/        控制平面门面和应用服务
+src/tianjun/chat/               Hermes 风格聊天运行时
+src/tianjun/interfaces/http/    HTTP 服务器和遗留路由适配器
 src/tianjun/interfaces/dashboard/static/
-                                static HTML/CSS/JS Dashboard
-src/tianjun/integrations/       MCP integration
-src/tianjun/scheduling/         deterministic scheduler
-src/tianjun/policy/             requirement parsing, policy generation, feedback
-data/trained_models/            optional runtime model artifacts and manifest
-data/dci_reference/             research data for DCI reproduction
-tests/                          unit, integration, contract, and smoke coverage
+                                静态 HTML/CSS/JS Dashboard
+src/tianjun/integrations/       MCP 集成
+src/tianjun/scheduling/         确定性调度器
+src/tianjun/policy/             需求解析、策略生成、反馈
+data/trained_models/            可选的运行时模型制品和清单
+data/dci_reference/             DCI 复现用研究数据
+tests/                          单元、集成、契约和冒烟测试覆盖
 ```
 
-## Compatibility
+## 兼容性
 
-The official chat flow is `/chat/sessions`. The older `/intent`, `/chat`, `/hermes/chat`, and `/hermes/chat/stream` endpoints are still available as deprecated compatibility routes. New clients should not depend on them.
+官方聊天流程为 `/chat/sessions`。较早的 `/intent`、`/chat`、`/hermes/chat` 和 `/hermes/chat/stream` 端点仍作为已弃用的兼容路由可用。新客户端不应依赖它们。
 
-See [docs/deprecation.md](docs/deprecation.md) for migration guidance.
+请参阅 [docs/deprecation.md](docs/deprecation.md) 获取迁移指导。

@@ -348,45 +348,6 @@ def build_http_server(
                 control_plane.submit_task(task)
             return control_plane.schedule_pending_task(task.task_id)
 
-        def _legacy_intent(self, payload: dict[str, Any]) -> dict[str, Any]:
-            message = str(payload.get("message", "")).strip()
-            if not message:
-                raise ValueError("message is required")
-            dry_run = bool(payload.get("dry_run", False))
-            requirement = control_plane.parse_requirement(message, overrides=payload.get("overrides"))
-            policy = control_plane.draft_policy(requirement, execution_payload=payload.get("execution"))
-            policy_id = str(policy["policy_id"])
-            task = control_plane.policy_tasks[policy_id]
-            preview = control_plane.preview_task(task)
-            submitted = None
-            status = "preview"
-            lease = None
-            if not dry_run:
-                committed = control_plane.commit_policy(policy_id)
-                submitted = committed.get("submitted_task")
-                status = committed.get("status", "committed")
-            return {
-                "status": status,
-                "mode": "optimized_legacy_dashboard_gateway",
-                "interpretation": {
-                    "requirement": requirement,
-                    "policy_id": policy_id,
-                    "questions": requirement.get("questions", []),
-                    "dialogue_status": requirement.get("dialogue_status"),
-                },
-                "task": task.to_dict(),
-                "preview_decision": preview,
-                "submitted_task": submitted,
-                "lease": lease,
-                "policy": policy,
-                "hermes_tool_contract": {
-                    "endpoint": "/intent",
-                    "method": "POST",
-                    "payload": {"message": "自然语言调度需求", "dry_run": False},
-                    "purpose": "兼容原仪表盘：将自然语言需求转为优化版策略草案、调度预览或显式提交。",
-                },
-            }
-
         def _dashboard_payload_from_chat_result(self, result: dict[str, Any]) -> dict[str, Any] | None:
             artifacts = result.get("artifacts") or {}
             commit = artifacts.get("commit") if isinstance(artifacts, dict) else None
@@ -426,66 +387,6 @@ def build_http_server(
             except Exception as exc:  # noqa: BLE001
                 emit({"type": "error", "message": str(exc)})
                 emit({"type": "done", "result": None})
-
-        def _write_legacy_hermes_stream(self, message: str, *, session_id: Any = None) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache, no-transform")
-            self.send_header("Connection", "close")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
-
-            def send(payload: dict[str, Any]) -> None:
-                body = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
-                self.wfile.write(body)
-                self.wfile.flush()
-
-            assistant_was_streamed = False
-
-            def emit(event: dict[str, Any]) -> None:
-                nonlocal assistant_was_streamed
-                event_type = str(event.get("type") or "")
-                if event_type == "assistant_delta":
-                    assistant_was_streamed = True
-                    send({"type": "delta", "text": str(event.get("delta", ""))})
-                elif event_type == "llm_start":
-                    send({"type": "delta", "text": "\n[DeepSeek 辅助] 正在解析用户意图...\n"})
-                elif event_type == "llm_done":
-                    send({"type": "delta", "text": "[DeepSeek 辅助完成] 意图字段已交由 Hermes 校验。\n"})
-                elif event_type == "llm_fallback":
-                    reason = str(event.get("reason") or "接口请求未完成")
-                    send({"type": "delta", "text": f"[DeepSeek 辅助降级] {reason}，Hermes 已使用本地规则处理。\n"})
-                elif event_type == "tool_start":
-                    send({"type": "delta", "text": f"\n[工具] {event.get('tool', '')} ...\n"})
-                elif event_type in {"tool_done", "tool_result"}:
-                    send({"type": "delta", "text": f"\n[工具完成] {event.get('summary', '')}\n"})
-                elif event_type == "session":
-                    session = event.get("session") or {}
-                    send({"type": "session", "session_id": session.get("session_id")})
-
-            try:
-                if session_id:
-                    result = chat.continue_session(str(session_id), message, stream_emit=emit)
-                else:
-                    result = chat.start(message, stream_emit=emit)
-                session = result.get("session") or {}
-                send(
-                    {
-                        "type": "result",
-                        "session_id": session.get("session_id"),
-                        "action": result.get("action"),
-                        "commit_policy_id": result.get("commit_policy_id"),
-                        "dashboard_payload": self._dashboard_payload_from_chat_result(result),
-                    }
-                )
-                if result and result.get("message") and not assistant_was_streamed:
-                    send({"type": "delta", "text": str(result.get("message"))})
-                send({"type": "done"})
-                self.close_connection = True
-            except Exception as exc:  # noqa: BLE001
-                send({"type": "error", "error": str(exc)})
-                send({"type": "done"})
-                self.close_connection = True
 
         def _write_html(self, status: int, payload: str) -> None:
             body = payload.encode("utf-8")

@@ -220,36 +220,10 @@ def main() -> None:
     app_config = TianjunConfig.load(getattr(args, "config", None))
 
     if args.command == "secrets":
-        secret_path = secret_path_from_config(app_config.get("llm.secrets_file"))
-        secret_key = str(first_present(app_config.get("llm.api_key_secret"), default="llm.api_key"))
-        if args.secrets_command == "set":
-            written = write_secret(args.api_key, secret_path, key=secret_key)
-            print(json.dumps({
-                "status": "ok",
-                "provider": args.provider,
-                "path": str(written),
-                "key": secret_key,
-                "message": "API key stored in the user-level secrets file. The raw key was not printed.",
-            }, ensure_ascii=False, indent=2))
-            return
-        if args.secrets_command == "show":
-            settings = resolved_llm_settings(args, app_config)
-            description = describe_secret(secret_path, key=secret_key)
-            print(json.dumps({
-                "provider": args.provider,
-                "configured_secret": description,
-                "effective_llm_key_source": settings.api_key_source,
-                "effective_llm_key_present": bool(settings.api_key),
-                "effective_llm_key_fingerprint": settings.key_fingerprint(),
-            }, ensure_ascii=False, indent=2))
-            return
-        if args.secrets_command == "path":
-            print(str(secret_path))
-            return
-        if args.secrets_command == "remove":
-            removed = delete_secret(secret_path, key=secret_key)
-            print(json.dumps({"status": "removed" if removed else "not_found", "path": str(secret_path), "key": secret_key}, ensure_ascii=False, indent=2))
-            return
+        from tianjun.cli.commands.secrets import handle
+
+        handle(args, app_config)
+        return
 
     if args.command == "runtime-demo":
         scenario = resolved_path_setting(
@@ -275,61 +249,10 @@ def main() -> None:
         return
 
     if args.command == "serve":
-        host = str(first_present(args.host, app_config.get("server.host"), app_config.get("control_plane.host"), default="127.0.0.1"))
-        port = int(first_present(args.port, app_config.get("server.port"), app_config.get("control_plane.port"), default=8024))
-        scenario = resolved_path_setting(args.scenario, app_config, "server.scenario", "control_plane.scenario")
-        if args.demo and scenario is None:
-            scenario = config_path("examples/runtime_scenario.json")
-        inventory = resolved_path_setting(args.inventory, app_config, "server.inventory", "simulation.inventory")
-        state_db = resolved_path_setting(args.state_db, app_config, "server.state_db", "control_plane.state_db")
-        heartbeat_timeout = float(first_present(
-            args.heartbeat_timeout_seconds,
-            app_config.get("server.heartbeat_timeout_seconds"),
-            app_config.get("control_plane.heartbeat_timeout_seconds"),
-            default=15.0,
-        ))
-        policy_update_interval = int(first_present(
-            args.policy_update_interval,
-            app_config.get("server.policy_update_interval"),
-            app_config.get("control_plane.policy_update_interval"),
-            default=2,
-        ))
-        state_store = None if state_db is None else SQLiteStateStore(state_db)
-        control_plane = build_control_plane(
-            state_store=state_store,
-            heartbeat_timeout_seconds=heartbeat_timeout,
-            policy_update_interval=policy_update_interval,
-            model_dir=resolved_model_dir(args, app_config),
-            require_model=require_model(args, app_config),
-        )
-        default_execution_mode = first_present(args.default_execution_mode, app_config.get("server.default_execution_mode"), app_config.get("simulation.default_execution_mode"))
-        if default_execution_mode:
-            control_plane.policy_generator.default_execution_mode = ExecutionMode(str(default_execution_mode))
-        if inventory:
-            # Validate the inventory path/configuration, but do not register its
-            # nodes here. The dashboard should discover resources only after the
-            # CloudSimPlus/simulation backend reports them.
-            load_inventory_config(inventory)
-        if scenario and not control_plane.tasks:
-            payload = load_scenario_payload(scenario)
-            for node_data in payload.get("nodes", []):
-                control_plane.register_node(node_from_dict(node_data))
-            for task_data in payload.get("tasks", []):
-                control_plane.submit_task(task_from_dict(task_data))
-        chat_runtime = ChatRuntime.with_llm_settings(control_plane, resolved_llm_settings(args, app_config))
-        server = build_http_server(control_plane, host, port, chat_runtime=chat_runtime)
-        print(f"Control plane listening on http://{host}:{port}")
-        print(f"Dashboard available at http://{host}:{port}/dashboard")
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            server.server_close()
-            if state_store is not None:
-                state_store.close()
-        return
+        from tianjun.cli.commands.serve import handle
 
+        handle(args, app_config)
+        return
 
     if args.command == "chat":
         scenario = resolved_path_setting(args.scenario, app_config, "chat.scenario", "scenario.path")
@@ -359,22 +282,9 @@ def main() -> None:
         return
 
     if args.command == "llm-check":
-        from tianjun.llm import OpenAICompatibleClient
+        from tianjun.cli.commands.llm_check import handle
 
-        settings = resolved_llm_settings(args, app_config)
-        print(json.dumps(settings.describe(), ensure_ascii=False, indent=2))
-        settings.validate_for_chat()
-        if not settings.enabled():
-            print(json.dumps({"status": "skipped", "reason": "LLM is offline or disabled."}, ensure_ascii=False, indent=2))
-            return
-        if "api.deepseek.com" in str(settings.base_url) and not settings.api_key:
-            raise ValueError("DeepSeek API requires an API key. Run `tianjun secrets set deepseek --api-key YOUR_KEY`, or set DEEPSEEK_API_KEY in .env / process environment.")
-        client = OpenAICompatibleClient(settings)
-        reply = client.chat([
-            {"role": "system", "content": "你是连接测试助手，只回复 OK。"},
-            {"role": "user", "content": "请回复 OK"},
-        ], timeout_seconds=min(10.0, settings.timeout_seconds))
-        print(json.dumps({"status": "ok", "reply": reply}, ensure_ascii=False, indent=2))
+        handle(args, app_config)
         return
 
     if args.command == "mcp-server":

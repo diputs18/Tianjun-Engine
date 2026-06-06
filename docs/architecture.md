@@ -1,39 +1,39 @@
-# Architecture
+# 架构
 
-Tianjun Engine is organized around a small set of public adapters and a central application facade.
+Tianjun Engine 围绕少量公共适配器和一个中央应用门面组织。
 
-## Runtime Flow
+## 运行时流程
 
-1. A user talks to the Dashboard, CLI chat, or an MCP host.
-2. `ChatRuntime` separates general chat from scheduling requirements.
-3. Requirement and policy tools call `CentralControlPlane`.
-4. The control plane coordinates policy generation, deterministic scheduling, task lease creation, and execution feedback.
-5. Simulated nodes, CloudSimPlus bridges, or real node agents register inventory and report progress/results.
-6. Reports and health data are exposed through HTTP and rendered by the Dashboard.
+1. 用户与 Dashboard、CLI 聊天或 MCP 主机交互。
+2. `ChatRuntime` 将通用聊天与调度需求分离。
+3. 需求和策略工具调用 `CentralControlPlane`。
+4. 控制平面协调策略生成、确定性调度、任务租约创建和执行反馈。
+5. 模拟节点、CloudSimPlus 桥接器或真实节点代理注册资源清单并报告进度/结果。
+6. 报告和健康数据通过 HTTP 暴露并由 Dashboard 渲染。
 
-## Main Subsystems
+## 主要子系统
 
-| Subsystem | Responsibility |
+| 子系统 | 职责 |
 | --- | --- |
-| HTTP interface | Official REST/SSE API, Dashboard static serving, legacy compatibility adapter |
-| Dashboard | Static HTML/CSS/JS control surface using official APIs |
-| Chat runtime | Hermes-style dialogue, policy option selection, explicit commit flow |
-| Control-plane facade | Stable API used by HTTP, chat, MCP, and tests |
-| Scheduling engine | Deterministic node filtering and multi-objective scoring |
-| Policy workflow | Requirement parsing, policy drafting, simulation, feedback optimization |
-| Node/lease flow | Node registration, heartbeat, task lifecycle, lease/result reporting |
-| MCP adapter | Tool exposure for MCP hosts through HTTP wrappers |
+| HTTP 接口 | 官方 REST/SSE API、Dashboard 静态服务、遗留兼容适配器 |
+| Dashboard | 使用官方 API 的静态 HTML/CSS/JS 控制界面 |
+| 聊天运行时 | Hermes 风格对话、策略选项选择、明确提交流程 |
+| 控制平面门面 | HTTP、聊天、MCP 和测试使用的稳定 API |
+| 调度引擎 | 确定性节点过滤和多目标评分 |
+| 策略工作流 | 需求解析、策略起草、模拟、反馈优化 |
+| 节点/租约流程 | 节点注册、心跳、任务生命周期、租约/结果报告 |
+| MCP 适配器 | 通过 HTTP 包装器向 MCP 主机暴露工具 |
 
-## Control-Plane Responsibility Map
+## 控制平面职责映射
 
-| Area | Current facade methods |
+| 领域 | 当前门面方法 |
 | --- | --- |
-| Nodes and topology | `register_node`, `record_heartbeat`, `register_topology`, `_node_report_payload`, stale node recovery |
-| Tasks and leases | `submit_task`, `preview_task`, `schedule_pending_task`, `request_lease`, progress/result/cancel reporting |
-| Requirements | `parse_requirement`, requirement session start/continue/read helpers |
-| Policy workflow | draft, compare, simulate, explain/get, commit, weight updates |
-| Feedback | parse, record, optimize from feedback |
-| Reporting | `build_report`, `current_tick`, active run payloads, SLA summaries |
-| Persistence | SQLite restore and per-entity persist helpers |
+| 节点和拓扑 | `register_node`、`record_heartbeat`、`register_topology`、`_node_report_payload`、陈旧节点恢复 |
+| 任务和租约 | `submit_task`、`preview_task`、`schedule_pending_task`、`request_lease`、进度/结果/取消报告 |
+| 需求 | `parse_requirement`、需求会话开始/继续/读取辅助方法 |
+| 策略工作流 | 起草、比较、模拟、解释/获取、提交、权重更新 |
+| 反馈 | 解析、记录、根据反馈优化 |
+| 报告 | `build_report`、`current_tick`、活动运行负载、SLA 摘要 |
+| 持久化 | SQLite 恢复和每个实体的持久化辅助方法 |
 
-The long-term direction is to keep `CentralControlPlane` as a facade while extracting services for node registry, task lease lifecycle, policy workflow, and requirement dialogue. The facade API remains stable for HTTP, ChatRuntime, MCP, and existing tests.
+长期方向是保持 `CentralControlPlane` 作为门面，同时为节点注册、任务租约生命周期、策略工作流和需求对话提取服务。门面 API 对 HTTP、ChatRuntime、MCP 和现有测试保持稳定。

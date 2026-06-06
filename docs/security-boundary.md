@@ -1,10 +1,10 @@
-# Security Boundary
+# 安全边界
 
-Tianjun is a local research and demo control plane. Production use requires additional authentication, authorization, isolation, auditing, and executor hardening.
+Tianjun 是本地研究和演示控制平面。生产使用需要额外的身份验证、授权、隔离、审计和执行器加固。
 
-## Confirmation Boundary
+## 确认边界
 
-The following operations require an explicit confirmation parameter or Dashboard button flow:
+以下操作需要明确的确认参数或 Dashboard 按钮流程：
 
 - `POST /policies/commit`
 - `POST /tasks/{task_id}/schedule`
@@ -12,22 +12,22 @@ The following operations require an explicit confirmation parameter or Dashboard
 - MCP `commit_policy(..., confirmed=true)`
 - MCP `schedule_pending_task(..., confirmed=true)`
 
-Natural-language messages such as "confirm" are not enough to bypass the API confirmation boundary.
+“确认”等自然语言消息不足以绕过 API 确认边界。
 
-## Executor Boundary
+## 执行器边界
 
-The default configuration keeps process, Docker, and Kubernetes executors disabled. Enable them only with clear host-level isolation, command allowlists, resource limits, and audit logging.
+默认配置保持进程、Docker 和 Kubernetes 执行器处于禁用状态。只有在具有明确的主机级隔离、命令允许列表、资源限制和审计日志的情况下才能启用它们。
 
-## Secret Boundary
+## 密钥边界
 
-Do not write real API keys to repository files. Prefer:
+不要将真实的 API 密钥写入仓库文件。推荐使用：
 
 ```powershell
 python -B main.py secrets --config configs\tianjun.example.toml set deepseek --api-key "..."
 ```
 
-Environment variables and ignored local `.env` files are supported for CI or container setups.
+环境变量和被忽略的本地 `.env` 文件支持 CI 或容器配置。
 
-## LLM Boundary
+## LLM 边界
 
-The LLM may explain, summarize, and help parse user requirements. It must not invent inventory, commit tasks, mutate policy state, or create leases except through explicit tool/API calls.
+LLM 可以解释、总结和帮助解析用户需求。它不得捷造资源清单、提交任务、变更策略状态或创建租约，除非通过明确的工具/API 调用。

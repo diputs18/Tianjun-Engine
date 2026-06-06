@@ -8,7 +8,7 @@ from statistics import mean
 from typing import Any
 
 from ..core import ComputeNetworkPolicy, UserFeedback, UserRequirement
-from ..domain import ExecutionRecord, NetworkPathProfile, Node, PhysicalTopology, PolicyAdjustment, PolicyState, RunningTask, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
+from ..domain import ExecutionRecord, Node, PhysicalTopology, PolicyAdjustment, PolicyState, RunningTask, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
 from ..policy.optimizer import PolicyOptimizer
 from ..policy.clarifier import ConversationTurn, RequirementSession, clarification_questions, session_status
 from ..policy.feedback import parse_feedback_instruction
@@ -101,18 +101,7 @@ class CentralControlPlane:
             self.state_store.set_control_value("policy_weights", self.policy_state.current_weights())
 
     def register_node(self, node: Node) -> dict[str, Any]:
-        with self.lock:
-            current = self.nodes.get(node.node_id)
-            if current is not None:
-                node.running_tasks = current.running_tasks
-                node.reliability_score = current.reliability_score
-                node.health_score = current.health_score
-            node.online = True
-            node.telemetry_tick = self.current_tick()
-            self.nodes[node.node_id] = node
-            self.last_heartbeat_at[node.node_id] = time.monotonic()
-            self._persist_node(node)
-            return node.to_dict()
+        return self.node_registry.register_node(node)
 
     def register_topology(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
@@ -649,54 +638,19 @@ class CentralControlPlane:
         performance_factors: dict[str, float] | None = None,
         network_paths: dict[str, dict[str, float]] | None = None,
     ) -> dict[str, Any]:
-        with self.lock:
-            self._expire_stale_nodes()
-            node = self.nodes[node_id]
-            node.telemetry_tick = self.current_tick()
-            node.online = True if online is None else online
-            if health_score is not None:
-                node.health_score = health_score
-            if reliability_score is not None:
-                node.reliability_score = reliability_score
-            if cost_per_tick is not None:
-                node.cost_per_tick = cost_per_tick
-            if region is not None:
-                node.region = region
-            if location is not None:
-                node.location = location
-            if service_region is not None:
-                node.service_region = service_region
-            if labels is not None:
-                node.labels = set(labels)
-            if performance_factors is not None:
-                node.performance_factors.update(performance_factors)
-            if network_paths is not None:
-                for source_region, profile_updates in network_paths.items():
-                    profile = node.network_paths.get(str(source_region))
-                    if profile is None:
-                        profile = NetworkPathProfile()
-                        node.network_paths[str(source_region)] = profile
-                    for key, value in profile_updates.items():
-                        if hasattr(profile, key):
-                            setattr(profile, key, float(value))
-            self.last_heartbeat_at[node_id] = time.monotonic()
-            heartbeat_payload = {
-                "node_id": node_id,
-                "tick": node.telemetry_tick,
-                "running_tasks": sorted(node.running_tasks.keys()),
-                "pending_tasks": len(self.pending_queue),
-                "online": node.online,
-                "network_paths": {
-                    region: profile.to_dict()
-                    for region, profile in sorted(node.network_paths.items(), key=lambda item: item[0])
-                },
-            }
-            self._persist_node(node)
-            if node.online is False:
-                self._recover_leases_for_stale_nodes({node_id})
-            if self.state_store is not None:
-                self.state_store.record_heartbeat(node_id, heartbeat_payload)
-            return heartbeat_payload
+        return self.node_registry.record_heartbeat(
+            node_id,
+            health_score=health_score,
+            online=online,
+            reliability_score=reliability_score,
+            cost_per_tick=cost_per_tick,
+            region=region,
+            location=location,
+            service_region=service_region,
+            labels=labels,
+            performance_factors=performance_factors,
+            network_paths=network_paths,
+        )
 
     def request_lease(self, node_id: str) -> dict[str, Any] | None:
         with self.lock:

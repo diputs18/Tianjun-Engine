@@ -1,17 +1,17 @@
-# Tianjun Documentation Index
+# Tianjun 文档索引
 
-Start here when you need to find the right maintenance surface quickly.
+当您需要快速找到合适的维护面时，请从这里开始。
 
-| Topic | Document |
+| 主题 | 文档 |
 | --- | --- |
-| System shape, responsibilities, and control-plane boundaries | [architecture.md](architecture.md) |
-| Official HTTP API and legacy route ownership | [api.md](api.md) |
-| Deprecated endpoints and migration path | [deprecation.md](deprecation.md) |
-| Confirmation, executor, secret, and production safety boundaries | [security-boundary.md](security-boundary.md) |
-| DCI reference data, model assets, and reproduction notes | [experiments-dci.md](experiments-dci.md) |
-| Manual Dashboard acceptance checks | [dashboard-test-checklist.md](dashboard-test-checklist.md) |
+| 系统形态、职责和控制平面边界 | [architecture.md](architecture.md) |
+| 官方 HTTP API 和遗留路由归属 | [api.md](api.md) |
+| 已弃用的端点和迁移路径 | [deprecation.md](deprecation.md) |
+| 确认、执行器、密钥和生产安全边界 | [security-boundary.md](security-boundary.md) |
+| DCI 参考数据、模型资产和复现说明 | [experiments-dci.md](experiments-dci.md) |
+| 手动 Dashboard 验收检查 | [dashboard-test-checklist.md](dashboard-test-checklist.md) |
 
-For day-to-day verification, run:
+用于日常验证的运行：
 
 ```powershell
 python -m pytest

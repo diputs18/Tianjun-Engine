@@ -32,7 +32,10 @@ def handle_legacy_post(
     chat: ChatRuntime,
 ) -> bool:
     if path == "/intent":
-        handler._write_json(200, _legacy_intent(control_plane, payload))
+        try:
+            handler._write_json(200, _legacy_intent(control_plane, payload))
+        except PermissionError as exc:
+            handler._write_json(403, {"error": str(exc), "deprecated": True, "replacement": "/chat/sessions"})
         return True
     if path == "/chat":
         session_id = payload.get("session_id")
@@ -79,7 +82,8 @@ def _legacy_intent(control_plane: CentralControlPlane, payload: dict[str, Any]) 
     message = str(payload.get("message", "")).strip()
     if not message:
         raise ValueError("message is required")
-    dry_run = bool(payload.get("dry_run", False))
+    dry_run = bool(payload.get("dry_run", True))
+    confirmed = bool(payload.get("confirmed_by_user_button") or payload.get("confirmed"))
     requirement = control_plane.parse_requirement(message, overrides=payload.get("overrides"))
     policy = control_plane.draft_policy(requirement, execution_payload=payload.get("execution"))
     policy_id = str(policy["policy_id"])
@@ -89,6 +93,8 @@ def _legacy_intent(control_plane: CentralControlPlane, payload: dict[str, Any]) 
     status = "preview"
     lease = None
     if not dry_run:
+        if not confirmed:
+            raise PermissionError("legacy /intent commit requires explicit confirmation")
         committed = control_plane.commit_policy(policy_id)
         submitted = committed.get("submitted_task")
         status = committed.get("status", "committed")

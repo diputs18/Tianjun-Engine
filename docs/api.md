@@ -1,57 +1,59 @@
 # HTTP API
 
-The official API is JSON over the standard-library HTTP server. Request and response bodies are UTF-8 JSON unless the route is an SSE stream or Dashboard HTML/static content.
+官方 API 基于标准库 HTTP 服务器上的 JSON。除非路由是 SSE 流或 Dashboard HTML/静态内容，否则请求和响应体均为 UTF-8 JSON。
 
-## Official Routes
+## 官方路由
 
-| Method | Path | Purpose |
+| 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| GET | `/health` | Runtime health, model status, chat runtime status |
-| GET | `/report` | Control-plane state for Dashboard and tools |
-| GET | `/dashboard` | Static Dashboard shell |
-| GET | `/chat/sessions/{session_id}` | Read chat session state |
-| POST | `/chat/sessions` | Start a chat session |
-| POST | `/chat/sessions/stream` | Start or continue chat through SSE |
-| POST | `/chat/sessions/{session_id}/messages` | Continue a chat session |
-| POST | `/chat/sessions/{session_id}/messages/stream` | Continue a chat session through SSE |
-| POST | `/chat/sessions/{session_id}/commit` | Commit the selected chat policy |
-| POST | `/requirements/parse` | Parse a single requirement |
-| GET | `/conversations/{session_id}` | Read structured requirement dialogue |
-| POST | `/conversations/start` | Start structured requirement dialogue |
-| POST | `/conversations/{session_id}/continue` | Continue structured requirement dialogue |
-| POST | `/conversations/{session_id}/draft` | Draft a policy from a requirement dialogue |
-| GET | `/policies/{policy_id}` | Explain/read a policy |
-| POST | `/policies/draft` | Draft a policy |
-| POST | `/policies/compare` | Compare policy options |
-| POST | `/policies/simulate` | Simulate a policy |
-| POST | `/policies/commit` | Commit a policy; requires explicit confirmation |
-| POST | `/policies/{policy_id}/optimize` | Optimize a policy from feedback |
-| POST | `/policies/{policy_id}/resimulate` | Re-run policy simulation |
-| POST | `/policy-weights` | Update scheduler weights; requires explicit confirmation |
-| POST | `/feedback/parse` | Parse user feedback |
-| POST | `/feedback` | Record user feedback |
-| POST | `/topology/register` | Register physical topology |
-| POST | `/nodes/register` | Register node inventory |
-| POST | `/nodes/heartbeat` | Update node heartbeat and telemetry |
-| POST | `/tasks` | Submit a task |
-| POST | `/tasks/{task_id}/schedule` | Schedule a pending task; requires explicit confirmation |
-| POST | `/leases/next` | Node agent lease polling |
-| POST | `/task-runs/progress` | Report task progress |
-| POST | `/task-runs/result` | Report final task result |
-| POST | `/task-runs/cancel` | Cancel an active task run |
-| POST | `/schedule/preview` | CloudSimPlus-compatible schedule preview |
-| POST | `/schedule/commit` | CloudSimPlus-compatible direct commit |
+| GET | `/health` | 运行时健康、模型状态、聊天运行时状态 |
+| GET | `/report` | Dashboard 和工具用的控制平面状态 |
+| GET | `/dashboard` | 静态 Dashboard 壳页面 |
+| GET | `/chat/sessions/{session_id}` | 读取聊天会话状态 |
+| POST | `/chat/sessions` | 开始聊天会话 |
+| POST | `/chat/sessions/stream` | 通过 SSE 开始或继续聊天 |
+| POST | `/chat/sessions/{session_id}/messages` | 继续聊天会话 |
+| POST | `/chat/sessions/{session_id}/messages/stream` | 通过 SSE 继续聊天会话 |
+| POST | `/chat/sessions/{session_id}/commit` | 提交所选聊天策略 |
+| POST | `/requirements/parse` | 解析单个需求 |
+| GET | `/conversations/{session_id}` | 读取结构化需求对话 |
+| POST | `/conversations/start` | 开始结构化需求对话 |
+| POST | `/conversations/{session_id}/continue` | 继续结构化需求对话 |
+| POST | `/conversations/{session_id}/draft` | 从需求对话起草策略 |
+| GET | `/policies/{policy_id}` | 解释/读取策略 |
+| POST | `/policies/draft` | 起草策略 |
+| POST | `/policies/compare` | 比较策略选项 |
+| POST | `/policies/simulate` | 模拟策略 |
+| POST | `/policies/commit` | 提交策略；需要明确确认 |
+| POST | `/policies/{policy_id}/optimize` | 根据反馈优化策略 |
+| POST | `/policies/{policy_id}/resimulate` | 重新运行策略模拟 |
+| POST | `/policy-weights` | 更新调度器权重；需要明确确认 |
+| POST | `/feedback/parse` | 解析用户反馈 |
+| POST | `/feedback` | 记录用户反馈 |
+| POST | `/topology/register` | 注册物理拓扑 |
+| POST | `/nodes/register` | 注册节点清单 |
+| POST | `/nodes/heartbeat` | 更新节点心跳和遥测数据 |
+| POST | `/tasks` | 提交任务 |
+| POST | `/tasks/{task_id}/schedule` | 调度待处理任务；需要明确确认 |
+| POST | `/leases/next` | 节点代理租约轮询 |
+| POST | `/task-runs/progress` | 报告任务进度 |
+| POST | `/task-runs/result` | 报告最终任务结果 |
+| POST | `/task-runs/cancel` | 取消活动任务运行 |
+| POST | `/schedule/preview` | CloudSimPlus 兼容的调度预览 |
+| POST | `/schedule/commit` | CloudSimPlus 兼容的直接提交 |
 
-## Legacy Routes
+## 遗留路由
 
-These routes remain available for compatibility but are deprecated:
+这些路由为了兼容性仍然可用，但已弃用：
 
-| Method | Path | Replacement |
+| 方法 | 路径 | 替代方案 |
 | --- | --- | --- |
-| POST | `/intent` | `/chat/sessions` or `/chat/sessions/stream` |
+| POST | `/intent` | `/chat/sessions` 或 `/chat/sessions/stream` |
 | POST | `/chat` | `/chat/sessions` |
 | POST | `/hermes/chat` | `/chat/sessions` |
 | POST | `/hermes/chat/stream` | `/chat/sessions/stream` |
 | GET | `/hermes/status` | `/health` |
 
-New clients should use official routes. Legacy routes are centralized in the HTTP legacy adapter and covered by route regression tests.
+新客户端应使用官方路由。遗留路由集中在 HTTP 遗留适配器中，并由路由回归测试覆盖。
+
+Safety note: `/intent` defaults to preview. If a legacy caller sends `dry_run=false`, the request must include `confirmed=true` or `confirmed_by_user_button=true`.

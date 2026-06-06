@@ -84,10 +84,24 @@ def test_legacy_routes_remain_available_and_marked_deprecated() -> None:
         status = get_json(base_url, "/hermes/status")
         hermes = post_json(base_url, "/hermes/chat", {"message": "hello"})
         chat = post_json(base_url, "/chat", {"message": "hello"})
+        intent = post_json(base_url, "/intent", {"message": "hello"})
 
         assert status["deprecated"] is True
         assert hermes["deprecated"] is True
         assert chat["session"]["session_id"]
+        assert intent["deprecated"] is True
+        assert intent["replacement"] == "/chat/sessions"
+        assert intent["status"] == "preview"
+        assert intent["submitted_task"] is None
+
+
+def test_legacy_intent_requires_confirmation_for_commit() -> None:
+    with running_server() as base_url:
+        status, payload = post_status(base_url, "/intent", {"message": "hello", "dry_run": False})
+
+        assert status == 403
+        assert payload["deprecated"] is True
+        assert "confirmation" in payload["error"]
 
 
 def test_confirmation_boundaries_reject_missing_confirmation() -> None:
