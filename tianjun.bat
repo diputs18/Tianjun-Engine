@@ -15,8 +15,9 @@ if /I "%ACTION%"=="open" (
 if /I "%ACTION%"=="stop" goto :stop
 if /I "%ACTION%"=="restart" goto :restart
 if /I "%ACTION%"=="start" goto :start
+if /I "%ACTION%"=="smoke" goto :smoke
 
-echo Usage: tianjun.bat start^|restart^|stop^|open
+echo Usage: tianjun.bat start^|restart^|stop^|open^|smoke
 exit /b 2
 
 :check_python
@@ -32,7 +33,14 @@ exit /b 0
 echo Checking DeepSeek connection for Hermes...
 python -B main.py llm-check --config "%TJ_CONFIG%"
 if errorlevel 1 (
-  echo DeepSeek connection check failed. Use "python -B main.py serve --offline" for local-only verification.
+  echo.
+  echo DeepSeek connection check failed.
+  echo Full startup requires a working OpenAI-compatible LLM configuration.
+  echo Configure it with:
+  echo   python -B main.py secrets --config "%TJ_CONFIG%" set deepseek --api-key "your_api_key_here"
+  echo.
+  echo For local offline verification only, run:
+  echo   tianjun.bat smoke
   pause
   exit /b 1
 )
@@ -41,7 +49,7 @@ exit /b 0
 :wait_health
 echo Waiting for control plane health check...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$url = 'http://%TJ_HOST%:%TJ_PORT%/health'; $limit = (Get-Date).AddSeconds(20); do { try { Invoke-RestMethod $url -TimeoutSec 2 | Out-Null; exit 0 } catch { Start-Sleep -Milliseconds 500 } } while ((Get-Date) -lt $limit); exit 1"
+  "$url = '%TJ_BASE_URL%/health'; $limit = (Get-Date).AddSeconds(25); do { try { Invoke-RestMethod $url -TimeoutSec 2 | Out-Null; exit 0 } catch { Start-Sleep -Milliseconds 500 } } while ((Get-Date) -lt $limit); exit 1"
 if errorlevel 1 (
   echo Tianjun control plane did not become healthy in time.
   pause
@@ -56,42 +64,63 @@ if errorlevel 1 (
   echo Tianjun Engine appears to be running already.
   echo Opening dashboard: %TJ_URL%
   start "" "%TJ_URL%"
-  exit /b 0
+  exit /b 10
 )
 exit /b 0
 
 :stop
 call :check_python
-echo Stopping Tianjun control plane on %TJ_HOST%:%TJ_PORT%...
+echo Stopping Tianjun Engine processes...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$port = %TJ_PORT%; $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue); foreach ($listener in $listeners) { $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $listener.OwningProcess) -ErrorAction SilentlyContinue; if (-not $process) { continue }; $cmd = [string]$process.CommandLine; if ($cmd -match 'main\.py\s+serve' -and $cmd -match ('--port\s+' + $port)) { Write-Host ('Stopping Tianjun process ' + $process.ProcessId + '...'); Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop } else { Write-Error ('Port ' + $port + ' is occupied by another process: ' + $process.Name + ' (' + $process.ProcessId + ').'); exit 2 } }; exit 0"
+  "$patterns = @('main\.py\s+serve.*--port\s+%TJ_PORT%', 'main\.py\s+sim-backend.*%TJ_BASE_URL%', 'main\.py\s+mcp-server.*%TJ_BASE_URL%');" ^
+  "Get-CimInstance Win32_Process | ForEach-Object { $cmd = [string]$_.CommandLine; foreach ($p in $patterns) { if ($cmd -match $p) { Write-Host ('Stopping ' + $_.ProcessId + ': ' + $_.Name); Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; break } } }"
 exit /b %ERRORLEVEL%
+
 
 :restart
 call :check_python
-call :check_llm
-echo Restarting Tianjun Engine on %TJ_HOST%:%TJ_PORT%...
 call :stop
 if errorlevel 1 (
-  echo Tianjun could not be restarted because the port could not be safely released.
+  echo Tianjun could not be restarted cleanly.
   pause
   exit /b 1
 )
-goto :launch
+goto :start_checked_python
 
 :start
 call :check_python
 call :ensure_free
-call :check_llm
-goto :launch
+if errorlevel 10 exit /b 0
 
-:launch
-echo Starting Tianjun Engine control plane...
+:start_checked_python
+call :check_llm
+
+echo Starting Tianjun Engine full local stack...
 echo Dashboard: %TJ_URL%
 start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%TJ_CONFIG%" --default-execution-mode simulation --host %TJ_HOST% --port %TJ_PORT%
+
 call :wait_health
-start "" "%TJ_URL%"
-echo Tianjun Engine control plane is running in a separate window.
-echo No simulated nodes are started automatically.
-echo Start CloudSim Plus, sim-backend, or a node agent manually when you want nodes to appear.
+
+start "Tianjun Sim Backend" cmd /k python -B main.py sim-backend --config "%TJ_CONFIG%" --server "%TJ_BASE_URL%" --inventory "%TJ_SIM_INVENTORY%" --verbose
+
+if "%TJ_START_MCP%"=="1" (
+  start "Tianjun MCP Server" cmd /k python -B main.py mcp-server --config "%TJ_CONFIG%" --server "%TJ_BASE_URL%"
+)
+
+if "%TJ_OPEN_DASHBOARD%"=="1" (
+  start "" "%TJ_URL%"
+)
+
+echo.
+echo Tianjun Engine full local stack is running:
+echo   Control plane: %TJ_BASE_URL%
+echo   Dashboard:     %TJ_URL%
+echo   Sim backend:   %TJ_SIM_INVENTORY%
+if "%TJ_START_MCP%"=="1" echo   MCP server:    enabled
 exit /b 0
+
+:smoke
+call :check_python
+echo Running offline smoke test...
+python scripts\smoke_test.py --port 8135
+exit /b %ERRORLEVEL%

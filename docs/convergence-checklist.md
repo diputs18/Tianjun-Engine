@@ -24,12 +24,18 @@ python scripts\convergence_check.py
 
 ## 完整本地启动检查
 
+先配置并验证 LLM：
+
+```powershell
+python -B main.py secrets --config configs\tianjun.example.toml set deepseek --api-key "your_api_key_here"
+python -B main.py llm-check --config configs\tianjun.example.toml
+```
+
 第一个终端启动控制平面：
 
 ```powershell
 python -B main.py serve `
   --config configs\tianjun.example.toml `
-  --offline `
   --default-execution-mode simulation `
   --host 127.0.0.1 `
   --port 8024
@@ -45,12 +51,21 @@ python -B main.py sim-backend `
   --verbose
 ```
 
+第三个终端启动 MCP server：
+
+```powershell
+python -B main.py mcp-server `
+  --config configs\tianjun.example.toml `
+  --server http://127.0.0.1:8024
+```
+
 然后检查：
 
 - `/health` 返回 `status=ok`。
 - `/report` 返回控制平面状态。
 - `/dashboard` 能打开静态 Dashboard。
 - Dashboard 节点/拓扑页面能看到模拟节点。
+- MCP host 可通过 `mcp-server` 访问 Tianjun 工具。
 - `sim-backend` 持续发送心跳、领取租约并报告任务进度/结果。
 
 ## 运行时检查

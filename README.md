@@ -6,6 +6,8 @@ Tianjun Engine 是一个本地优先的算网调度控制平面原型。它把�
 
 ## 快速开始
 
+### 0. 安装依赖
+
 需要 Python 3.10 或更新版本。
 
 ```powershell
@@ -15,18 +17,36 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev,mcp,ml-runtime]"
 ```
 
-## 完整本地启动
+### 1. 配置并验证 LLM
 
-下面的流程会启动控制平面、模拟节点后端，并打开 Dashboard。默认使用离线模式，不需要 LLM API Key。
+不要把真实 API Key 写入仓库文件。推荐使用本地 secrets 文件：
 
-### 1. 启动控制平面
+```powershell
+python -B main.py secrets --config configs\tianjun.example.toml set deepseek --api-key "your_api_key_here"
+python -B main.py llm-check --config configs\tianjun.example.toml
+```
+
+### 2. Windows 启动脚本
+
+Windows 用户可以使用统一脚本入口，或使用后面的指令：
+
+```cmd
+tianjun.bat start
+tianjun.bat restart
+tianjun.bat stop
+tianjun.bat open
+tianjun.bat smoke
+```
+
+`tianjun.bat start` 只会在 LLM 校验通过后启动控制平面、模拟节点后端、Dashboard，以及可选 MCP server。`tianjun.bat smoke` 只做离线 smoke test，不代表完整启动。
+
+### 3. 启动控制平面
 
 在第一个终端运行：
 
 ```powershell
 python -B main.py serve `
   --config configs\tianjun.example.toml `
-  --offline `
   --default-execution-mode simulation `
   --host 127.0.0.1 `
   --port 8024
@@ -39,7 +59,7 @@ Invoke-RestMethod http://127.0.0.1:8024/health
 Invoke-RestMethod http://127.0.0.1:8024/report
 ```
 
-### 2. 启动模拟节点
+### 4. 启动模拟节点后端
 
 在第二个终端运行：
 
@@ -51,7 +71,7 @@ python -B main.py sim-backend `
   --verbose
 ```
 
-`sim-backend` 会从 `configs\sim_cluster.example.json` 注册多地域 CPU/GPU 模拟节点，持续发送心跳、轮询 `/leases/next`，并在收到任务租约后上报进度和结果。停止该进程时，模拟节点会主动上报离线状态。
+`sim-backend` 会注册多地域 CPU/GPU 模拟节点，持续发送心跳、轮询 `/leases/next`，并在收到任务租约后通过 `/task-runs/progress` 和 `/task-runs/result` 上报执行进度与结果。停止该进程时，模拟节点会主动上报离线状态。
 
 如果只想短跑验证，可加 `--max-cycles 3`：
 
@@ -64,7 +84,7 @@ python -B main.py sim-backend `
   --verbose
 ```
 
-### 3. 打开 Dashboard
+### 5. 打开 Dashboard
 
 在浏览器打开：
 
@@ -72,37 +92,45 @@ python -B main.py sim-backend `
 http://127.0.0.1:8024/dashboard
 ```
 
-Dashboard 是静态 HTML/CSS/JS，无构建步骤。节点页面应能看到模拟节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由模拟节点通过租约和结果回报推进。
+Dashboard 是静态 HTML/CSS/JS，无构建步骤。节点/拓扑页面应能看到模拟节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由模拟节点通过租约、进度和结果回报推进。
 
-### 4. 一条命令冒烟验证
+### 6. 启动 MCP 工具服务
+
+如果需要让 Hermes/MCP 主机调用 Tianjun 工具，在第三个终端运行：
+
+```powershell
+python -B main.py mcp-server `
+  --config configs\tianjun.example.toml `
+  --server http://127.0.0.1:8024
+```
+
+MCP server 会把 Tianjun HTTP API 包装为工具，包括读取集群状态、开始/继续聊天会话、起草/比较/仿真/解释策略，以及带确认边界的策略提交和任务调度。
+
+### 7. 可选：真实节点代理
+
+如需使用真实节点遥测代理，而不是模拟节点：
+
+```powershell
+python -B main.py real-agent `
+  --config configs\tianjun.example.toml `
+  --server http://127.0.0.1:8024 `
+  --node-config examples\real_node_agent.example.json
+```
+
+默认不会执行真实任务。只有在确认主机隔离、命令允许列表、资源限制和审计策略后，才应使用 `--execute`。
+
+### 8. 离线 smoke test
 
 ```powershell
 python scripts\smoke_test.py --port 8135
 ```
 
-该脚本会启动离线控制平面，检查 `/health`、`/report`、`/dashboard`，并验证 MCP 工具契约可导入。
+该脚本会启动离线控制平面，检查 `/health`、`/report`、`/dashboard`，并验证 MCP 工具契约可导入。它用于快速验证，不代表完整启动。
 
-## Windows 脚本入口
-
-Windows 用户可以使用统一脚本入口：
-
-```cmd
-tianjun.bat start
-tianjun.bat restart
-tianjun.bat stop
-tianjun.bat open
-```
-
-旧版 `start_tianjun.bat` 和 `restart_tianjun.bat` 仅作为兼容包装器保留。
 
 ## LLM 配置
 
-离线模式是本地验证最安全的默认选项。要启用 OpenAI 兼容的 Hermes 聊天层，请将 API 密钥存储在仓库之外：
-
-```powershell
-python -B main.py secrets --config configs\tianjun.example.toml set deepseek --api-key "your_api_key_here"
-python -B main.py llm-check --config configs\tianjun.example.toml
-```
+离线模式适合本地冒烟验证。要启用 OpenAI 兼容的 Hermes 聊天层，请按“完整本地启动”的第 1 步配置并验证 LLM，并将 API 密钥存储在仓库之外。
 
 项目 `.env` 和 `DEEPSEEK_API_KEY` 也受支持，但本地开发推荐使用 `secrets` 命令。
 
