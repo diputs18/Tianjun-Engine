@@ -1,8 +1,8 @@
-"""Command handler package for Tianjun CLI convergence.
+"""Command handler package for Tianjun CLI commands.
 
-The public command behavior is still preserved by ``tianjun.cli.main``. Future
-small PRs can move one command at a time into this package while reusing
-``tianjun.cli.context`` and ``tianjun.cli.parser``.
+The package entry point parses arguments, loads configuration, and dispatches
+to these modules. Command business logic should live here, not in
+``tianjun.cli.__init__``.
 """
 
 COMMAND_GROUPS = [

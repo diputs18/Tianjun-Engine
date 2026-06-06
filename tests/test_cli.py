@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from types import SimpleNamespace
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -31,13 +32,36 @@ def test_cli_package_exposes_parser_module() -> None:
 
 
 def test_core_cli_handlers_are_split_into_command_modules() -> None:
-    from tianjun.cli.commands.llm_check import handle as llm_check_handle
-    from tianjun.cli.commands.secrets import handle as secrets_handle
-    from tianjun.cli.commands.serve import handle as serve_handle
+    from tianjun.cli import COMMAND_HANDLERS
 
-    assert callable(serve_handle)
-    assert callable(secrets_handle)
-    assert callable(llm_check_handle)
+    assert set(COMMAND_HANDLERS) == {
+        "agent",
+        "chat",
+        "llm-check",
+        "mcp-server",
+        "real-agent",
+        "runtime-demo",
+        "secrets",
+        "serve",
+        "sim-backend",
+    }
+
+
+def test_cli_dispatches_all_command_handlers(monkeypatch) -> None:
+    from tianjun.cli import COMMAND_HANDLERS, dispatch
+    from tianjun.config import TianjunConfig
+
+    called: list[str] = []
+    for command, module_name in COMMAND_HANDLERS.items():
+        module = __import__(module_name, fromlist=["handle"])
+
+        def fake_handle(args, app_config, *, command=command):
+            called.append(command)
+
+        monkeypatch.setattr(module, "handle", fake_handle)
+        dispatch(SimpleNamespace(command=command), TianjunConfig())
+
+    assert called == list(COMMAND_HANDLERS)
 
 
 def test_llm_check_offline_skips_network() -> None:

@@ -1,26 +1,27 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
+import importlib
 from pathlib import Path
 
 from tianjun.config import TianjunConfig, config_bool, config_path, first_present
-from tianjun.config.secrets import delete_secret, describe_secret, read_secret, secret_path_from_config, write_secret
-from tianjun.chat import ChatRuntime
+from tianjun.config.secrets import read_secret, secret_path_from_config
 from tianjun.llm import LLMSettings
-from tianjun.node_agent.runtime import LightweightNodeAgent
-from tianjun.node_agent.clients import HttpControlPlaneClient
-from tianjun.application.bootstrap import build_control_plane
-from tianjun.interfaces.http.server import build_http_server
-from tianjun.storage.sqlite_state_store import SQLiteStateStore
-from tianjun.node_agent.real_probe import run_real_node_agent
-from tianjun.observability.reporting import format_report
-from tianjun.execution.runtime_demo import run_runtime_demo
-from tianjun.scenarios import load_scenario_payload, node_from_dict, task_from_dict
 from tianjun.domain import ExecutionMode
-from tianjun.inventory import load_inventory_config
-from tianjun.simulation import run_simulation_backend
+
+
+COMMAND_HANDLERS = {
+    "agent": "tianjun.cli.commands.agent",
+    "chat": "tianjun.cli.commands.chat",
+    "llm-check": "tianjun.cli.commands.llm_check",
+    "mcp-server": "tianjun.cli.commands.mcp_server",
+    "real-agent": "tianjun.cli.commands.real_agent",
+    "runtime-demo": "tianjun.cli.commands.runtime_demo",
+    "secrets": "tianjun.cli.commands.secrets",
+    "serve": "tianjun.cli.commands.serve",
+    "sim-backend": "tianjun.cli.commands.sim_backend",
+}
 
 
 def add_llm_options(parser: argparse.ArgumentParser) -> None:
@@ -218,155 +219,15 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     app_config = TianjunConfig.load(getattr(args, "config", None))
+    dispatch(args, app_config)
 
-    if args.command == "secrets":
-        from tianjun.cli.commands.secrets import handle
 
-        handle(args, app_config)
-        return
-
-    if args.command == "runtime-demo":
-        scenario = resolved_path_setting(
-            args.scenario,
-            app_config,
-            "runtime_demo.scenario",
-            "scenario.path",
-            default="examples/runtime_scenario.json",
-        )
-        state_db = resolved_path_setting(args.state_db, app_config, "runtime_demo.state_db")
-        max_rounds = int(first_present(args.max_rounds, app_config.get("runtime_demo.max_rounds"), default=40))
-        payload = run_runtime_demo(
-            scenario,
-            max_rounds=max_rounds,
-            state_db_path=state_db,
-            model_dir=resolved_model_dir(args, app_config),
-            require_model=require_model(args, app_config),
-        )
-        report = payload["report"]
-        print(format_report(report))
-        if args.json_out:
-            args.json_out.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
-        return
-
-    if args.command == "serve":
-        from tianjun.cli.commands.serve import handle
-
-        handle(args, app_config)
-        return
-
-    if args.command == "chat":
-        scenario = resolved_path_setting(args.scenario, app_config, "chat.scenario", "scenario.path")
-        control_plane = build_control_plane(
-            model_dir=resolved_model_dir(args, app_config),
-            require_model=require_model(args, app_config),
-        )
-        if scenario:
-            payload = load_scenario_payload(scenario)
-            for node_data in payload.get("nodes", []):
-                control_plane.register_node(node_from_dict(node_data))
-        runtime = ChatRuntime.with_llm_settings(control_plane, resolved_llm_settings(args, app_config))
-        print("Tianjun chat is ready. Type 'exit' to quit.")
-        session_id = None
-        while True:
-            try:
-                message = input("> ").strip()
-            except EOFError:
-                break
-            if message.lower() in {"exit", "quit"}:
-                break
-            if not message:
-                continue
-            result = runtime.start(message) if session_id is None else runtime.continue_session(session_id, message)
-            session_id = result["session"]["session_id"]
-            print(result["message"])
-        return
-
-    if args.command == "llm-check":
-        from tianjun.cli.commands.llm_check import handle
-
-        handle(args, app_config)
-        return
-
-    if args.command == "mcp-server":
-        server = first_present(args.server, app_config.get("mcp.base_url"))
-        if server:
-            os.environ["TIANJUN_BASE_URL"] = str(server)
-        from tianjun.integrations.mcp_server import main as mcp_main
-
-        mcp_main()
-        return
-
-    if args.command == "agent":
-        server = first_present(args.server, app_config.get("agent.server"))
-        scenario = resolved_path_setting(args.scenario, app_config, "agent.scenario", "scenario.path")
-        node_id = first_present(args.node_id, app_config.get("agent.node_id"))
-        max_cycles = int(first_present(args.max_cycles, app_config.get("agent.max_cycles"), default=30))
-        poll_interval = float(first_present(args.poll_interval, app_config.get("agent.poll_interval_seconds"), default=1.0))
-        if not server:
-            raise ValueError("agent requires --server or agent.server in config.")
-        if scenario is None:
-            raise ValueError("agent requires --scenario or agent.scenario/scenario.path in config.")
-        if not node_id:
-            raise ValueError("agent requires --node-id or agent.node_id in config.")
-        payload = load_scenario_payload(scenario)
-        node_data = next((item for item in payload.get("nodes", []) if item["node_id"] == node_id), None)
-        if node_data is None:
-            raise ValueError(f"Node {node_id} was not found in {scenario}.")
-        agent = LightweightNodeAgent(
-            node=node_from_dict(node_data),
-            control_plane_client=HttpControlPlaneClient(str(server)),
-            poll_interval_seconds=poll_interval,
-        )
-        agent.register()
-        results = agent.run_until_idle(max_cycles=max_cycles)
-        print(json.dumps({"node_id": node_id, "completed": results}, indent=2, ensure_ascii=True))
-        return
-
-    if args.command == "sim-backend":
-        server = first_present(args.server, app_config.get("simulation.server"), app_config.get("agent.server"))
-        max_cycles_value = first_present(args.max_cycles, app_config.get("simulation.max_cycles"))
-        max_cycles = None if max_cycles_value is None else int(max_cycles_value)
-        poll_interval = float(first_present(args.poll_interval, app_config.get("simulation.poll_interval_seconds"), default=1.0))
-        time_scale = float(first_present(args.time_scale, app_config.get("simulation.time_scale"), default=0.08))
-        if not server:
-            raise ValueError("sim-backend requires --server or simulation.server/agent.server in config.")
-        if args.verbose:
-            print("Simulation backend running. Press Ctrl+C to stop.", flush=True)
-        payload = run_simulation_backend(
-            config_path=args.inventory,
-            server=str(server),
-            node_ids=args.node_id,
-            max_cycles=max_cycles,
-            poll_interval_seconds=poll_interval,
-            time_scale=time_scale,
-            verbose=bool(args.verbose),
-        )
-        if max_cycles is not None:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
-        return
-
-    if args.command == "real-agent":
-        server = first_present(args.server, app_config.get("real_agent.server"))
-        node_config = resolved_path_setting(args.node_config, app_config, "real_agent.node_config")
-        once = bool(args.once or config_bool(app_config.get("real_agent.once"), default=False))
-        execute = bool(args.execute or config_bool(app_config.get("real_agent.execute"), default=False))
-        max_cycles = first_present(args.max_cycles, app_config.get("real_agent.max_cycles"))
-        if max_cycles is not None:
-            max_cycles = int(max_cycles)
-        if not server:
-            raise ValueError("real-agent requires --server or real_agent.server in config.")
-        if node_config is None:
-            raise ValueError("real-agent requires --node-config or real_agent.node_config in config.")
-        run_real_node_agent(
-            config_path=node_config,
-            server=str(server),
-            once=once,
-            max_cycles=max_cycles,
-            execute=execute,
-        )
-        return
-
-    raise ValueError(f"Unsupported command: {args.command}")
+def dispatch(args: argparse.Namespace, app_config: TianjunConfig) -> None:
+    module_name = COMMAND_HANDLERS.get(args.command)
+    if module_name is None:
+        raise ValueError(f"Unsupported command: {args.command}")
+    module = importlib.import_module(module_name)
+    module.handle(args, app_config)
 
 
 if __name__ == "__main__":

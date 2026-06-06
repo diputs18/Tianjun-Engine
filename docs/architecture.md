@@ -37,3 +37,16 @@ Tianjun Engine 围绕少量公共适配器和一个中央应用门面组织。
 | 持久化 | SQLite 恢复和每个实体的持久化辅助方法 |
 
 长期方向是保持 `CentralControlPlane` 作为门面，同时为节点注册、任务租约生命周期、策略工作流和需求对话提取服务。门面 API 对 HTTP、ChatRuntime、MCP 和现有测试保持稳定。
+## Current Extracted Services
+
+`CentralControlPlane` is the stable facade used by HTTP, ChatRuntime, MCP, and tests. It should not reimplement migrated business flows.
+
+| Service | Responsibility |
+| --- | --- |
+| `NodeRegistry` | Node registration, heartbeat, node telemetry mutation, node persistence |
+| `TaskLeaseService` | Task submission, preview, pending-task scheduling, agent lease polling, lease activation |
+| `RequirementDialogueService` | Requirement parsing, start/continue/get requirement sessions, region availability payloads |
+| `PolicyWorkflowService` | Policy draft, option comparison, simulation, commit, feedback parsing/recording/optimization |
+| `src/tianjun/cli/commands/` | All CLI command handlers |
+
+`CentralControlPlane` keeps facade methods, report assembly, restore/persistence coordination, topology registration, weight updates, and execution progress/result reporting.

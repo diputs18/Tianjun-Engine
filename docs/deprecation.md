@@ -20,3 +20,6 @@ Tianjun 保持兼容路由可用，同时引导所有新客户端使用官方的
 - 只有在下游脚本和演示不再调用已弃用路径后才能移除。
 
 Safety note: `/intent` defaults to preview. If a legacy caller sends `dry_run=false`, the request must also include `confirmed=true` or `confirmed_by_user_button=true`; otherwise the server returns 403 and does not commit a policy.
+## Legacy Implementation Boundary
+
+Deprecated routes are implemented only in `src/tianjun/interfaces/http/legacy_routes.py`. New Dashboard and CLI code should use official routes and must not add new calls to `/intent`, `/chat`, or `/hermes/*`.

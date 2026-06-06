@@ -20,6 +20,39 @@ def test_control_plane_exposes_service_boundaries() -> None:
     assert control_plane.task_lease_service.active_lease_count == 0
 
 
+def test_control_plane_facade_delegates_migrated_service_boundaries(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def node_register(self, node):
+        calls.append("node")
+        return {"service": "node"}
+
+    def task_submit(self, task):
+        calls.append("task")
+        return {"service": "task"}
+
+    def requirement_parse(self, message, *, overrides=None):
+        calls.append("requirement")
+        return {"service": "requirement"}
+
+    def policy_draft(self, requirement_payload, *, execution_payload=None):
+        calls.append("policy")
+        return {"service": "policy"}
+
+    monkeypatch.setattr(NodeRegistry, "register_node", node_register)
+    monkeypatch.setattr(TaskLeaseService, "submit_task", task_submit)
+    monkeypatch.setattr(RequirementDialogueService, "parse_requirement", requirement_parse)
+    monkeypatch.setattr(PolicyWorkflowService, "draft_policy", policy_draft)
+
+    control_plane = CentralControlPlane()
+
+    assert control_plane.register_node(object()) == {"service": "node"}
+    assert control_plane.submit_task(object()) == {"service": "task"}
+    assert control_plane.parse_requirement("hello") == {"service": "requirement"}
+    assert control_plane.draft_policy({}) == {"service": "policy"}
+    assert calls == ["node", "task", "requirement", "policy"]
+
+
 def test_node_registry_handles_registration_and_heartbeat_through_facade() -> None:
     control_plane = CentralControlPlane()
     control_plane.register_node(Node(node_id="node-a", region="dc1", capacity=ResourceVector(cpu=4)))

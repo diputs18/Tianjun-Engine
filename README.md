@@ -130,3 +130,12 @@ tests/                          单元、集成、契约和冒烟测试覆盖
 官方聊天流程为 `/chat/sessions`。较早的 `/intent`、`/chat`、`/hermes/chat` 和 `/hermes/chat/stream` 端点仍作为已弃用的兼容路由可用。新客户端不应依赖它们。
 
 请参阅 [docs/deprecation.md](docs/deprecation.md) 获取迁移指导。
+## Current Architecture Boundary
+
+`CentralControlPlane` is now a facade and orchestration surface. Core business lifecycles live in application services:
+
+- `NodeRegistry`: node registration and heartbeat lifecycle.
+- `TaskLeaseService`: task submission, preview, scheduling, lease issue, and lease activation.
+- `RequirementDialogueService`: requirement parsing and requirement-session lifecycle.
+- `PolicyWorkflowService`: policy draft, option comparison, simulation, commit, feedback parsing, and feedback optimization.
+- `src/tianjun/cli/commands/`: all CLI command handlers; `tianjun.cli` parses args, loads config, and dispatches.
