@@ -10,6 +10,7 @@
 | 确认、执行器、密钥和生产安全边界 | [security-boundary.md](security-boundary.md) |
 | DCI 参考数据、模型资产和复现说明 | [experiments-dci.md](experiments-dci.md) |
 | 手动 Dashboard 验收检查 | [dashboard-test-checklist.md](dashboard-test-checklist.md) |
+| Final convergence freeze checks | [convergence-checklist.md](convergence-checklist.md) |
 
 用于日常验证的运行：
 

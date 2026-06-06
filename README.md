@@ -103,6 +103,7 @@ flowchart LR
 - [安全边界](docs/security-boundary.md)
 - [DCI 实验与模型资产](docs/experiments-dci.md)
 - [Dashboard 验证清单](docs/dashboard-test-checklist.md)
+- [最终收敛冻结清单](docs/convergence-checklist.md)
 - [文档索引](docs/README.md)
 
 ## 仓库布局
