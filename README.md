@@ -15,4 +15,6 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev,mcp,ml-runtime]"
 ```
 
-## 完整本地启动（
+## 完整本地启动
+
+完整启动不是离线降级模式，也不是只跑一次冒
