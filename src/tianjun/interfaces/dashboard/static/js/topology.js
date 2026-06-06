@@ -534,8 +534,7 @@ function renderFabricAndZones(topology) {
 function renderZone(topology, zoneInfo, side) {
   const leafIds = side === "left" ? ["leaf-a", "leaf-b"] : ["leaf-c", "leaf-d"];
   const clusterId = side === "left" ? "cluster-a" : "cluster-b";
-  const isRoute = topology.routeCluster === clusterId;
-  return `<section class="resource-zone ${isRoute ? "route-zone" : ""}">
+  return `<section class="resource-zone">
     <h4>${escapeHtml(zoneInfo.name)}</h4>
     <div class="zone-leaf-grid">
       ${leafIds.map((id) => `<div class="leaf-slot">${renderDownlink(topology, `fabric-bus-${id}`, id === topology.routeLeaf)}${renderDcNode(topology, id, "compact")}</div>`).join("")}
@@ -548,7 +547,7 @@ function renderClusterCard(topology, id, zoneInfo) {
   const item = nodeById(topology, id);
   const route = id === topology.routeCluster;
   const tooltip = `${item.name} / CPU ${zoneInfo.cpu}% / 内存 ${zoneInfo.memory}% / 任务 ${zoneInfo.tasks}`;
-  return `<article class="compute-card ${statusClass(zoneInfo.scheduleState)} ${route ? "route-node" : ""}" role="button" tabindex="0" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
+  return `<article class="compute-card ${statusClass(zoneInfo.scheduleState)}" role="button" tabindex="0" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
     <span class="status-dot ${escapeHtml(zoneInfo.status)}"></span>
     <span class="compute-title">${escapeHtml(item.name)}</span>
     <span class="compute-metrics">
@@ -601,10 +600,9 @@ function renderDcNode(topology, id, modifier = "") {
   const item = nodeById(topology, id);
   if (!item) return "";
   const selected = selectedDetail?.kind === "node" && selectedDetail.id === id;
-  const route = ["gw", "spine-a", topology.routeLeaf].includes(id);
   const health = item.health ?? statusClass(item.status);
   const tooltip = `${item.name} / ${item.subtitle} / ${item.status}`;
-  return `<button class="dc-node ${escapeHtml(item.type)} ${escapeHtml(modifier)} ${statusClass(item.status)} ${route ? "route-node" : ""} ${selected ? "selected" : ""}" type="button" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
+  return `<button class="dc-node ${escapeHtml(item.type)} ${escapeHtml(modifier)} ${statusClass(item.status)} ${selected ? "selected" : ""}" type="button" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
     <span class="status-dot ${escapeHtml(health)}"></span>
     <span class="node-icon">${iconFor(item.type)}</span>
     <span class="node-copy"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.subtitle)}</small></span>
