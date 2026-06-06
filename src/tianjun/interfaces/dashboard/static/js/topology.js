@@ -824,8 +824,28 @@ function renderTopologyEmpty(container, report) {
 }
 
 function bindInteractions(topology, container, detailPanel) {
+  container.querySelectorAll("[data-vm]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectedDetail = {
+        kind: "vm",
+        id: element.dataset.vm,
+        clusterId: element.dataset.cluster,
+        zone: element.dataset.zone,
+        name: element.dataset.name,
+        cpu: element.dataset.cpu,
+        memory: element.dataset.memory,
+        state: element.dataset.state,
+        taskCount: element.dataset.taskCount,
+      };
+      renderTopology(null, container);
+    }, { capture: true });
+  });
+
   container.querySelectorAll("[data-node]").forEach((element) => {
     element.addEventListener("click", (event) => {
+      if (event.target.closest("[data-vm]")) return;
       event.stopPropagation();
       const item = nodeById(topology, element.dataset.node);
       if (item?.drilldown) {
@@ -846,24 +866,6 @@ function bindInteractions(topology, container, detailPanel) {
     });
   });
 
-  container.querySelectorAll("[data-vm]").forEach((element) => {
-    element.addEventListener("click", (event) => {
-      event.stopPropagation();
-      selectedDetail = {
-        kind: "vm",
-        id: element.dataset.vm,
-        clusterId: element.dataset.cluster,
-        zone: element.dataset.zone,
-        name: element.dataset.name,
-        cpu: element.dataset.cpu,
-        memory: element.dataset.memory,
-        state: element.dataset.state,
-        taskCount: element.dataset.taskCount,
-      };
-      renderTopology(null, container);
-    });
-  });
-
   container.querySelector("[data-back-global]")?.addEventListener("click", (event) => {
     event.stopPropagation();
     activeTopologyKey = "global";
@@ -871,7 +873,8 @@ function bindInteractions(topology, container, detailPanel) {
     renderTopology(null, container);
   });
 
-  container.querySelector(".network-topology-shell")?.addEventListener("click", () => {
+  container.querySelector(".network-topology-shell")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-vm], [data-node], [data-link], [data-back-global]")) return;
     if (!selectedDetail) return;
     selectedDetail = null;
     renderTopology(null, container);

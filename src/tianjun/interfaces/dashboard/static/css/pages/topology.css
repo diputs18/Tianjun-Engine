@@ -919,12 +919,16 @@
 }
 
 .vm-grid {
+  position: relative;
+  z-index: 2;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
 .vm-node {
+  position: relative;
+  z-index: 3;
   display: block;
   padding: 5px 4px;
   border: 1px solid rgba(255, 255, 255, .12);
@@ -935,6 +939,7 @@
   text-align: center;
   white-space: nowrap;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .vm-node:hover,
