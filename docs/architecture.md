@@ -1,15 +1,15 @@
 # 架构
 
-Tianjun Engine 围绕少量公共适配器和一个中央应用门面组织。
+Tianjun Engine 围绕公共适配器、中央控制平面门面和可测试的应用服务组织。HTTP、Dashboard、ChatRuntime 和 MCP 都调用稳定的 `CentralControlPlane` facade；已经迁出的业务生命周期由独立服务维护。
 
 ## 运行时流程
 
-1. 用户与 Dashboard、CLI 聊天或 MCP 主机交互。
-2. `ChatRuntime` 将通用聊天与调度需求分离。
-3. 需求和策略工具调用 `CentralControlPlane`。
-4. 控制平面协调策略生成、确定性调度、任务租约创建和执行反馈。
-5. 模拟节点、CloudSimPlus 桥接器或真实节点代理注册资源清单并报告进度/结果。
-6. 报告和健康数据通过 HTTP 暴露并由 Dashboard 渲染。
+1. 用户通过 Dashboard、CLI 聊天或 MCP 主机发起请求。
+2. `ChatRuntime` 区分普通聊天、需求解析、策略选择和提交确认。
+3. HTTP、聊天和 MCP 工具统一调用 `CentralControlPlane`。
+4. 控制平面门面协调策略工作流、确定性调度、任务租约和执行反馈。
+5. `sim-backend`、CloudSimPlus 桥接器或真实节点代理注册节点、发送心跳、轮询租约并报告进度/结果。
+6. `/report`、`/health` 和 Dashboard 展示节点、任务、策略、执行和模型状态。
 
 ## 主要子系统
 
@@ -18,35 +18,36 @@ Tianjun Engine 围绕少量公共适配器和一个中央应用门面组织。
 | HTTP 接口 | 官方 REST/SSE API、Dashboard 静态服务、遗留兼容适配器 |
 | Dashboard | 使用官方 API 的静态 HTML/CSS/JS 控制界面 |
 | 聊天运行时 | Hermes 风格对话、策略选项选择、明确提交流程 |
-| 控制平面门面 | HTTP、聊天、MCP 和测试使用的稳定 API |
-| 调度引擎 | 确定性节点过滤和多目标评分 |
-| 策略工作流 | 需求解析、策略起草、模拟、反馈优化 |
-| 节点/租约流程 | 节点注册、心跳、任务生命周期、租约/结果报告 |
 | MCP 适配器 | 通过 HTTP 包装器向 MCP 主机暴露工具 |
+| 控制平面门面 | 为 HTTP、聊天、MCP 和测试提供稳定 API |
+| 调度引擎 | 确定性节点过滤和多目标评分 |
+| 模拟/节点代理 | 节点注册、心跳、租约轮询、进度和结果回报 |
 
-## 控制平面职责映射
+## 控制平面服务边界
 
-| 领域 | 当前门面方法 |
+| 服务 | 当前职责 |
 | --- | --- |
-| 节点和拓扑 | `register_node`、`record_heartbeat`、`register_topology`、`_node_report_payload`、陈旧节点恢复 |
-| 任务和租约 | `submit_task`、`preview_task`、`schedule_pending_task`、`request_lease`、进度/结果/取消报告 |
-| 需求 | `parse_requirement`、需求会话开始/继续/读取辅助方法 |
-| 策略工作流 | 起草、比较、模拟、解释/获取、提交、权重更新 |
-| 反馈 | 解析、记录、根据反馈优化 |
-| 报告 | `build_report`、`current_tick`、活动运行负载、SLA 摘要 |
-| 持久化 | SQLite 恢复和每个实体的持久化辅助方法 |
+| `NodeRegistry` | 节点注册、心跳、节点遥测变更、节点持久化 |
+| `TaskLeaseService` | 任务提交、预览、pending 调度、agent 租约轮询、租约激活 |
+| `RequirementDialogueService` | 需求解析、需求会话开始/继续/读取、地域可用性载荷 |
+| `PolicyWorkflowService` | 策略起草、候选比较、模拟、提交、反馈解析、反馈记录、反馈优化 |
+| `src/tianjun/cli/commands/` | 所有 CLI 命令处理器 |
 
-长期方向是保持 `CentralControlPlane` 作为门面，同时为节点注册、任务租约生命周期、策略工作流和需求对话提取服务。门面 API 对 HTTP、ChatRuntime、MCP 和现有测试保持稳定。
-## Current Extracted Services
+`CentralControlPlane` 保留 facade 方法、共享状态、报表组装、恢复/持久化协调、拓扑注册、策略权重更新以及执行进度/结果回报等跨领域逻辑。已经迁移到服务中的业务流程不应复制回门面类。
 
-`CentralControlPlane` is the stable facade used by HTTP, ChatRuntime, MCP, and tests. It should not reimplement migrated business flows.
+## 模拟节点链路
 
-| Service | Responsibility |
-| --- | --- |
-| `NodeRegistry` | Node registration, heartbeat, node telemetry mutation, node persistence |
-| `TaskLeaseService` | Task submission, preview, pending-task scheduling, agent lease polling, lease activation |
-| `RequirementDialogueService` | Requirement parsing, start/continue/get requirement sessions, region availability payloads |
-| `PolicyWorkflowService` | Policy draft, option comparison, simulation, commit, feedback parsing/recording/optimization |
-| `src/tianjun/cli/commands/` | All CLI command handlers |
+`sim-backend` 是本地演示推荐使用的模拟节点运行时。它会：
 
-`CentralControlPlane` keeps facade methods, report assembly, restore/persistence coordination, topology registration, weight updates, and execution progress/result reporting.
+- 读取 `configs\sim_cluster.example.json` 中的节点和链路。
+- 调用 `/nodes/register` 注册模拟节点。
+- 持续调用 `/nodes/heartbeat` 上报在线状态。
+- 调用 `/leases/next` 为每个空闲节点领取任务。
+- 对租约任务执行模拟生命周期，并通过 `/task-runs/progress` 和 `/task-runs/result` 回报。
+- 正常退出时将节点标记为离线。
+
+完整启动命令见 [README.md](../README.md)。
+
+## 兼容层边界
+
+遗留路由只应存在于 `src/tianjun/interfaces/http/legacy_routes.py`。新 Dashboard、CLI、MCP 和文档示例都应使用官方路由，尤其是 `/chat/sessions*` 聊天流程。

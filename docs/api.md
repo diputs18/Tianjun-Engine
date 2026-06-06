@@ -56,14 +56,15 @@
 
 新客户端应使用官方路由。遗留路由集中在 HTTP 遗留适配器中，并由路由回归测试覆盖。
 
-Safety note: `/intent` defaults to preview. If a legacy caller sends `dry_run=false`, the request must include `confirmed=true` or `confirmed_by_user_button=true`.
-## Implementation Boundary
+安全说明：`/intent` 默认只预览。如果遗留调用方发送 `dry_run=false`，请求必须同时包含 `confirmed=true` 或 `confirmed_by_user_button=true`，否则服务器返回 403 且不会提交策略。
 
-HTTP routes call `CentralControlPlane` as a facade. The facade delegates migrated behavior to:
+## 实现边界
 
-- `NodeRegistry` for node lifecycle routes.
-- `TaskLeaseService` for task and lease lifecycle routes.
-- `RequirementDialogueService` for requirement/session routes.
-- `PolicyWorkflowService` for policy, simulation, commit, and feedback routes.
+HTTP 路由调用 `CentralControlPlane` facade。facade 将已迁移的行为转发给应用服务：
 
-This document describes public API behavior; the service extraction does not change route semantics.
+- `NodeRegistry` 处理节点注册和心跳路由。
+- `TaskLeaseService` 处理任务和租约生命周期路由。
+- `RequirementDialogueService` 处理需求解析和需求会话路由。
+- `PolicyWorkflowService` 处理策略起草、比较、模拟、提交和反馈路由。
+
+本文只描述公开 API 行为；服务拆分不改变路由语义。

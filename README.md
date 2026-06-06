@@ -1,8 +1,8 @@
 # Tianjun Engine
 
-Tianjun Engine 是一个以本地优先的算网调度控制平面。它将自然语言需求对话、确定性多目标调度、可选的 ML 辅助预测、执行反馈、MCP 工具以及静态 Dashboard 整合为一个可运行的原型。
+Tianjun Engine 是一个本地优先的算网调度控制平面原型。它把自然语言需求对话、确定性多目标调度、可选 ML 辅助预测、执行反馈、MCP 工具和静态 Dashboard 连接成一个可运行的研究系统。
 
-本项目用于研究、演示和架构实验，并非生产级云平台。资源清单、定价、拓扑和执行事实必须来自已注册的节点、仿真后端、CloudSimPlus 桥接器或真实节点代理；LLM 层可以进行解释和帮助解析意图，但不得在没有明确确认路径的情况下捏造控制平面事实或提交工作。
+本项目用于研究、演示和架构实验，并非生产级云平台。资源清单、定价、拓扑和执行事实必须来自已注册节点、仿真后端、CloudSimPlus 桥接器或真实节点代理；LLM 可以解释和帮助解析意图，但不能在没有明确确认路径的情况下捏造控制平面事实或提交工作。
 
 ## 快速开始
 
@@ -15,7 +15,13 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev,mcp,ml-runtime]"
 ```
 
-在不使用 LLM 的情况下运行控制平面：
+## 完整本地启动
+
+下面的流程会启动控制平面、模拟节点后端，并打开 Dashboard。默认使用离线模式，不需要 LLM API Key。
+
+### 1. 启动控制平面
+
+在第一个终端运行：
 
 ```powershell
 python -B main.py serve `
@@ -26,12 +32,6 @@ python -B main.py serve `
   --port 8024
 ```
 
-打开 Dashboard：
-
-```text
-http://127.0.0.1:8024/dashboard
-```
-
 验证服务：
 
 ```powershell
@@ -39,14 +39,52 @@ Invoke-RestMethod http://127.0.0.1:8024/health
 Invoke-RestMethod http://127.0.0.1:8024/report
 ```
 
-运行测试：
+### 2. 启动模拟节点
+
+在第二个终端运行：
 
 ```powershell
-python -m pytest
-python scripts\smoke_test.py
+python -B main.py sim-backend `
+  --config configs\tianjun.example.toml `
+  --server http://127.0.0.1:8024 `
+  --inventory configs\sim_cluster.example.json `
+  --verbose
 ```
 
-Windows 用户也可以使用统一脚本入口：
+`sim-backend` 会从 `configs\sim_cluster.example.json` 注册多地域 CPU/GPU 模拟节点，持续发送心跳、轮询 `/leases/next`，并在收到任务租约后上报进度和结果。停止该进程时，模拟节点会主动上报离线状态。
+
+如果只想短跑验证，可加 `--max-cycles 3`：
+
+```powershell
+python -B main.py sim-backend `
+  --config configs\tianjun.example.toml `
+  --server http://127.0.0.1:8024 `
+  --inventory configs\sim_cluster.example.json `
+  --max-cycles 3 `
+  --verbose
+```
+
+### 3. 打开 Dashboard
+
+在浏览器打开：
+
+```text
+http://127.0.0.1:8024/dashboard
+```
+
+Dashboard 是静态 HTML/CSS/JS，无构建步骤。节点页面应能看到模拟节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由模拟节点通过租约和结果回报推进。
+
+### 4. 一条命令冒烟验证
+
+```powershell
+python scripts\smoke_test.py --port 8135
+```
+
+该脚本会启动离线控制平面，检查 `/health`、`/report`、`/dashboard`，并验证 MCP 工具契约可导入。
+
+## Windows 脚本入口
+
+Windows 用户可以使用统一脚本入口：
 
 ```cmd
 tianjun.bat start
@@ -55,7 +93,7 @@ tianjun.bat stop
 tianjun.bat open
 ```
 
-旧版 `start_tianjun.bat` 和 `restart_tianjun.bat` 包装脚本保留用于兼容。
+旧版 `start_tianjun.bat` 和 `restart_tianjun.bat` 仅作为兼容包装器保留。
 
 ## LLM 配置
 
@@ -66,7 +104,7 @@ python -B main.py secrets --config configs\tianjun.example.toml set deepseek --a
 python -B main.py llm-check --config configs\tianjun.example.toml
 ```
 
-项目 `.env` 和 `DEEPSEEK_API_KEY` 也受支持，但桌面使用推荐使用本地密钥。
+项目 `.env` 和 `DEEPSEEK_API_KEY` 也受支持，但本地开发推荐使用 `secrets` 命令。
 
 ## 架构概览
 
@@ -79,24 +117,35 @@ flowchart LR
     HTTP --> CP["CentralControlPlane facade"]
     Tools --> CP
     CP --> Scheduler["ClosedLoopAdaptiveScheduler"]
-    CP --> Policy["Policy workflow"]
-    CP --> Leases["Task lease flow"]
+    CP --> Policy["PolicyWorkflowService"]
+    CP --> Requirements["RequirementDialogueService"]
+    CP --> Nodes["NodeRegistry"]
+    CP --> Leases["TaskLeaseService"]
     Scheduler --> ML["Optional LSTM / GraphSAGE runtime"]
-    Leases --> Agents["Sim backend / CloudSimPlus / real agents"]
+    Leases --> Agents["sim-backend / CloudSimPlus / real-agent"]
     Agents --> Results["Progress and results"]
     Results --> CP
 ```
 
 核心入口：
 
-- CLI：`main.py` 或已安装的 `tianjun`
+- CLI：`main.py` 或安装后的 `tianjun`
 - HTTP 服务器：`src/tianjun/interfaces/http/server.py`
 - Dashboard 资源：`src/tianjun/interfaces/dashboard/static/`
 - 控制平面门面：`src/tianjun/application/control_plane.py`
 - MCP 适配器：`src/tianjun/integrations/mcp_server.py`
 
+当前服务边界：
+
+- `NodeRegistry`：节点注册、心跳和节点状态变更。
+- `TaskLeaseService`：任务提交、预览、待调度任务、租约发放和租约激活。
+- `RequirementDialogueService`：需求解析和需求会话生命周期。
+- `PolicyWorkflowService`：策略起草、比较、模拟、提交、反馈解析和优化。
+- `src/tianjun/cli/commands/`：CLI 命令处理器；`tianjun.cli` 只负责参数、配置和分发。
+
 ## 文档
 
+- [文档索引](docs/README.md)
 - [架构](docs/architecture.md)
 - [HTTP API](docs/api.md)
 - [弃用与遗留路由](docs/deprecation.md)
@@ -104,15 +153,14 @@ flowchart LR
 - [DCI 实验与模型资产](docs/experiments-dci.md)
 - [Dashboard 验证清单](docs/dashboard-test-checklist.md)
 - [最终收敛冻结清单](docs/convergence-checklist.md)
-- [文档索引](docs/README.md)
 
 ## 仓库布局
 
 ```text
 main.py                         本地源码检出用 CLI 入口
 pyproject.toml                  包元数据和依赖项扩展
-configs/                        最小可运行配置模板
-scripts/                        冒烟测试、训练辅助、Windows 辅助脚本
+configs/                        最小配置和模拟集群 inventory
+scripts/                        冒烟测试、收敛检查、训练辅助、Windows 辅助脚本
 src/tianjun/application/        控制平面门面和应用服务
 src/tianjun/chat/               Hermes 风格聊天运行时
 src/tianjun/interfaces/http/    HTTP 服务器和遗留路由适配器
@@ -121,22 +169,23 @@ src/tianjun/interfaces/dashboard/static/
 src/tianjun/integrations/       MCP 集成
 src/tianjun/scheduling/         确定性调度器
 src/tianjun/policy/             需求解析、策略生成、反馈
-data/trained_models/            可选的运行时模型制品和清单
+data/trained_models/            可选运行时模型制品和清单
 data/dci_reference/             DCI 复现用研究数据
 tests/                          单元、集成、契约和冒烟测试覆盖
 ```
 
 ## 兼容性
 
-官方聊天流程为 `/chat/sessions`。较早的 `/intent`、`/chat`、`/hermes/chat` 和 `/hermes/chat/stream` 端点仍作为已弃用的兼容路由可用。新客户端不应依赖它们。
+官方聊天流程为 `/chat/sessions`。较早的 `/intent`、`/chat`、`/hermes/chat` 和 `/hermes/chat/stream` 端点仍作为已弃用兼容路由可用，但新客户端和 Dashboard 不应依赖它们。
 
 请参阅 [docs/deprecation.md](docs/deprecation.md) 获取迁移指导。
-## Current Architecture Boundary
 
-`CentralControlPlane` is now a facade and orchestration surface. Core business lifecycles live in application services:
+## 验证
 
-- `NodeRegistry`: node registration and heartbeat lifecycle.
-- `TaskLeaseService`: task submission, preview, scheduling, lease issue, and lease activation.
-- `RequirementDialogueService`: requirement parsing and requirement-session lifecycle.
-- `PolicyWorkflowService`: policy draft, option comparison, simulation, commit, feedback parsing, and feedback optimization.
-- `src/tianjun/cli/commands/`: all CLI command handlers; `tianjun.cli` parses args, loads config, and dispatches.
+常规验证：
+
+```powershell
+python -m pytest
+python scripts\smoke_test.py
+python scripts\convergence_check.py
+```

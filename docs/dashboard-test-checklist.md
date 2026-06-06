@@ -5,9 +5,11 @@ Dashboard 是静态 HTML/CSS/JS，没有构建步骤。在演示前，运行冒�
 - `/dashboard` 加载时浏览器控制台没有错误。
 - 顶部导航显示来自 `/health` 的系统状态。
 - 概览页面渲染来自 `/report` 的指标。
-- 当没有注册节点时，拓扑页面显示空状态。
+- 未启动 `sim-backend` 时，拓扑页面显示空状态。
+- 启动 `sim-backend` 后，节点/拓扑页面显示来自 `configs\sim_cluster.example.json` 的模拟节点。
 - 调度聊天通过 `/chat/sessions/stream` 发送消息。
 - 最终提交按钮通过 `/chat/sessions/{session_id}/commit` 提交。
+- 任务执行进度来自模拟节点的 `/task-runs/progress` 和 `/task-runs/result` 回报。
 - 模型页面权重更新需要明确确认并调用 `/policy-weights`。
 - 任务取消调用 `/task-runs/cancel`。
 - Dashboard 代码中没有调用 `/intent`、`/chat` 或 `/hermes/*`。

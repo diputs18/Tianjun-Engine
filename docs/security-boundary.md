@@ -30,14 +30,15 @@ python -B main.py secrets --config configs\tianjun.example.toml set deepseek --a
 
 ## LLM 边界
 
-LLM 可以解释、总结和帮助解析用户需求。它不得捷造资源清单、提交任务、变更策略状态或创建租约，除非通过明确的工具/API 调用。
-## Service Responsibility Boundary
+LLM 可以解释、总结和帮助解析用户需求。它不得捏造资源清单、提交任务、变更策略状态或创建租约，除非通过明确的工具/API 调用。
 
-Security-sensitive state transitions should stay in the extracted services:
+## 服务职责边界
 
-- `PolicyWorkflowService`: policy commit and feedback-driven policy changes.
-- `TaskLeaseService`: task scheduling and lease activation.
-- `NodeRegistry`: node heartbeat and node-state mutation.
-- `RequirementDialogueService`: requirement-session mutation.
+安全敏感的状态迁移应保留在已抽取的服务中：
 
-`CentralControlPlane` exposes stable facade methods for callers, but migrated service logic should not be copied back into the facade.
+- `PolicyWorkflowService`：策略提交和基于反馈的策略变更。
+- `TaskLeaseService`：任务调度和租约激活。
+- `NodeRegistry`：节点心跳和节点状态变更。
+- `RequirementDialogueService`：需求会话状态变更。
+
+`CentralControlPlane` 为调用方暴露稳定 facade 方法，但已经迁移的服务逻辑不应复制回 facade。
