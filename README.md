@@ -2,7 +2,7 @@
 
 天钧（Tianjun Engine）是一个面向算力网络资源编排的本地可运行原型系统。它把自然语言需求理解、可解释策略生成、确定性多目标调度、可选机器学习增强、仿真/真实节点执行回传和可视化监控组织成一条闭环链路。
 
-用户可以用自然语言描述任务，例如“在上海部署一个低时延推理任务，2 核 4 GB 内存，不需要 GPU”，由 Hermes 智能体澄清需求、生成策略、执行仿真并等待用户明确确认；控制面随后才会创建任务、发放 lease，并接收节点执行反馈以更新后续调度权重。
+用户可以用自然语言描述任务，例如“在上海部署一个低时延推理任务，2 核 4 GB 内存，不需要 GPU”，由 Hermes 智能体澄清需求、解释缺失条件、生成多种可选策略、执行仿真并等待用户明确确认；控制面随后才会创建任务、发放 lease，并接收节点执行反馈以更新后续调度权重。
 
 > 当前定位：本项目是研究与演示性质的算力调度控制面，不是可直接承载生产业务的云平台。节点、价格和执行结果只来自已注册节点、仿真后端或外部系统上报，智能体不会凭空生成资源事实。
 
@@ -11,7 +11,8 @@
 传统资源调度 Demo 往往只展示“任务分配给哪个节点”。天钧关注更完整的问题：
 
 - 用自然语言把业务诉求转换为结构化的算力、网络、预算与安全约束。
-- 在选点之前进行需求澄清、候选预演、风险解释和人工确认。
+- 在选点之前进行需求澄清、候选预演、风险解释、多方案对比和人工确认。
+- 将用户意图拆解为低时延、低成本、均衡/高可靠等可选策略方向，而不是只输出一个单一推荐。
 - 同时考虑计算资源、网络传输、成本、可靠性、负载均衡、局部性和安全约束。
 - 支持 CloudSimPlus、手动启动的配置驱动模拟节点运行时和真实节点 Agent 接入同一控制面。
 - 将执行结果回写为调度反馈，使策略权重随 SLA、失败率、成本和网络压力调整。
@@ -21,11 +22,12 @@
 
 | 能力 | 实现说明 |
 | --- | --- |
-| Hermes 对话调度 | 多轮澄清需求，生成策略、仿真、解释、反馈优化和确认后提交 |
+| Hermes 对话调度 | 多轮澄清需求，支持普通问答与调度需求分流，生成策略、仿真、解释、反馈优化和确认后提交 |
+| 多方案策略对比 | 完整需求会触发低时延、低成本、均衡/高可靠三类候选方案，用户选择后才进入最终确认 |
 | 确定性选点 | 基于九项指标的可审计归一化加权评分，不将最终状态迁移交给 LLM |
 | 模型增强 | 可加载 LSTM 时延模型与 GraphSAGE 风格拓扑稳定性模型；未安装 PyTorch 时自动降级 |
 | 控制面 API | 标准库 `ThreadingHTTPServer` 提供节点、任务、策略、聊天、lease 与执行结果接口 |
-| Dashboard | 单页控制台展示节点、任务、策略、模型状态、评分权重、最近决策与智能体会话 |
+| Dashboard | 单页控制台包含总览、拓扑、任务执行、智能调度和模型配置页面，展示节点、任务、策略、模型状态、评分权重、最近决策与智能体会话 |
 | 执行闭环 | 支持 `noop`、本地进程、Docker、Kubernetes Job 和配置驱动仿真模式 |
 | 外部仿真接入 | 为 CloudSimPlus 保留 `/schedule/preview` 与 `/schedule/commit` 兼容接口 |
 | MCP 工具服务 | 基于可选依赖 FastMCP，将当前已注册的 13 个控制面/会话工具以 stdio MCP server 暴露 |
@@ -110,7 +112,13 @@ tianjun-optimize/
    └─ config/                      # 配置、路径、dotenv 与本地密钥读取
 ```
 
-Dashboard 静态页面唯一源文件位于 `src/tianjun/interfaces/dashboard/static/dashboard.html`，由 `page.py` 直接读取返回。不存在内嵌回退版本，修改时只需编辑该文件。
+Dashboard 静态资源位于 `src/tianjun/interfaces/dashboard/static/`，页面由原生 HTML/CSS/JavaScript 组成，无需前端构建流程。主要页面包括：
+
+- 资源调度总览：展示资源池、实时调度队列、最近决策和 SLA 风险入口。
+- 网络拓扑：展示全局 DCI 拓扑与 DC 内部 Spine-Leaf 结构；当前任务线路和 VM 高亮会跟随目标 DC，不会在非目标区域重复高亮。
+- 任务执行：展示批任务流水线、执行记录、资源消耗和 SLA 校验结果。
+- 智能调度：承载 Hermes 对话、需求解析、多方案对比、工具调用轨迹和正式下发确认。
+- 模型配置：展示 LSTM/GNN 状态、9 轴权重滑块、策略模板和调整影响预估。
 
 ## 快速开始
 
@@ -238,9 +246,12 @@ sequenceDiagram
     Tools->>CP: 解析并补齐结构化需求
     CP-->>Hermes: 缺失字段 / 可用地域
     Hermes-->>User: 追问或确认需求
-    Hermes->>Tools: draft_compute_network_policy
-    Hermes->>Tools: simulate_policy
-    Tools-->>User: 推荐节点、预期效果、风险
+    Hermes->>Tools: compare_policy_options
+    Tools->>CP: 生成低时延 / 低成本 / 均衡可靠候选
+    Tools-->>User: Markdown 多方案表、推荐理由、风险
+    User->>Hermes: 选择 A / B / C 或按推荐执行
+    Hermes->>Tools: explain_policy + simulate_policy
+    Tools-->>User: 最终推荐节点、预期效果、风险
     User->>UI: 点击正式下发
     UI->>Tools: commit_policy(confirmed=true)
     Tools->>CP: 创建待执行任务
@@ -538,13 +549,15 @@ CloudSim Plus 的 DCI 案例参考实验可先调用 `POST /topology/register` �
 
 - 库存查询优先读取 `get_cluster_state`，例如“成都有节点吗”不会被误当成新任务。
 - 信息不足的部署请求先进入需求澄清，不会直接选点或创建任务。
-- 策略草案必须经过仿真，向用户展示时延、成本、SLA、安全风险和推荐依据。
+- 完整需求会先生成多方案对比，向用户展示低时延、低成本、均衡/高可靠三种取向的节点、时延、成本、SLA、评分和风险。
+- 策略草案必须经过仿真，用户选择方案后再展示最终推荐、风险和确认入口。
 - 用户反馈可形成新的约束并生成优化后的策略。
+- 普通知识问答会交给配置的 LLM，不会强行进入调度需求澄清流程。
 - 正式下发必须通过确认参数或 Dashboard 按钮进行显式授权。
 
 ### 工具清单
 
-统一工具契约声明了 11 个控制面/Hermes 核心工具，并为 MCP 加入 3 个聊天会话工具，目标能力总数为 14。当前 `FastMCP` 注册实现实际提供 13 个工具：`analyze_user_intent` 已在统一契约与进程内 Hermes registry 中实现，但尚未作为单独的 MCP function 注册；MCP 客户端可通过需求会话工具完成同类解析。
+统一工具契约声明了控制面/Hermes 核心工具，并为 MCP 加入聊天会话工具。`analyze_user_intent` 已在统一契约与进程内 Hermes registry 中实现，但尚未作为单独的 MCP function 注册；MCP 客户端可通过需求会话工具完成同类解析。
 
 | 工具 | MCP | 作用 |
 | --- | --- | --- |
@@ -556,6 +569,7 @@ CloudSim Plus 的 DCI 案例参考实验可先调用 `POST /topology/register` �
 | `start_requirement_dialogue` | 是 | 开始结构化需求澄清 |
 | `continue_requirement_dialogue` | 是 | 合并补充信息并更新缺失槽位 |
 | `draft_compute_network_policy` | 是 | 为完整需求生成策略草案 |
+| `compare_policy_options` | 是 | 为完整需求生成低时延、低成本、均衡/高可靠多方案对比 |
 | `simulate_policy` | 是 | 评估可行性、效果与风险 |
 | `explain_policy` | 是 | 读取并解释策略详情 |
 | `parse_user_feedback` | 是 | 将反馈转为结构化修改意图 |
@@ -618,6 +632,7 @@ MCP server 只负责把工具调用转发到 Tianjun HTTP 控制面，因此节�
 | `POST` | `/conversations/start` | 开始需求澄清会话 |
 | `POST` | `/conversations/{id}/continue` | 继续需求澄清会话 |
 | `POST` | `/conversations/{id}/draft` | 从会话生成策略 |
+| `POST` | `/policies/compare` | 生成低时延、低成本、均衡/高可靠多方案策略对比 |
 | `GET` | `/policies/{id}` | 查询策略 |
 | `POST` | `/policies/simulate` | 仿真策略 |
 | `POST` | `/policies/commit` | 显式确认后提交策略 |
@@ -675,14 +690,15 @@ MCP server 只负责把工具调用转发到 Tianjun HTTP 控制面，因此节�
 
 1. **LLM-first 但非 LLM-authoritative**：智能体善于理解和解释，确定性控制面负责真实状态与执行授权，兼顾体验与可审计性。
 2. **算力与网络联合决策**：选点不仅看 CPU/GPU 空闲量，还将网络稳定时延、保证带宽、传输概率、拓扑稳定性和安全约束纳入同一策略对象。
-3. **多模型可降级融合**：LSTM、GraphSAGE 提供增强信号；依赖缺失或输入分布异常时，调度链路不会中断，而是回到透明的确定性评分。
-4. **人工确认的工具安全边界**：智能体可以草拟、模拟、解释和优化，但不能在没有用户显式授权时正式创建执行任务。
-5. **执行反馈驱动调权**：任务完成后的真实/仿真结果会改变节点状态和策略权重，使 Dashboard 展示的不只是一次推荐，而是闭环演进过程。
-6. **统一工具面**：Dashboard、进程内 Hermes 与 MCP adapter 共用 `TianjunToolService` 契约，降低不同入口行为漂移的风险。
+3. **意图解释后的多方案自选**：Hermes 会把模糊需求拆成低时延、低成本、均衡/高可靠等可比较方案，用户选择偏好后才进入最终策略确认。
+4. **多模型可降级融合**：LSTM、GraphSAGE 提供增强信号；依赖缺失或输入分布异常时，调度链路不会中断，而是回到透明的确定性评分。
+5. **人工确认的工具安全边界**：智能体可以草拟、模拟、解释和优化，但不能在没有用户显式授权时正式创建执行任务。
+6. **执行反馈驱动调权**：任务完成后的真实/仿真结果会改变节点状态和策略权重，使 Dashboard 展示的不只是一次推荐，而是闭环演进过程。
+7. **统一工具面**：Dashboard、进程内 Hermes 与 MCP adapter 共用 `TianjunToolService` 契约，降低不同入口行为漂移的风险。
 
 ## GitHub 协作建议
 
-本目录目前尚未初始化为 Git 仓库。准备发布到 GitHub 时，建议采用以下协作习惯：
+本项目使用 GitHub Pull Request 协作。准备发布或合并改动时，建议采用以下协作习惯：
 
 1. 首次发布前确认不包含 API key、`.env`、SQLite 状态库、日志以及个人运行产物。
 2. 补充许可证文件，并明确模型资产与数据来源的发布许可。
