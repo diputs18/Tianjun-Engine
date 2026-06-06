@@ -148,7 +148,9 @@ function normalizeGlobalTopology() {
     if (positions[item.id]) Object.assign(item, positions[item.id]);
   }
 
-  globalTopology.currentRoute = ["user-access", "border1", "pe1", "dc1"];
+  const targetRoute = globalRouteForTargetDc(currentTargetDcKey());
+  globalTopology.currentRoute = targetRoute.nodes;
+  globalTopology.currentPathText = targetRoute.pathText;
   globalTopology.links = [
     link("user-access", "border1", "access", "接入链路", "用户业务接入出口 A", { showLabel: false }),
     link("user-access", "border2", "access", "3ms · 10Gbps", "用户业务接入出口 B", { showLabel: true, labelAnchor: "mid" }),
@@ -261,6 +263,29 @@ function currentTopology() {
   return activeTopologyKey === "global" ? globalTopology : dcTopologies[activeTopologyKey] ?? globalTopology;
 }
 
+function currentTargetDcKey() {
+  const match = String(schedulerStatus.target ?? "").match(/\bDC(\d+)\b/i);
+  return match ? `dc${match[1]}` : null;
+}
+
+function globalRouteForTargetDc(targetDcKey) {
+  const routes = {
+    dc1: {
+      nodes: ["user-access", "border1", "pe1", "dc1"],
+      pathText: "当前任务调度路径：User-Access → DC1 → 北京计算集群 / VM-02",
+    },
+    dc2: {
+      nodes: ["user-access", "border2", "pe2", "dc2"],
+      pathText: "当前任务调度路径：User-Access → DC2 → 深圳计算集群 / VM-02",
+    },
+    dc3: {
+      nodes: ["user-access", "border3", "pe3", "dc3"],
+      pathText: "当前任务调度路径：User-Access → DC3 → 成都计算集群 / VM-02",
+    },
+  };
+  return routes[targetDcKey] ?? routes.dc2;
+}
+
 function nodeById(topology, id) {
   return topology.nodes.find((item) => item.id === id);
 }
@@ -306,6 +331,7 @@ function isRouteNode(topology, id) {
 }
 
 function isRouteLink(topology, item) {
+  if (topology.kind === "dc" && topology.key !== currentTargetDcKey()) return false;
   const route = topology.currentRoute ?? [];
   return route.some((id, index) => {
     const next = route[index + 1];
@@ -534,8 +560,7 @@ function renderFabricAndZones(topology) {
 function renderZone(topology, zoneInfo, side) {
   const leafIds = side === "left" ? ["leaf-a", "leaf-b"] : ["leaf-c", "leaf-d"];
   const clusterId = side === "left" ? "cluster-a" : "cluster-b";
-  const isRoute = topology.routeCluster === clusterId;
-  return `<section class="resource-zone ${isRoute ? "route-zone" : ""}">
+  return `<section class="resource-zone">
     <h4>${escapeHtml(zoneInfo.name)}</h4>
     <div class="zone-leaf-grid">
       ${leafIds.map((id) => `<div class="leaf-slot">${renderDownlink(topology, `fabric-bus-${id}`, id === topology.routeLeaf)}${renderDcNode(topology, id, "compact")}</div>`).join("")}
@@ -548,7 +573,7 @@ function renderClusterCard(topology, id, zoneInfo) {
   const item = nodeById(topology, id);
   const route = id === topology.routeCluster;
   const tooltip = `${item.name} / CPU ${zoneInfo.cpu}% / 内存 ${zoneInfo.memory}% / 任务 ${zoneInfo.tasks}`;
-  return `<article class="compute-card ${statusClass(zoneInfo.scheduleState)} ${route ? "route-node" : ""}" role="button" tabindex="0" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
+  return `<article class="compute-card ${statusClass(zoneInfo.scheduleState)}" role="button" tabindex="0" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
     <span class="status-dot ${escapeHtml(zoneInfo.status)}"></span>
     <span class="compute-title">${escapeHtml(item.name)}</span>
     <span class="compute-metrics">
@@ -565,12 +590,12 @@ function renderClusterCard(topology, id, zoneInfo) {
 function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
   const vmName = `VM-${String(index + 1).padStart(2, "0")}`;
   const vmId = `${clusterId}-vm-${String(index + 1).padStart(2, "0")}`;
-  const active = routeCluster && vmName === topology.routeVm;
+  const active = topology.key === currentTargetDcKey() && routeCluster && vmName === topology.routeVm;
   const selected = selectedDetail?.kind === "vm" && selectedDetail.id === vmId;
   const cpu = Math.min(92, Math.max(12, zoneInfo.cpu + (index - 1) * 6));
   const memory = Math.min(90, Math.max(18, zoneInfo.memory + (index % 2 === 0 ? -4 : 5)));
   const state = active ? "正在调度" : cpu > 78 ? "高负载" : "可调度";
-  return `<button class="vm-node ${active ? "active" : ""} ${selected ? "selected" : ""}" type="button"
+  return `<button class="vm-node ${active ? "route-vm" : ""} ${selected ? "selected" : ""}" type="button"
       data-vm="${escapeHtml(vmId)}"
       data-cluster="${escapeHtml(clusterId)}"
       data-zone="${escapeHtml(zoneInfo.name)}"
@@ -601,10 +626,9 @@ function renderDcNode(topology, id, modifier = "") {
   const item = nodeById(topology, id);
   if (!item) return "";
   const selected = selectedDetail?.kind === "node" && selectedDetail.id === id;
-  const route = ["gw", "spine-a", topology.routeLeaf].includes(id);
   const health = item.health ?? statusClass(item.status);
   const tooltip = `${item.name} / ${item.subtitle} / ${item.status}`;
-  return `<button class="dc-node ${escapeHtml(item.type)} ${escapeHtml(modifier)} ${statusClass(item.status)} ${route ? "route-node" : ""} ${selected ? "selected" : ""}" type="button" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
+  return `<button class="dc-node ${escapeHtml(item.type)} ${escapeHtml(modifier)} ${statusClass(item.status)} ${selected ? "selected" : ""}" type="button" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
     <span class="status-dot ${escapeHtml(health)}"></span>
     <span class="node-icon">${iconFor(item.type)}</span>
     <span class="node-copy"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.subtitle)}</small></span>
@@ -824,8 +848,28 @@ function renderTopologyEmpty(container, report) {
 }
 
 function bindInteractions(topology, container, detailPanel) {
+  container.querySelectorAll("[data-vm]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectedDetail = {
+        kind: "vm",
+        id: element.dataset.vm,
+        clusterId: element.dataset.cluster,
+        zone: element.dataset.zone,
+        name: element.dataset.name,
+        cpu: element.dataset.cpu,
+        memory: element.dataset.memory,
+        state: element.dataset.state,
+        taskCount: element.dataset.taskCount,
+      };
+      renderTopology(null, container);
+    }, { capture: true });
+  });
+
   container.querySelectorAll("[data-node]").forEach((element) => {
     element.addEventListener("click", (event) => {
+      if (event.target.closest("[data-vm]")) return;
       event.stopPropagation();
       const item = nodeById(topology, element.dataset.node);
       if (item?.drilldown) {
@@ -846,24 +890,6 @@ function bindInteractions(topology, container, detailPanel) {
     });
   });
 
-  container.querySelectorAll("[data-vm]").forEach((element) => {
-    element.addEventListener("click", (event) => {
-      event.stopPropagation();
-      selectedDetail = {
-        kind: "vm",
-        id: element.dataset.vm,
-        clusterId: element.dataset.cluster,
-        zone: element.dataset.zone,
-        name: element.dataset.name,
-        cpu: element.dataset.cpu,
-        memory: element.dataset.memory,
-        state: element.dataset.state,
-        taskCount: element.dataset.taskCount,
-      };
-      renderTopology(null, container);
-    });
-  });
-
   container.querySelector("[data-back-global]")?.addEventListener("click", (event) => {
     event.stopPropagation();
     activeTopologyKey = "global";
@@ -871,7 +897,8 @@ function bindInteractions(topology, container, detailPanel) {
     renderTopology(null, container);
   });
 
-  container.querySelector(".network-topology-shell")?.addEventListener("click", () => {
+  container.querySelector(".network-topology-shell")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-vm], [data-node], [data-link], [data-back-global]")) return;
     if (!selectedDetail) return;
     selectedDetail = null;
     renderTopology(null, container);

@@ -575,11 +575,17 @@
 }
 
 .dc-node:hover,
-.dc-node:focus,
-.compute-card:hover,
-.compute-card:focus {
+.dc-node:focus {
   transform: translateY(-2px) scale(1.015);
   filter: brightness(1.08);
+  border-color: rgba(20, 184, 166, .72);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, .13), 0 0 0 3px rgba(20, 184, 166, .12);
+  outline: none;
+}
+
+.compute-card:hover,
+.compute-card:focus,
+.compute-card:focus-within {
   border-color: rgba(20, 184, 166, .72);
   box-shadow: 0 16px 30px rgba(15, 23, 42, .13), 0 0 0 3px rgba(20, 184, 166, .12);
   outline: none;
@@ -919,12 +925,16 @@
 }
 
 .vm-grid {
+  position: relative;
+  z-index: 2;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
 .vm-node {
+  position: relative;
+  z-index: 3;
   display: block;
   padding: 5px 4px;
   border: 1px solid rgba(255, 255, 255, .12);
@@ -935,6 +945,7 @@
   text-align: center;
   white-space: nowrap;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .vm-node:hover,
@@ -945,7 +956,14 @@
   outline: none;
 }
 
-.vm-node.active {
+.vm-node.route-vm {
+  border-color: rgba(255, 255, 255, .55);
+  background: rgba(14, 165, 233, .95);
+  color: white;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .18);
+}
+
+.vm-node.selected {
   background: rgba(14, 165, 233, .95);
   color: white;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, .18);
