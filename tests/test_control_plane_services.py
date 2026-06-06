@@ -58,3 +58,84 @@ def test_task_lease_service_handles_task_lifecycle_through_facade() -> None:
     assert control_plane.task_lease_service.active_lease_count == 1
     assert control_plane.tasks["task-a"].status == TaskStatus.RUNNING
     assert control_plane.request_lease("node-a") is None
+
+
+def test_task_lease_service_rejects_duplicate_task_ids() -> None:
+    control_plane = CentralControlPlane()
+    task = Task(task_id="dup", task_type="batch", demand=ResourceVector(cpu=1), estimated_duration=1)
+
+    control_plane.submit_task(task)
+
+    try:
+        control_plane.submit_task(Task(task_id="dup", task_type="batch", demand=ResourceVector(cpu=1), estimated_duration=1))
+    except ValueError as exc:
+        assert "already exists" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("duplicate task id was accepted")
+
+
+def test_task_lease_service_rejects_unknown_task_schedule() -> None:
+    control_plane = CentralControlPlane()
+
+    try:
+        control_plane.schedule_pending_task("missing")
+    except ValueError as exc:
+        assert "Unknown task" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("unknown task was scheduled")
+
+
+def test_task_lease_service_returns_rejected_when_no_node_is_feasible() -> None:
+    control_plane = CentralControlPlane()
+    task = Task(task_id="no-node", task_type="batch", demand=ResourceVector(cpu=1), estimated_duration=1)
+    control_plane.submit_task(task)
+
+    result = control_plane.schedule_pending_task("no-node")
+
+    assert result["status"] == "rejected"
+    assert result["lease"] is None
+
+
+def test_request_lease_respects_target_node_id() -> None:
+    control_plane = CentralControlPlane()
+    control_plane.register_node(Node(node_id="node-a", region="dc1", capacity=ResourceVector(cpu=4)))
+    control_plane.register_node(Node(node_id="node-b", region="dc1", capacity=ResourceVector(cpu=4)))
+    task = Task(
+        task_id="targeted",
+        task_type="batch",
+        demand=ResourceVector(cpu=1),
+        estimated_duration=1,
+        target_node_id="node-b",
+    )
+    control_plane.submit_task(task)
+
+    assert control_plane.request_lease("node-a") is None
+    lease = control_plane.request_lease("node-b")
+
+    assert lease is not None
+    assert lease["node_id"] == "node-b"
+
+
+def test_requirement_dialogue_service_handles_sessions_through_facade() -> None:
+    control_plane = CentralControlPlane()
+    control_plane.register_node(
+        Node(
+            node_id="east-a",
+            region="dc1",
+            service_region="east",
+            capacity=ResourceVector(cpu=4, memory=8),
+        )
+    )
+
+    parsed = control_plane.parse_requirement("east batch job with 1 cpu")
+    started = control_plane.start_requirement_session("east batch job with 1 cpu")
+    continued = control_plane.continue_requirement_session(
+        started["session_id"],
+        "latency under 100ms and budget 10",
+    )
+    loaded = control_plane.get_requirement_session(started["session_id"])
+
+    assert "dialogue_status" in parsed
+    assert control_plane.requirement_dialogue.session_count == 1
+    assert continued["session_id"] == started["session_id"]
+    assert loaded["region_availability"]["registered_regions"]["east"] == 1

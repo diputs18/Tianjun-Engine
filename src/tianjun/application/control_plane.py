@@ -102,12 +102,7 @@ class CentralControlPlane:
         *,
         overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        with self.lock:
-            requirement = self.policy_generator.parse_requirement(message, overrides=overrides)
-            payload = requirement.to_dict()
-            payload["questions"] = clarification_questions(requirement, self.nodes.values())
-            payload["dialogue_status"] = session_status(requirement, payload["questions"])
-            return payload
+        return self.requirement_dialogue.parse_requirement(message, overrides=overrides)
 
     def start_requirement_session(
         self,
@@ -115,20 +110,7 @@ class CentralControlPlane:
         *,
         overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        with self.lock:
-            requirement = self.policy_generator.parse_requirement(message, overrides=overrides)
-            questions = clarification_questions(requirement, self.nodes.values())
-            session = RequirementSession(
-                session_id=self._new_session_id(),
-                requirement=requirement,
-                turns=[ConversationTurn(role="user", content=str(message))],
-                questions=questions,
-                status=session_status(requirement, questions),
-            )
-            if questions:
-                session.turns.append(ConversationTurn(role="assistant", content="\n".join(questions)))
-            self.requirement_sessions[session.session_id] = session
-            return self._requirement_session_payload(session)
+        return self.requirement_dialogue.start_requirement_session(message, overrides=overrides)
 
     def continue_requirement_session(
         self,
@@ -137,52 +119,13 @@ class CentralControlPlane:
         *,
         overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        with self.lock:
-            session = self._session_or_raise(session_id)
-            requirement = self.policy_generator.merge_requirement_update(
-                session.requirement,
-                message,
-                overrides=overrides,
-            )
-            questions = clarification_questions(requirement, self.nodes.values())
-            session.requirement = requirement
-            session.questions = questions
-            session.status = session_status(requirement, questions)
-            session.updated_at = time.time()
-            session.turns.append(ConversationTurn(role="user", content=str(message)))
-            if questions:
-                session.turns.append(ConversationTurn(role="assistant", content="\n".join(questions)))
-            else:
-                session.turns.append(ConversationTurn(role="assistant", content="需求槽位已完整，可以生成算网策略草案。"))
-            return self._requirement_session_payload(session)
+        return self.requirement_dialogue.continue_requirement_session(session_id, message, overrides=overrides)
 
     def get_requirement_session(self, session_id: str) -> dict[str, Any]:
-        with self.lock:
-            return self._requirement_session_payload(self._session_or_raise(session_id))
+        return self.requirement_dialogue.get_requirement_session(session_id)
 
     def _requirement_session_payload(self, session: RequirementSession) -> dict[str, Any]:
-        self._expire_stale_nodes()
-        payload = session.to_dict()
-        requested_regions = list(session.requirement.region_preference)
-        registered_regions: dict[str, int] = {}
-        online_regions: dict[str, int] = {}
-        for node in self.nodes.values():
-            service_region = node.service_region or node.location or node.region
-            registered_regions[service_region] = registered_regions.get(service_region, 0) + 1
-            if node.online:
-                online_regions[service_region] = online_regions.get(service_region, 0) + 1
-        payload["region_availability"] = {
-            "requested_regions": requested_regions,
-            "registered_regions": registered_regions,
-            "online_regions": online_regions,
-            "unregistered_regions": [region for region in requested_regions if region not in registered_regions],
-            "offline_regions": [
-                region
-                for region in requested_regions
-                if region in registered_regions and region not in online_regions
-            ],
-        }
-        return payload
+        return self.requirement_dialogue.requirement_session_payload(session)
 
     def draft_policy_from_session(
         self,
@@ -978,10 +921,7 @@ class CentralControlPlane:
         return policy
 
     def _session_or_raise(self, session_id: str) -> RequirementSession:
-        session = self.requirement_sessions.get(session_id)
-        if session is None:
-            raise ValueError(f"Unknown requirement session {session_id}.")
-        return session
+        return self.requirement_dialogue.session_or_raise(session_id)
 
     def _normalize_feedback_payload(self, feedback_payload: dict[str, Any]) -> dict[str, Any]:
         policy_id = str(feedback_payload.get("policy_id", ""))
