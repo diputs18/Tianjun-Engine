@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
 from math import ceil
 from statistics import mean
 from typing import Any
 
 from ..core import ComputeNetworkPolicy, UserFeedback, UserRequirement
-from ..domain import ExecutionRecord, Node, PhysicalTopology, PolicyAdjustment, PolicyState, RunningTask, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
+from ..domain import ExecutionRecord, Node, PhysicalTopology, PolicyAdjustment, PolicyState, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
 from ..policy.optimizer import PolicyOptimizer
 from ..policy.clarifier import ConversationTurn, RequirementSession, clarification_questions, session_status
 from ..policy.feedback import parse_feedback_instruction
@@ -21,37 +20,13 @@ from ..scenarios import execution_from_dict, node_from_dict, task_from_dict
 from .node_registry import NodeRegistry
 from .policy_workflow import PolicyWorkflowService
 from .requirement_dialogue import RequirementDialogueService
-from .task_lease_service import TaskLeaseService
+from .task_lease_service import TaskLease, TaskLeaseService
 
 
 def _truncate(text: str, limit: int = 400) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 3] + "..."
-
-
-@dataclass(slots=True)
-class TaskLease:
-    task_id: str
-    node_id: str
-    issued_tick: int
-    predicted_finish_tick: int
-    predicted_cost: float
-    explanation: str
-    task: Task
-    decision: SchedulingDecision
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "task_id": self.task_id,
-            "node_id": self.node_id,
-            "issued_tick": self.issued_tick,
-            "predicted_finish_tick": self.predicted_finish_tick,
-            "predicted_cost": round(self.predicted_cost, 4),
-            "explanation": self.explanation,
-            "task": self.task.to_dict(),
-            "decision": self.decision.to_dict(),
-        }
 
 
 class CentralControlPlane:
@@ -113,82 +88,13 @@ class CentralControlPlane:
             return topology.to_dict()
 
     def submit_task(self, task: Task) -> dict[str, Any]:
-        with self.lock:
-            if task.task_id in self.tasks:
-                raise ValueError(f"Task {task.task_id} already exists.")
-            task.submit_tick = self.current_tick()
-            if task.deadline is not None and task.deadline <= task.submit_tick:
-                task.deadline = task.submit_tick + task.deadline
-            self.tasks[task.task_id] = task
-            self.pending_queue.append(task.task_id)
-            self._persist_task(task)
-            return task.to_dict()
+        return self.task_lease_service.submit_task(task)
 
     def preview_task(self, task: Task) -> dict[str, Any] | None:
-        with self.lock:
-            self._expire_stale_nodes()
-            decision = self.scheduler.select_node(
-                task,
-                self.nodes.values(),
-                current_tick=self.current_tick(),
-                topology_nodes=self.nodes.values(),
-            )
-            return None if decision is None else decision.to_dict()
+        return self.task_lease_service.preview_task(task)
 
     def schedule_pending_task(self, task_id: str) -> dict[str, Any]:
-        """Assign one already-submitted task to its best eligible node."""
-        with self.lock:
-            self._expire_stale_nodes()
-            task = self.tasks.get(task_id)
-            if task is None:
-                raise ValueError(f"Unknown task {task_id}.")
-            if task.status == TaskStatus.RUNNING and task_id in self.leases:
-                lease = self.leases[task_id]
-                return {
-                    "status": "already_scheduled",
-                    "task_id": task_id,
-                    "node_id": lease.node_id,
-                    "total_score": lease.decision.total_score,
-                    "preview_decision": lease.decision.to_dict(),
-                    "lease": lease.to_dict(),
-                }
-            if task.status != TaskStatus.PENDING:
-                raise ValueError(f"Task {task_id} is {task.status.value}, not pending.")
-
-            tick = self.current_tick()
-            decision = self.scheduler.select_node(
-                task,
-                self.nodes.values(),
-                current_tick=tick,
-                topology_nodes=self.nodes.values(),
-            )
-            if decision is None:
-                return {
-                    "status": "rejected",
-                    "task_id": task_id,
-                    "node_id": "",
-                    "total_score": 0.0,
-                    "preview_decision": None,
-                    "lease": None,
-                    "reason": "no feasible online node",
-                    "task": task.to_dict(),
-                }
-            node = self.nodes[decision.node_id]
-            lease = self._activate_task_lease(
-                task=task,
-                node=node,
-                decision=decision,
-                tick=tick,
-                remove_from_pending=True,
-            )
-            return {
-                "status": "committed",
-                "task_id": task_id,
-                "node_id": lease.node_id,
-                "total_score": decision.total_score,
-                "preview_decision": decision.to_dict(),
-                "lease": lease.to_dict(),
-            }
+        return self.task_lease_service.schedule_pending_task(task_id)
 
     def parse_requirement(
         self,
@@ -653,42 +559,7 @@ class CentralControlPlane:
         )
 
     def request_lease(self, node_id: str) -> dict[str, Any] | None:
-        with self.lock:
-            self._expire_stale_nodes()
-            node = self.nodes.get(node_id)
-            if node is None or not node.online:
-                return None
-
-            tick = self.current_tick()
-            ordered_task_ids = sorted(
-                self.pending_queue,
-                key=lambda task_id: self._task_sort_key(self.tasks[task_id]),
-            )
-            for task_id in ordered_task_ids:
-                task = self.tasks[task_id]
-                if task.status != TaskStatus.PENDING:
-                    continue
-                if task.target_node_id and task.target_node_id != node_id:
-                    continue
-                candidates = [self.nodes[task.target_node_id]] if task.target_node_id and task.target_node_id in self.nodes else list(self.nodes.values())
-                decision = self.scheduler.select_node(
-                    task,
-                    candidates,
-                    current_tick=tick,
-                    topology_nodes=self.nodes.values(),
-                )
-                if decision is None or decision.node_id != node_id:
-                    continue
-
-                lease = self._activate_task_lease(
-                    task=task,
-                    node=node,
-                    decision=decision,
-                    tick=tick,
-                    remove_from_pending=True,
-                )
-                return lease.to_dict()
-            return None
+        return self.task_lease_service.request_lease(node_id)
 
     def report_task_progress(
         self,
@@ -1221,8 +1092,7 @@ class CentralControlPlane:
         return mean(wait_times) if wait_times else 0.0
 
     def _task_sort_key(self, task: Task) -> tuple[float, int, int, str]:
-        deadline_sort = task.deadline if task.deadline is not None else 10**9
-        return (-task.priority, deadline_sort, task.submit_tick, task.task_id)
+        return self.task_lease_service.task_sort_key(task)
 
     def _activate_task_lease(
         self,
@@ -1233,48 +1103,13 @@ class CentralControlPlane:
         tick: int,
         remove_from_pending: bool,
     ) -> TaskLease:
-        predicted_duration = max(1, decision.predicted_finish_tick - tick)
-        network_delay_ticks = int(round(decision.network_snapshot.get("transfer_ticks", 0.0)))
-        node.running_tasks[task.task_id] = RunningTask(
-            task_id=task.task_id,
-            node_id=node.node_id,
-            allocation=task.demand,
-            start_tick=tick,
-            predicted_duration=predicted_duration,
-            actual_duration=0,
-            finish_tick=decision.predicted_finish_tick,
-            success_probability=1.0,
-            network_delay_ticks=network_delay_ticks,
-            network_risk=float(decision.network_snapshot.get("uncertainty", 0.0)),
-            effective_bandwidth_mbps=float(
-                decision.network_snapshot.get("guaranteed_bandwidth_mbps", 0.0)
-            ),
-            delivery_probability=float(decision.network_snapshot.get("delivery_probability", 1.0)),
-        )
-        task.status = TaskStatus.RUNNING
-        task.last_scheduled_node = node.node_id
-        task.attempts += 1
-        if remove_from_pending and task.task_id in self.pending_queue:
-            self.pending_queue.remove(task.task_id)
-        self.decision_log.append(decision)
-
-        lease = TaskLease(
-            task_id=task.task_id,
-            node_id=node.node_id,
-            issued_tick=tick,
-            predicted_finish_tick=decision.predicted_finish_tick,
-            predicted_cost=decision.predicted_cost,
-            explanation=decision.explanation,
+        return self.task_lease_service.activate_task_lease(
             task=task,
+            node=node,
             decision=decision,
+            tick=tick,
+            remove_from_pending=remove_from_pending,
         )
-        self.leases[task.task_id] = lease
-        self._persist_task(task)
-        self._persist_node(node)
-        if self.state_store is not None:
-            self.state_store.append_decision(decision.to_dict())
-            self.state_store.save_lease(lease.to_dict())
-        return lease
 
     def _persist_node(self, node: Node) -> None:
         if self.state_store is None:

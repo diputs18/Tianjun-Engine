@@ -117,8 +117,8 @@ def _legacy_intent(control_plane: CentralControlPlane, payload: dict[str, Any]) 
         "hermes_tool_contract": {
             "endpoint": "/intent",
             "method": "POST",
-            "payload": {"message": "natural language scheduling requirement", "dry_run": False},
-            "purpose": "Deprecated compatibility gateway. New clients should use /chat/sessions.",
+            "payload": {"message": "natural language scheduling requirement", "dry_run": True},
+            "purpose": "Deprecated compatibility gateway. New clients should use /chat/sessions. dry_run=false requires confirmed=true or confirmed_by_user_button=true.",
         },
     }
 

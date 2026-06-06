@@ -93,6 +93,8 @@ def test_legacy_routes_remain_available_and_marked_deprecated() -> None:
         assert intent["replacement"] == "/chat/sessions"
         assert intent["status"] == "preview"
         assert intent["submitted_task"] is None
+        assert intent["hermes_tool_contract"]["payload"]["dry_run"] is True
+        assert "confirmed=true" in intent["hermes_tool_contract"]["purpose"]
 
 
 def test_legacy_intent_requires_confirmation_for_commit() -> None:
