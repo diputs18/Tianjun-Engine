@@ -5,7 +5,8 @@ from tianjun.application.node_registry import NodeRegistry
 from tianjun.application.policy_workflow import PolicyWorkflowService
 from tianjun.application.requirement_dialogue import RequirementDialogueService
 from tianjun.application.task_lease_service import TaskLeaseService
-from tianjun.domain import Node, ResourceVector, Task, TaskStatus
+from tianjun.core import UserRequirement
+from tianjun.domain import NetworkPathProfile, Node, ResourceVector, Task, TaskStatus
 
 
 def test_control_plane_exposes_service_boundaries() -> None:
@@ -139,3 +140,102 @@ def test_requirement_dialogue_service_handles_sessions_through_facade() -> None:
     assert control_plane.requirement_dialogue.session_count == 1
     assert continued["session_id"] == started["session_id"]
     assert loaded["region_availability"]["registered_regions"]["east"] == 1
+
+
+def policy_ready_control_plane() -> tuple[CentralControlPlane, dict]:
+    control_plane = CentralControlPlane()
+    control_plane.register_node(
+        Node(
+            node_id="node-a",
+            region="east",
+            location="shanghai",
+            service_region="east",
+            labels={"latency-sensitive"},
+            capacity=ResourceVector(cpu=8, memory=16, gpu=0, storage=50),
+            cost_per_tick=0.1,
+            base_reliability=0.99,
+            network_paths={"east": NetworkPathProfile(latency_ms=10, bandwidth_mbps=1000)},
+        )
+    )
+    requirement = UserRequirement(
+        objective="deploy batch",
+        workload_type="batch",
+        region_preference=["east"],
+        cpu_cores=1,
+        memory_gb=1,
+        gpu_count=0,
+        latency_target_ms=100,
+        bandwidth_mbps=10,
+        budget_limit=1000,
+        confidence=1,
+        missing_fields=[],
+    ).to_dict()
+    return control_plane, requirement
+
+
+def test_policy_workflow_drafts_policy_through_facade() -> None:
+    control_plane, requirement = policy_ready_control_plane()
+
+    policy = control_plane.draft_policy(requirement)
+
+    assert policy["status"] == "draft"
+    assert policy["selected_compute"]["node_id"] == "node-a"
+    assert control_plane.policy_workflow.policy_count == 1
+
+
+def test_policy_workflow_compares_options_through_facade() -> None:
+    control_plane, requirement = policy_ready_control_plane()
+
+    comparison = control_plane.compare_policy_options(requirement)
+
+    assert comparison["status"] == "compared"
+    assert [option["label"] for option in comparison["options"]] == ["A", "B", "C"]
+    assert comparison["recommended_policy_id"] in control_plane.policies
+
+
+def test_policy_workflow_simulates_policy_through_facade() -> None:
+    control_plane, requirement = policy_ready_control_plane()
+    policy = control_plane.draft_policy(requirement)
+
+    simulation = control_plane.simulate_policy(policy["policy_id"])
+
+    assert simulation["policy_id"] == policy["policy_id"]
+    assert simulation["status"] in {"feasible", "feasible_with_risks", "infeasible"}
+
+
+def test_policy_workflow_commit_requires_existing_policy() -> None:
+    control_plane = CentralControlPlane()
+
+    try:
+        control_plane.commit_policy("missing")
+    except ValueError as exc:
+        assert "Unknown policy" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("unknown policy was committed")
+
+
+def test_policy_workflow_commit_creates_pending_task() -> None:
+    control_plane, requirement = policy_ready_control_plane()
+    policy = control_plane.draft_policy(requirement)
+
+    committed = control_plane.commit_policy(policy["policy_id"])
+
+    assert committed["status"] == "committed"
+    assert committed["submitted_task"]["task_id"] in control_plane.tasks
+    assert control_plane.tasks[committed["submitted_task"]["task_id"]].status == TaskStatus.PENDING
+
+
+def test_policy_workflow_feedback_optimization_through_facade() -> None:
+    control_plane, requirement = policy_ready_control_plane()
+    policy = control_plane.draft_policy(requirement)
+
+    parsed = control_plane.parse_feedback({"policy_id": policy["policy_id"], "instruction": "make it lower latency"})
+    optimized = control_plane.optimize_policy_from_feedback({
+        "policy_id": policy["policy_id"],
+        "instruction": "make it lower latency",
+    })
+
+    assert parsed["policy_id"] == policy["policy_id"]
+    assert optimized["status"] == "optimized"
+    assert optimized["base_policy_id"] == policy["policy_id"]
+    assert optimized["policy"]["policy_id"] in control_plane.policies

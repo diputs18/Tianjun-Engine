@@ -9,14 +9,12 @@ from typing import Any
 from ..core import ComputeNetworkPolicy, UserFeedback, UserRequirement
 from ..domain import ExecutionRecord, Node, PhysicalTopology, PolicyAdjustment, PolicyState, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
 from ..policy.optimizer import PolicyOptimizer
-from ..policy.clarifier import ConversationTurn, RequirementSession, clarification_questions, session_status
-from ..policy.feedback import parse_feedback_instruction
+from ..policy.clarifier import RequirementSession
 from ..policy.generator import ComputeNetworkPolicyGenerator
-from ..policy.simulator import simulate_policy
 from ..storage.sqlite_state_store import SQLiteStateStore
 from ..scheduling.engine import ClosedLoopAdaptiveScheduler
 from ..ml.runtime import TrainedModelRuntime
-from ..scenarios import execution_from_dict, node_from_dict, task_from_dict
+from ..scenarios import node_from_dict, task_from_dict
 from .node_registry import NodeRegistry
 from .policy_workflow import PolicyWorkflowService
 from .requirement_dialogue import RequirementDialogueService
@@ -133,18 +131,7 @@ class CentralControlPlane:
         *,
         execution_payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        with self.lock:
-            session = self._session_or_raise(session_id)
-            result = self.draft_policy(
-                session.requirement.to_dict(),
-                execution_payload=execution_payload,
-            )
-            result["requirement_session"] = {
-                "session_id": session.session_id,
-                "status": session.status,
-                "questions": list(session.questions),
-            }
-            return result
+        return self.policy_workflow.draft_policy_from_session(session_id, execution_payload=execution_payload)
 
     def compare_policy_options_from_session(
         self,
@@ -153,18 +140,11 @@ class CentralControlPlane:
         execution_payload: dict[str, Any] | None = None,
         option_profiles: list[str] | None = None,
     ) -> dict[str, Any]:
-        with self.lock:
-            session = self._session_or_raise(session_id)
-            return self.compare_policy_options(
-                session.requirement.to_dict(),
-                execution_payload=execution_payload,
-                option_profiles=option_profiles,
-                requirement_session={
-                    "session_id": session.session_id,
-                    "status": session.status,
-                    "questions": list(session.questions),
-                },
-            )
+        return self.policy_workflow.compare_policy_options_from_session(
+            session_id,
+            execution_payload=execution_payload,
+            option_profiles=option_profiles,
+        )
 
     def draft_policy(
         self,
@@ -172,20 +152,7 @@ class CentralControlPlane:
         *,
         execution_payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        with self.lock:
-            self._expire_stale_nodes()
-            requirement = UserRequirement.from_dict(requirement_payload)
-            execution = None if execution_payload is None else execution_from_dict(execution_payload)
-            policy, task = self.policy_generator.draft_policy(
-                requirement,
-                scheduler=self.scheduler,
-                nodes=self.nodes.values(),
-                current_tick=self.current_tick(),
-                execution=execution,
-            )
-            self.policies[policy.policy_id] = policy
-            self.policy_tasks[policy.policy_id] = task
-            return policy.to_dict()
+        return self.policy_workflow.draft_policy(requirement_payload, execution_payload=execution_payload)
 
     def compare_policy_options(
         self,
@@ -195,204 +162,21 @@ class CentralControlPlane:
         option_profiles: list[str] | None = None,
         requirement_session: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        with self.lock:
-            self._expire_stale_nodes()
-            base_requirement = UserRequirement.from_dict(requirement_payload)
-            execution = None if execution_payload is None else execution_from_dict(execution_payload)
-            profiles = self._normalize_option_profiles(option_profiles)
-            options: list[dict[str, Any]] = []
-            for index, profile in enumerate(profiles):
-                requirement = self._requirement_for_option_profile(base_requirement, profile)
-                policy, task = self.policy_generator.draft_policy(
-                    requirement,
-                    scheduler=self.scheduler,
-                    nodes=self.nodes.values(),
-                    current_tick=self.current_tick(),
-                    policy_id=f"{self.policy_generator._new_policy_id()}_{profile}",
-                    execution=execution,
-                )
-                self.policies[policy.policy_id] = policy
-                self.policy_tasks[policy.policy_id] = task
-                policy_payload = policy.to_dict()
-                simulation = simulate_policy(policy).to_dict()
-                options.append(
-                    self._policy_option_payload(
-                        label=chr(ord("A") + index),
-                        profile=profile,
-                        policy=policy_payload,
-                        simulation=simulation,
-                    )
-                )
-            recommended = self._recommended_policy_option(options)
-            return {
-                "status": "compared",
-                "requirement": base_requirement.to_dict(),
-                "requirement_session": requirement_session,
-                "option_profiles": profiles,
-                "options": options,
-                "recommended_option": recommended,
-                "recommended_policy_id": None if recommended is None else recommended["policy_id"],
-                "explanation": self._policy_options_explanation(options, recommended),
-            }
-
-    @staticmethod
-    def _normalize_option_profiles(option_profiles: list[str] | None) -> list[str]:
-        aliases = {
-            "latency": "latency_first",
-            "latency_first": "latency_first",
-            "low_latency": "latency_first",
-            "cost": "cost_first",
-            "cost_first": "cost_first",
-            "low_cost": "cost_first",
-            "balanced": "balanced_reliability",
-            "reliability": "balanced_reliability",
-            "reliability_first": "balanced_reliability",
-            "quality": "balanced_reliability",
-            "quality_first": "balanced_reliability",
-            "balanced_reliability": "balanced_reliability",
-        }
-        requested = option_profiles or ["latency_first", "cost_first", "balanced_reliability"]
-        profiles: list[str] = []
-        for item in requested:
-            profile = aliases.get(str(item).strip().lower())
-            if profile and profile not in profiles:
-                profiles.append(profile)
-        return profiles[:4] or ["latency_first", "cost_first", "balanced_reliability"]
-
-    @staticmethod
-    def _requirement_for_option_profile(requirement: UserRequirement, profile: str) -> UserRequirement:
-        data = requirement.to_dict()
-        vector = dict(data.get("priority_vector") or {})
-        if profile == "latency_first":
-            data["priority"] = "latency"
-            vector.update({
-                "latency": max(vector.get("latency", 0.0), 1.0),
-                "network": max(vector.get("network", 0.0), 0.78),
-            })
-        elif profile == "cost_first":
-            data["priority"] = "cost"
-            vector.update({
-                "cost": max(vector.get("cost", 0.0), 1.0),
-                "balance": max(vector.get("balance", 0.0), 0.45),
-            })
-        elif profile == "balanced_reliability":
-            data["priority"] = "quality"
-            vector.update({
-                "quality": max(vector.get("quality", 0.0), 0.9),
-                "network": max(vector.get("network", 0.0), 0.55),
-                "balance": max(vector.get("balance", 0.0), 0.45),
-            })
-        data["priority_vector"] = vector
-        data["objective"] = f"{requirement.objective} | option_profile={profile}"
-        data["missing_fields"] = []
-        data["confidence"] = max(requirement.confidence, 0.72)
-        return UserRequirement.from_dict(data)
-
-    @staticmethod
-    def _policy_option_payload(
-        *,
-        label: str,
-        profile: str,
-        policy: dict[str, Any],
-        simulation: dict[str, Any],
-    ) -> dict[str, Any]:
-        effect = policy.get("expected_effect") or {}
-        latency = effect.get("latency") or {}
-        cost = effect.get("cost") or {}
-        quality = effect.get("service_quality") or {}
-        security = effect.get("security") or {}
-        compute = policy.get("selected_compute") or {}
-        network = policy.get("selected_network") or {}
-        return {
-            "label": label,
-            "profile": profile,
-            "profile_name": {
-                "latency_first": "低时延优先",
-                "cost_first": "低成本优先",
-                "balanced_reliability": "均衡 / 高可靠优先",
-            }.get(profile, profile),
-            "policy_id": policy.get("policy_id"),
-            "status": policy.get("status"),
-            "feasible": bool(simulation.get("feasible") and compute.get("node_id")),
-            "selected_node": compute.get("node_id"),
-            "selected_region": compute.get("region") or network.get("target_region"),
-            "expected_latency_ms": latency.get("expected_ms"),
-            "expected_cost": cost.get("expected_cost"),
-            "budget_margin": cost.get("budget_margin"),
-            "sla_probability": quality.get("sla_probability"),
-            "security_score": security.get("security_score"),
-            "total_score": compute.get("score"),
-            "risks": list(simulation.get("risks") or (policy.get("explanation") or {}).get("risks") or []),
-            "policy": policy,
-            "simulation": simulation,
-        }
-
-    @staticmethod
-    def _recommended_policy_option(options: list[dict[str, Any]]) -> dict[str, Any] | None:
-        feasible = [option for option in options if option.get("feasible")]
-        if not feasible:
-            return options[0] if options else None
-
-        def score(option: dict[str, Any]) -> float:
-            total = float(option.get("total_score") or 0.0)
-            sla = float(option.get("sla_probability") or 0.0)
-            security = float(option.get("security_score") or 0.0)
-            cost = float(option.get("expected_cost") or 0.0)
-            latency = float(option.get("expected_latency_ms") or 0.0)
-            return (total * 0.46) + (sla * 0.24) + (security * 0.12) - (cost * 0.006) - (latency * 0.0015)
-
-        return max(feasible, key=score)
-
-    @staticmethod
-    def _policy_options_explanation(options: list[dict[str, Any]], recommended: dict[str, Any] | None) -> str:
-        if not options:
-            return "没有生成可对比的策略候选。"
-        if recommended is None or not recommended.get("feasible"):
-            return "当前多个策略取向下都缺少可正式下发的候选节点，建议放宽地域、资源、预算、网络或安全约束。"
-        return (
-            f"推荐优先选择方案 {recommended['label']}（{recommended['profile_name']}），"
-            "因为它在可行性、SLA 概率、成本和综合评分之间取得了当前最稳的平衡。"
+        return self.policy_workflow.compare_policy_options(
+            requirement_payload,
+            execution_payload=execution_payload,
+            option_profiles=option_profiles,
+            requirement_session=requirement_session,
         )
 
     def get_policy(self, policy_id: str) -> dict[str, Any]:
-        with self.lock:
-            return self._policy_or_raise(policy_id).to_dict()
+        return self.policy_workflow.get_policy(policy_id)
 
     def simulate_policy(self, policy_id: str) -> dict[str, Any]:
-        with self.lock:
-            policy = self._policy_or_raise(policy_id)
-            result = simulate_policy(policy)
-            return result.to_dict()
+        return self.policy_workflow.simulate_policy(policy_id)
 
     def commit_policy(self, policy_id: str) -> dict[str, Any]:
-        with self.lock:
-            policy = self._policy_or_raise(policy_id)
-            if policy.status == "failed" or policy.selected_compute.node_id is None:
-                raise ValueError(f"Policy {policy_id} has no feasible candidate to commit.")
-            task = self.policy_tasks.get(policy_id)
-            if task is None:
-                task = self.policy_generator.task_from_requirement(
-                    policy.requirement,
-                    task_id=policy.task_id or f"task_{policy_id}",
-                )
-                self.policy_tasks[policy_id] = task
-            if policy.selected_compute.node_id:
-                task.target_node_id = policy.selected_compute.node_id
-            # A user-approved policy should not silently execute on a different node or
-            # create duplicate attempts unless the future policy explicitly asks for retries.
-            task.max_retries = 0
-            if task.task_id in self.tasks:
-                submitted = self.tasks[task.task_id].to_dict()
-                status = "already_committed"
-            else:
-                submitted = self.submit_task(task_from_dict(task.to_dict()))
-                status = "committed"
-            policy.status = "committed"
-            return {
-                "status": status,
-                "policy": policy.to_dict(),
-                "submitted_task": submitted,
-            }
+        return self.policy_workflow.commit_policy(policy_id)
 
     def update_policy_weights(self, weights: dict[str, Any], *, reason: str = "用户手动提交多维策略权重。") -> dict[str, Any]:
         with self.lock:
@@ -417,60 +201,13 @@ class CentralControlPlane:
             }
 
     def parse_feedback(self, feedback_payload: dict[str, Any]) -> dict[str, Any]:
-        with self.lock:
-            policy_id = str(feedback_payload.get("policy_id", ""))
-            if policy_id:
-                self._policy_or_raise(policy_id)
-            normalized = self._normalize_feedback_payload(feedback_payload)
-            return normalized
+        return self.policy_workflow.parse_feedback(feedback_payload)
 
     def record_user_feedback(self, feedback_payload: dict[str, Any]) -> dict[str, Any]:
-        with self.lock:
-            normalized = self._normalize_feedback_payload(feedback_payload)
-            feedback = UserFeedback.from_dict(normalized)
-            self._policy_or_raise(feedback.policy_id)
-            self.user_feedback.append(feedback)
-            return {
-                "status": "recorded",
-                "feedback": feedback.to_dict(),
-            }
+        return self.policy_workflow.record_user_feedback(feedback_payload)
 
     def optimize_policy_from_feedback(self, feedback_payload: dict[str, Any]) -> dict[str, Any]:
-        with self.lock:
-            normalized = self._normalize_feedback_payload(feedback_payload)
-            feedback = UserFeedback.from_dict(normalized)
-            base_policy = self._policy_or_raise(feedback.policy_id)
-            self.user_feedback.append(feedback)
-            # Feedback can be a full constraint update, not only a preference delta.
-            # Always merge explicit fields first; apply the lightweight optimizer only for terse preference feedback.
-            requirement = self.policy_generator.merge_requirement_update(base_policy.requirement, feedback.instruction)
-            if feedback.target in {
-                "latency",
-                "cost",
-                "security",
-                "qos",
-                "balance",
-                "fragmentation",
-                "locality",
-                "network",
-            } and len(feedback.instruction) < 80:
-                requirement = self.policy_generator.apply_feedback(requirement, feedback)
-            base_task = self.policy_tasks.get(feedback.policy_id)
-            policy, task = self.policy_generator.draft_policy(
-                requirement,
-                scheduler=self.scheduler,
-                nodes=self.nodes.values(),
-                current_tick=self.current_tick(),
-                execution=None if base_task is None else base_task.execution,
-            )
-            self.policies[policy.policy_id] = policy
-            self.policy_tasks[policy.policy_id] = task
-            return {
-                "status": "optimized",
-                "feedback": feedback.to_dict(),
-                "base_policy_id": feedback.policy_id,
-                "policy": policy.to_dict(),
-            }
+        return self.policy_workflow.optimize_policy_from_feedback(feedback_payload)
 
     def record_heartbeat(
         self,
@@ -915,26 +652,40 @@ class CentralControlPlane:
         return runs
 
     def _policy_or_raise(self, policy_id: str) -> ComputeNetworkPolicy:
-        policy = self.policies.get(policy_id)
-        if policy is None:
-            raise ValueError(f"Unknown policy {policy_id}.")
-        return policy
+        return self.policy_workflow.policy_or_raise(policy_id)
 
     def _session_or_raise(self, session_id: str) -> RequirementSession:
         return self.requirement_dialogue.session_or_raise(session_id)
 
     def _normalize_feedback_payload(self, feedback_payload: dict[str, Any]) -> dict[str, Any]:
-        policy_id = str(feedback_payload.get("policy_id", ""))
-        instruction = str(feedback_payload.get("instruction", ""))
-        if not policy_id:
-            raise ValueError("feedback policy_id is required")
-        return parse_feedback_instruction(
-            policy_id=policy_id,
-            instruction=instruction,
-            target=feedback_payload.get("target"),
-            sentiment=feedback_payload.get("sentiment"),
-            preference_delta=feedback_payload.get("preference_delta"),
+        return self.policy_workflow.normalize_feedback_payload(feedback_payload)
+
+    def _normalize_option_profiles(self, option_profiles: list[str] | None) -> list[str]:
+        return self.policy_workflow.normalize_option_profiles(option_profiles)
+
+    def _requirement_for_option_profile(self, requirement: UserRequirement, profile: str) -> UserRequirement:
+        return self.policy_workflow.requirement_for_option_profile(requirement, profile)
+
+    def _policy_option_payload(
+        self,
+        *,
+        label: str,
+        profile: str,
+        policy: dict[str, Any],
+        simulation: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self.policy_workflow.policy_option_payload(
+            label=label,
+            profile=profile,
+            policy=policy,
+            simulation=simulation,
         )
+
+    def _recommended_policy_option(self, options: list[dict[str, Any]]) -> dict[str, Any] | None:
+        return self.policy_workflow.recommended_policy_option(options)
+
+    def _policy_options_explanation(self, options: list[dict[str, Any]], recommended: dict[str, Any] | None) -> str:
+        return self.policy_workflow.policy_options_explanation(options, recommended)
 
     def _new_session_id(self) -> str:
         return f"sess_{time.strftime('%Y%m%d_%H%M%S')}_{int(time.time() * 1000) % 1000:03d}"
