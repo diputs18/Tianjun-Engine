@@ -6,6 +6,108 @@
 
 > 当前定位：本项目是研究与演示性质的算力调度控制面，不是可直接承载生产业务的云平台。节点、价格和执行结果只来自已注册节点、仿真后端或外部系统上报，智能体不会凭空生成资源事实。
 
+## 最短启动
+
+### 1. 准备 Python 环境
+
+项目要求 Python 3.10 或更高版本。Windows PowerShell 示例：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[ml-runtime,mcp,dev]"
+```
+
+如果只想最小化运行控制面和 Dashboard，可以安装基础包：
+
+```powershell
+python -m pip install -e .
+```
+
+### 2. 配置 LLM 密钥
+
+Hermes 支持 OpenAI-compatible Chat Completions，示例配置使用 DeepSeek。推荐把密钥写入用户配置目录，避免进入 Git 仓库：
+
+```powershell
+python -B main.py secrets --config configs\tianjun.example.toml set deepseek --api-key "your_api_key_here"
+python -B main.py llm-check --config configs\tianjun.example.toml
+```
+
+也可以把密钥放入已被 `.gitignore` 排除的项目根目录 `.env`：
+
+```dotenv
+DEEPSEEK_API_KEY=your_api_key_here
+```
+
+不需要 LLM 时，启动服务可以加 `--offline`，此时 Dashboard、确定性调度和仿真后端仍可运行，但 Hermes 的开放问答与 LLM 辅助解析会被禁用。
+
+### 3. 启动控制面和 Dashboard
+
+```powershell
+python -B main.py serve `
+  --config configs\tianjun.example.toml `
+  --default-execution-mode simulation `
+  --host 127.0.0.1 `
+  --port 8024
+```
+
+打开 Dashboard：
+
+```text
+http://127.0.0.1:8024/dashboard
+```
+
+Windows 下也可以在配置好 LLM 密钥后双击 `start_tianjun.bat`，脚本会执行连接检查、启动控制面并打开 Dashboard。
+
+### 4. 接入仿真或真实节点
+
+控制面启动后不会自动注册节点。需要可调度资源时，请另开终端启动仿真后端、CloudSimPlus bridge 或真实 Agent。
+
+配置驱动仿真后端示例：
+
+```powershell
+python -B main.py sim-backend `
+  --server http://127.0.0.1:8024 `
+  --inventory path\to\your_sim_inventory.json `
+  --verbose
+```
+
+真实节点探测 Agent 示例：
+
+```powershell
+python -B main.py real-agent `
+  --server http://127.0.0.1:8024 `
+  --config path\to\agent_config.toml
+```
+
+### 5. 验证运行状态
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8024/health
+Invoke-RestMethod http://127.0.0.1:8024/report
+```
+
+推荐检查：
+
+- `/health` 中 `chat_runtime.llm.enabled` 是否符合预期。
+- `/health` 中 `model_runtime.status` 是否为 `loaded` 或明确降级状态。
+- `/report` 中是否出现已注册节点；如果为空，说明尚未启动仿真后端或真实 Agent。
+
+## 环境配置总览
+
+| 配置项 | 是否必需 | 配置方式 | 说明 |
+| --- | --- | --- | --- |
+| Python | 必需 | Python 3.10+ | 核心服务、CLI、测试和仿真后端运行时 |
+| Python 依赖 | 必需 | `python -m pip install -e .` 或 `".[ml-runtime,mcp,dev]"` | 基础包可运行控制面；完整包包含模型、MCP 和测试能力 |
+| 服务配置 | 必需 | `configs/tianjun.example.toml` | 控制面、LLM、MCP、执行器和安全边界配置模板 |
+| LLM API key | 可选 | `main.py secrets ... set deepseek` 或 `.env` | 启用 Hermes LLM 辅助、普通问答和更自然的需求理解 |
+| 模型资产 | 可选 | `--model-dir data\trained_models` | 加载 LSTM / GraphSAGE；缺失时回退到确定性调度 |
+| 仿真库存 | 可选 | `main.py sim-backend --inventory ...` | 控制面不会自动生成节点，需要外部仿真或 Agent 注册 |
+| SQLite 状态库 | 可选 | `--state-db path\to\state.db` | 持久化节点、任务、租约、决策和执行记录 |
+| MCP 服务 | 可选 | `python -m pip install -e ".[mcp]"` + `main.py mcp-server` | 将控制面工具暴露给支持 MCP 的智能体宿主 |
+| 真实执行器 | 可选 | Process / Docker / Kubernetes 配置 | 生产接入前必须补充权限、审计、隔离和命令白名单 |
+
 ## 项目价值
 
 传统资源调度 Demo 往往只展示“任务分配给哪个节点”。天钧关注更完整的问题：
