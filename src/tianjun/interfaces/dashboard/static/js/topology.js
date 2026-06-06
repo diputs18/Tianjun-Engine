@@ -148,7 +148,9 @@ function normalizeGlobalTopology() {
     if (positions[item.id]) Object.assign(item, positions[item.id]);
   }
 
-  globalTopology.currentRoute = ["user-access", "border1", "pe1", "dc1"];
+  const targetRoute = globalRouteForTargetDc(currentTargetDcKey());
+  globalTopology.currentRoute = targetRoute.nodes;
+  globalTopology.currentPathText = targetRoute.pathText;
   globalTopology.links = [
     link("user-access", "border1", "access", "接入链路", "用户业务接入出口 A", { showLabel: false }),
     link("user-access", "border2", "access", "3ms · 10Gbps", "用户业务接入出口 B", { showLabel: true, labelAnchor: "mid" }),
@@ -261,6 +263,29 @@ function currentTopology() {
   return activeTopologyKey === "global" ? globalTopology : dcTopologies[activeTopologyKey] ?? globalTopology;
 }
 
+function currentTargetDcKey() {
+  const match = String(schedulerStatus.target ?? "").match(/\bDC(\d+)\b/i);
+  return match ? `dc${match[1]}` : null;
+}
+
+function globalRouteForTargetDc(targetDcKey) {
+  const routes = {
+    dc1: {
+      nodes: ["user-access", "border1", "pe1", "dc1"],
+      pathText: "当前任务调度路径：User-Access → DC1 → 北京计算集群 / VM-02",
+    },
+    dc2: {
+      nodes: ["user-access", "border2", "pe2", "dc2"],
+      pathText: "当前任务调度路径：User-Access → DC2 → 深圳计算集群 / VM-02",
+    },
+    dc3: {
+      nodes: ["user-access", "border3", "pe3", "dc3"],
+      pathText: "当前任务调度路径：User-Access → DC3 → 成都计算集群 / VM-02",
+    },
+  };
+  return routes[targetDcKey] ?? routes.dc2;
+}
+
 function nodeById(topology, id) {
   return topology.nodes.find((item) => item.id === id);
 }
@@ -306,6 +331,7 @@ function isRouteNode(topology, id) {
 }
 
 function isRouteLink(topology, item) {
+  if (topology.kind === "dc" && topology.key !== currentTargetDcKey()) return false;
   const route = topology.currentRoute ?? [];
   return route.some((id, index) => {
     const next = route[index + 1];
@@ -564,7 +590,7 @@ function renderClusterCard(topology, id, zoneInfo) {
 function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
   const vmName = `VM-${String(index + 1).padStart(2, "0")}`;
   const vmId = `${clusterId}-vm-${String(index + 1).padStart(2, "0")}`;
-  const active = routeCluster && vmName === topology.routeVm;
+  const active = topology.key === currentTargetDcKey() && routeCluster && vmName === topology.routeVm;
   const selected = selectedDetail?.kind === "vm" && selectedDetail.id === vmId;
   const cpu = Math.min(92, Math.max(12, zoneInfo.cpu + (index - 1) * 6));
   const memory = Math.min(90, Math.max(18, zoneInfo.memory + (index % 2 === 0 ? -4 : 5)));
