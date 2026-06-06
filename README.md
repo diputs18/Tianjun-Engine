@@ -12,4 +12,7 @@ Tianjun Engine 是一个本地优先的算网调度控制平面原型。它把�
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev
+python -m pip install -e ".[dev,mcp,ml-runtime]"
+```
+
+## 完整本地启动（
