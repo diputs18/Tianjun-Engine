@@ -570,7 +570,7 @@ function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
   const cpu = Math.min(92, Math.max(12, zoneInfo.cpu + (index - 1) * 6));
   const memory = Math.min(90, Math.max(18, zoneInfo.memory + (index % 2 === 0 ? -4 : 5)));
   const state = active ? "正在调度" : cpu > 78 ? "高负载" : "可调度";
-  return `<button class="vm-node ${active ? "active" : ""} ${selected ? "selected" : ""}" type="button"
+  return `<button class="vm-node ${active ? "route-vm" : ""} ${selected ? "selected" : ""}" type="button"
       data-vm="${escapeHtml(vmId)}"
       data-cluster="${escapeHtml(clusterId)}"
       data-zone="${escapeHtml(zoneInfo.name)}"
