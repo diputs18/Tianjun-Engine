@@ -77,6 +77,8 @@ java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 
 
 该实验会创建 24 个仿真 VM，注册 DCI 拓扑和节点，持续发送心跳，通过 Tianjun 控制平面提交调度任务，并在 CloudSimPlus 仿真完成后回传执行结果。它是当前推荐的后台常驻仿真拓扑：只要该 Java 进程持续运行，控制平面就可以实时接收待调度任务，节点会通过 `/leases/next` 领取任务，再通过 `/task-runs/progress` 和 `/task-runs/result` 推进执行状态。
 
+当前 Java CloudSimPlus 示例已经接入控制平面的真实租约执行链路：实验启动后会先通过 `/tasks` 把 Cloudlet 对应的任务写入 `pending_queue`，随后每个仿真 VM 作为节点持续心跳并轮询 `/leases/next`。拿到租约后，示例才把对应 Cloudlet 提交给 CloudSimPlus 执行；执行期间会通过 `/task-runs/progress` 上报阶段、进度和模拟资源利用率，完成后再通过 `/task-runs/result` 回传结果。因此 Dashboard 的拓扑页可以从 `/report` 中的 `active_runs`、`recent_progress_events` 和调度决策实时高亮当前 DCI 路径。
+
 任务下发后的状态流转如下：
 
 1. `/tasks` 或策略提交只把任务写入控制平面并加入 `pending_queue`，此时任务会显示为“待调度”，还不会出现在执行记录。

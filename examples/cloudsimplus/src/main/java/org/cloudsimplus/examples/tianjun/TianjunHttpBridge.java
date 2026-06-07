@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
  */
 public class TianjunHttpBridge {
     private static final Pattern NODE_ID_PATTERN = Pattern.compile("\"node_id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern TASK_ID_PATTERN = Pattern.compile("\"task_id\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern STATUS_PATTERN = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern SCORE_PATTERN = Pattern.compile("\"total_score\"\\s*:\\s*([0-9.]+)");
     private static final Pattern LEASE_TASK_PATTERN = Pattern.compile("\"lease\"\\s*:\\s*\\{\\s*\"task_id\"\\s*:\\s*\"([^\"]+)\"");
@@ -132,6 +133,28 @@ public class TianjunHttpBridge {
         final String leaseTaskId = matchString(LEASE_TASK_PATTERN, response, task.taskId());
         final double score = matchDouble(SCORE_PATTERN, response, 0.0);
         return new SchedulingResult(status, nodeId, leaseTaskId, score, response);
+    }
+
+    public void submitTask(final SimTask task) {
+        post("/tasks", taskJson(task));
+    }
+
+    public LeaseResult requestLease(final String nodeId) {
+        final String response = post("/leases/next", """
+            {"node_id": "%s"}
+            """.formatted(escapeJson(nodeId)));
+        if (response == null || response.isBlank() || "null".equals(response.trim())) {
+            return null;
+        }
+        final String taskId = matchString(TASK_ID_PATTERN, response, "");
+        if (taskId.isBlank()) {
+            return null;
+        }
+        return new LeaseResult(taskId, matchString(NODE_ID_PATTERN, response, nodeId), response);
+    }
+
+    public void reportProgress(final SimTaskProgress progress) {
+        post("/task-runs/progress", progressJson(progress));
     }
 
     public void reportResult(final SimTaskResult result) {
@@ -335,6 +358,40 @@ public class TianjunHttpBridge {
         );
     }
 
+    private String progressJson(final SimTaskProgress progress) {
+        return """
+            {
+              "node_id": "%s",
+              "task_id": "%s",
+              "stage": "%s",
+              "status": "%s",
+              "progress": %.4f,
+              "message": "%s",
+              "metrics": {
+                "sim_tick": %.4f,
+                "simulated_utilization": {
+                  "cpu": %.6f,
+                  "memory": %.6f,
+                  "storage": %.6f
+                },
+                "bandwidth_utilization": %.6f
+              }
+            }
+            """.formatted(
+            progress.nodeId(),
+            progress.taskId(),
+            escapeJson(progress.stage()),
+            escapeJson(progress.status()),
+            clamp(progress.progress(), 0.0, 1.0),
+            escapeJson(progress.message()),
+            progress.tick(),
+            clamp(progress.cpuUtilization(), 0.0, 1.0),
+            clamp(progress.memoryUtilization(), 0.0, 1.0),
+            clamp(progress.storageUtilization(), 0.0, 1.0),
+            clamp(progress.bandwidthUtilization(), 0.0, 1.0)
+        );
+    }
+
     private String networkPathsJson(
         final SimNode node,
         final double tick,
@@ -473,8 +530,30 @@ public class TianjunHttpBridge {
 
     public record SchedulingResult(String status, String nodeId, String leaseTaskId, double score, String rawJson) {
         public boolean hasDecision() {
-            return nodeId != null && !nodeId.isBlank() && ("leased".equalsIgnoreCase(status) || "scheduled".equalsIgnoreCase(status));
+            return nodeId != null && !nodeId.isBlank() && (
+                "leased".equalsIgnoreCase(status)
+                    || "scheduled".equalsIgnoreCase(status)
+                    || "committed".equalsIgnoreCase(status)
+            );
         }
+    }
+
+    public record LeaseResult(String taskId, String nodeId, String rawJson) {
+    }
+
+    public record SimTaskProgress(
+        String nodeId,
+        String taskId,
+        String stage,
+        String status,
+        double progress,
+        String message,
+        double tick,
+        double cpuUtilization,
+        double memoryUtilization,
+        double bandwidthUtilization,
+        double storageUtilization
+    ) {
     }
 
     public record SimTaskResult(
