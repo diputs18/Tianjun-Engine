@@ -119,6 +119,15 @@ def create_mcp(client: TianjunHttpClient | None = None) -> Any:
         return http.post(f"/conversations/{session_id}/draft", {"execution": execution})
 
     @tool
+    def compare_policy_options(session_id: str, execution: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Compare multiple policy options for a completed requirement dialogue."""
+        session = http.get(f"/conversations/{session_id}")
+        requirement = session.get("requirement")
+        if not isinstance(requirement, dict):
+            raise RuntimeError(f"Requirement session {session_id} is not ready for policy comparison.")
+        return http.post("/policies/compare", {"requirement": requirement, "execution": execution})
+
+    @tool
     def simulate_policy(policy_id: str) -> dict[str, Any]:
         """仿真策略，返回负载、时延、成本、服务质量、安全和诊断建议。"""
         return http.post("/policies/simulate", {"policy_id": policy_id})

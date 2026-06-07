@@ -840,7 +840,7 @@ function renderTopologyEmpty(container, report) {
   if (detailPanel) {
     detailPanel.innerHTML = `<article class="topology-detail-card">
       <h3>拓扑尚未生成</h3>
-      <p>这里不会再使用静态 DC1/DC2/DC3 假数据兜底。请先导入仿真 inventory 或启动仿真节点后再查看全局与数据中心内部拓扑。</p>
+      <p>这里不会再使用静态 DC1/DC2/DC3 假数据兜底。请先启动 CloudSimPlus 桥接器或真实节点 Agent 后再查看全局与数据中心内部拓扑。</p>
       ${detailRow("数据来源", "report.nodes / report.physical_topology")}
       ${detailRow("当前状态", "等待仿真节点导入")}
     </article>`;
