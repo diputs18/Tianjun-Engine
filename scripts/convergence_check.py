@@ -23,7 +23,6 @@ def assert_cli_entry_is_dispatch_only() -> None:
     source = read("src/tianjun/cli/__init__.py")
     forbidden = [
         "run_until_idle(",
-        "run_simulation_backend(",
         "run_real_node_agent(",
         "serve_forever(",
         "input(\"> \")",
@@ -58,7 +57,6 @@ def assert_command_handlers_exist() -> None:
         "runtime_demo.py",
         "secrets.py",
         "serve.py",
-        "sim_backend.py",
     }
     found = {path.name for path in (ROOT / "src/tianjun/cli/commands").glob("*.py")}
     missing = commands - found

@@ -38,7 +38,7 @@ tianjun.bat open
 tianjun.bat smoke
 ```
 
-`tianjun.bat start` 会在 LLM 校验通过后启动控制平面、MCP server 并打开 Dashboard，不会自动启动模拟节点后端。`tianjun.bat smoke` 只做离线 smoke test，不代表完整启动。
+`tianjun.bat start` 会在 LLM 校验通过后启动控制平面、MCP server 并打开 Dashboard，不会自动启动仿真节点。`tianjun.bat smoke` 只做离线 smoke test，不代表完整启动。
 
 ### 3. 启动控制平面
 
@@ -61,7 +61,7 @@ Invoke-RestMethod http://127.0.0.1:8024/report
 
 ### 4. 启动 Java CloudSimPlus 仿真节点
 
-标准演示链路推荐使用 Java CloudSimPlus 仿真节点，而不是 Python `sim-backend`。CloudSimPlus 桥接器和参考实验位于 `examples/cloudsimplus/`：
+标准演示链路使用 Java CloudSimPlus 仿真节点。CloudSimPlus 桥接器和参考实验位于 `examples/cloudsimplus/`：
 
 ```text
 examples/cloudsimplus/src/main/java/org/cloudsimplus/examples/HuaweiDciTianjunExperiment.java
@@ -77,27 +77,6 @@ java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 
 
 该实验会创建 24 个仿真 VM，注册 DCI 拓扑和节点，持续发送心跳，通过 Tianjun 控制平面提交调度任务，并在 CloudSimPlus 仿真完成后回传执行结果。
 
-Python `sim-backend` 只保留为开发调试用的轻量后备入口，不作为标准演示启动方式，也不会被 `tianjun.bat start` 自动启动。确需本地快速调试租约链路时，可在单独终端手动运行：
-
-```powershell
-python -B main.py sim-backend `
-  --config configs\tianjun.example.toml `
-  --server http://127.0.0.1:8024 `
-  --inventory configs\sim_cluster.example.json `
-  --verbose
-```
-
-如果只想短跑验证 Python 后备入口，可加 `--max-cycles 3`：
-
-```powershell
-python -B main.py sim-backend `
-  --config configs\tianjun.example.toml `
-  --server http://127.0.0.1:8024 `
-  --inventory configs\sim_cluster.example.json `
-  --max-cycles 3 `
-  --verbose
-```
-
 ### 5. 打开 Dashboard
 
 在浏览器打开：
@@ -106,7 +85,7 @@ python -B main.py sim-backend `
 http://127.0.0.1:8024/dashboard
 ```
 
-Dashboard 是静态 HTML/CSS/JS，无构建步骤。手动启动 `sim-backend`、CloudSimPlus 桥接器或真实节点代理后，节点/拓扑页面应能看到已注册节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由节点侧进程通过租约、进度和结果回报推进。
+Dashboard 是静态 HTML/CSS/JS，无构建步骤。启动 CloudSimPlus 桥接器或真实节点代理后，节点/拓扑页面应能看到已注册节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由节点侧进程通过租约、进度和结果回报推进。
 
 ### 6. 启动 MCP 工具服务
 
@@ -164,7 +143,7 @@ flowchart LR
     CP --> Nodes["NodeRegistry"]
     CP --> Leases["TaskLeaseService"]
     Scheduler --> ML["Optional LSTM / GraphSAGE runtime"]
-    Leases --> Agents["sim-backend / CloudSimPlus / real-agent"]
+    Leases --> Agents["CloudSimPlus / real-agent"]
     Agents --> Results["Progress and results"]
     Results --> CP
 ```
@@ -201,7 +180,7 @@ flowchart LR
 ```text
 main.py                         本地源码检出用 CLI 入口
 pyproject.toml                  包元数据和依赖项扩展
-configs/                        最小配置和模拟集群 inventory
+configs/                        最小运行配置
 scripts/                        冒烟测试、收敛检查、训练辅助、Windows 辅助脚本
 src/tianjun/application/        控制平面门面和应用服务
 src/tianjun/chat/               Hermes 风格聊天运行时

@@ -8,9 +8,8 @@ Runtime boundaries:
 - ``tools``: unified agent/MCP/Dashboard tool surface
 - ``chat``: safe conversation orchestration over the unified tools
 - ``interfaces``: HTTP server and dashboard surface
-- ``node_agent`` / ``simulation``: real and simulated execution agents
+- ``node_agent``: real execution agent support
 - ``policy``: compute-network policy generation, simulation and feedback
-- ``inventory``: config-driven resource and workload inventory
 """
 
 __version__ = "0.1.0"

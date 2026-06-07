@@ -43,7 +43,6 @@ def test_core_cli_handlers_are_split_into_command_modules() -> None:
         "runtime-demo",
         "secrets",
         "serve",
-        "sim-backend",
     }
 
 

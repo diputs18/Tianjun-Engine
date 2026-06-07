@@ -72,7 +72,7 @@ exit /b 0
 call :check_python
 echo Stopping Tianjun Engine processes...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$patterns = @('main\.py\s+serve.*--port\s+%TJ_PORT%', 'main\.py\s+sim-backend.*%TJ_BASE_URL%', 'main\.py\s+mcp-server.*%TJ_BASE_URL%');" ^
+  "$patterns = @('main\.py\s+serve.*--port\s+%TJ_PORT%', 'main\.py\s+mcp-server.*%TJ_BASE_URL%');" ^
   "Get-CimInstance Win32_Process | ForEach-Object { $cmd = [string]$_.CommandLine; foreach ($p in $patterns) { if ($cmd -match $p) { Write-Host ('Stopping ' + $_.ProcessId + ': ' + $_.Name); Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; break } } }"
 exit /b %ERRORLEVEL%
 

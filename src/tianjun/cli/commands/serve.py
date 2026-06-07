@@ -7,7 +7,6 @@ from tianjun.chat import ChatRuntime
 from tianjun.config import TianjunConfig, config_path, first_present
 from tianjun.domain import ExecutionMode
 from tianjun.interfaces.http.server import build_http_server
-from tianjun.inventory import load_inventory_config
 from tianjun.scenarios import load_scenario_payload, node_from_dict, task_from_dict
 from tianjun.storage.sqlite_state_store import SQLiteStateStore
 from tianjun.cli import require_model, resolved_llm_settings, resolved_model_dir, resolved_path_setting
@@ -19,7 +18,6 @@ def handle(args: Namespace, app_config: TianjunConfig) -> None:
     scenario = resolved_path_setting(args.scenario, app_config, "server.scenario", "control_plane.scenario")
     if args.demo and scenario is None:
         scenario = config_path("examples/runtime_scenario.json")
-    inventory = resolved_path_setting(args.inventory, app_config, "server.inventory", "simulation.inventory")
     state_db = resolved_path_setting(args.state_db, app_config, "server.state_db", "control_plane.state_db")
     heartbeat_timeout = float(first_present(
         args.heartbeat_timeout_seconds,
@@ -44,8 +42,6 @@ def handle(args: Namespace, app_config: TianjunConfig) -> None:
     default_execution_mode = first_present(args.default_execution_mode, app_config.get("server.default_execution_mode"), app_config.get("simulation.default_execution_mode"))
     if default_execution_mode:
         control_plane.policy_generator.default_execution_mode = ExecutionMode(str(default_execution_mode))
-    if inventory:
-        load_inventory_config(inventory)
     if scenario and not control_plane.tasks:
         payload = load_scenario_payload(scenario)
         for node_data in payload.get("nodes", []):

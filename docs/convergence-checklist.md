@@ -41,14 +41,10 @@ python -B main.py serve `
   --port 8024
 ```
 
-第二个终端启动模拟节点：
+第二个终端启动 Java CloudSimPlus 仿真节点：
 
 ```powershell
-python -B main.py sim-backend `
-  --config configs\tianjun.example.toml `
-  --server http://127.0.0.1:8024 `
-  --inventory configs\sim_cluster.example.json `
-  --verbose
+java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 normal
 ```
 
 第三个终端启动 MCP server：
@@ -64,9 +60,9 @@ python -B main.py mcp-server `
 - `/health` 返回 `status=ok`。
 - `/report` 返回控制平面状态。
 - `/dashboard` 能打开静态 Dashboard。
-- Dashboard 节点/拓扑页面能看到模拟节点。
+- Dashboard 节点/拓扑页面能看到 CloudSimPlus 注册的仿真节点。
 - MCP host 可通过 `mcp-server` 访问 Tianjun 工具。
-- `sim-backend` 持续发送心跳、领取租约并报告任务进度/结果。
+- CloudSimPlus 桥接器注册拓扑和节点，发送心跳，并报告任务结果。
 
 ## 运行时检查
 

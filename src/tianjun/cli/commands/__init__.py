@@ -12,7 +12,6 @@ COMMAND_GROUPS = [
     "mcp_server",
     "agent",
     "real_agent",
-    "sim_backend",
     "runtime_demo",
     "secrets",
 ]

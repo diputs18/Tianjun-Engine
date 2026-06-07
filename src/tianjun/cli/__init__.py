@@ -20,7 +20,6 @@ COMMAND_HANDLERS = {
     "runtime-demo": "tianjun.cli.commands.runtime_demo",
     "secrets": "tianjun.cli.commands.secrets",
     "serve": "tianjun.cli.commands.serve",
-    "sim-backend": "tianjun.cli.commands.sim_backend",
 }
 
 
@@ -145,7 +144,6 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int)
     serve.add_argument("--scenario", type=Path, help="Optional demo scenario to preload. Omitted by default for a clean control plane.")
     serve.add_argument("--demo", action="store_true", help="Preload examples/runtime_scenario.json demo nodes and tasks.")
-    serve.add_argument("--inventory", type=Path, help="Config-driven simulated inventory JSON/TOML/YAML to register at startup.")
     serve.add_argument("--default-execution-mode", choices=[item.value for item in ExecutionMode], help="Default execution mode for chat/policy-generated tasks when no explicit execution payload is provided.")
     serve.add_argument("--state-db", type=Path)
     serve.add_argument("--heartbeat-timeout-seconds", type=float)
@@ -189,16 +187,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow this real node to request leases and execute assigned tasks. Disabled by default.",
     )
-
-    sim_backend = subparsers.add_parser("sim-backend", help="Run config-driven simulated node agents against the control-plane HTTP server.")
-    sim_backend.add_argument("--config", type=Path)
-    sim_backend.add_argument("--server")
-    sim_backend.add_argument("--inventory", type=Path, required=True, help="Simulation inventory/workload profile config, preferably JSON for dependency-free usage.")
-    sim_backend.add_argument("--node-id", action="append", help="Limit simulation to one node id; repeat to include multiple nodes.")
-    sim_backend.add_argument("--max-cycles", type=int, help="Stop after N runtime ticks. Omit for a long-running simulated node backend.")
-    sim_backend.add_argument("--poll-interval", type=float)
-    sim_backend.add_argument("--time-scale", type=float, help="Simulation acceleration factor. Smaller is faster; default comes from inventory or 0.08.")
-    sim_backend.add_argument("--verbose", action="store_true", help="Print concise node/progress logs. Full JSON is not printed unless this command exits.")
 
     secrets = subparsers.add_parser("secrets", help="Manage cross-platform local secrets such as the DeepSeek API key.")
     secrets.add_argument("--config", type=Path)
