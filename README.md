@@ -2,7 +2,7 @@
 
 Tianjun Engine 是一个本地优先的算网调度控制平面原型。它把自然语言需求对话、确定性多目标调度、可选 ML 辅助预测、执行反馈、MCP 工具和静态 Dashboard 连接成一个可运行的研究系统。
 
-本项目用于研究、演示和架构实验，并非生产级云平台。资源清单、定价、拓扑和执行事实必须来自已注册节点、仿真后端、CloudSimPlus 桥接器或真实节点代理；LLM 可以解释和帮助解析意图，但不能在没有明确确认路径的情况下捏造控制平面事实或提交工作。
+本项目用于研究、演示和架构实验，并非生产级云平台。资源清单、定价、拓扑和执行事实必须来自已注册节点、CloudSimPlus 桥接器或真实节点代理；LLM 可以解释和帮助解析意图，但不能在没有明确确认路径的情况下捏造控制平面事实或提交工作。
 
 ## 快速开始
 
@@ -75,7 +75,16 @@ examples/cloudsimplus/src/main/resources/huawei-dci-reference.brite
 java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 normal
 ```
 
-该实验会创建 24 个仿真 VM，注册 DCI 拓扑和节点，持续发送心跳，通过 Tianjun 控制平面提交调度任务，并在 CloudSimPlus 仿真完成后回传执行结果。
+该实验会创建 24 个仿真 VM，注册 DCI 拓扑和节点，持续发送心跳，通过 Tianjun 控制平面提交调度任务，并在 CloudSimPlus 仿真完成后回传执行结果。它是当前推荐的后台常驻仿真拓扑：只要该 Java 进程持续运行，控制平面就可以实时接收待调度任务，节点会通过 `/leases/next` 领取任务，再通过 `/task-runs/progress` 和 `/task-runs/result` 推进执行状态。
+
+当前 Java CloudSimPlus 示例已经接入控制平面的真实租约执行链路：实验启动后会先通过 `/tasks` 把 Cloudlet 对应的任务写入 `pending_queue`，随后每个仿真 VM 作为节点持续心跳并轮询 `/leases/next`。拿到租约后，示例才把对应 Cloudlet 提交给 CloudSimPlus 执行；执行期间会通过 `/task-runs/progress` 上报阶段、进度和模拟资源利用率，完成后再通过 `/task-runs/result` 回传结果。因此 Dashboard 的拓扑页可以从 `/report` 中的 `active_runs`、`recent_progress_events` 和调度决策实时高亮当前 DCI 路径。
+
+任务下发后的状态流转如下：
+
+1. `/tasks` 或策略提交只把任务写入控制平面并加入 `pending_queue`，此时任务会显示为“待调度”，还不会出现在执行记录。
+2. CloudSimPlus 桥接器或真实节点代理持续心跳并请求 `/leases/next`，控制平面才会做调度决策并把任务租约发给目标节点。
+3. 节点执行过程中回传 `/task-runs/progress`，Dashboard 的拓扑路径会根据 `/report` 中的 `active_runs`、最新进度、调度决策和节点 inventory 实时切换。
+4. 节点最终回传 `/task-runs/result` 后，控制平面才写入执行记录；因此“执行记录没有这个任务”通常表示任务还在待调度队列或已发租约但尚未回传结果。
 
 ### 5. 打开 Dashboard
 
@@ -85,7 +94,7 @@ java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 
 http://127.0.0.1:8024/dashboard
 ```
 
-Dashboard 是静态 HTML/CSS/JS，无构建步骤。启动 CloudSimPlus 桥接器或真实节点代理后，节点/拓扑页面应能看到已注册节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由节点侧进程通过租约、进度和结果回报推进。
+Dashboard 是静态 HTML/CSS/JS，无构建步骤。启动 CloudSimPlus 桥接器或真实节点代理后，节点/拓扑页面应能看到已注册节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由节点侧进程通过租约、进度和结果回报推进。拓扑页不再固定展示静态路径，而是优先读取 `/report` 中的 `active_runs`、`recent_progress_events`、`recent_decisions`、执行记录和待调度队列，实时高亮当前任务的全局 DCI 路径、数据中心内部 Leaf/Cluster/VM 路径以及路径时延、带宽、风险等指标。
 
 ### 6. 启动 MCP 工具服务
 
@@ -111,6 +120,16 @@ python -B main.py real-agent `
 ```
 
 默认不会执行真实任务。只有在确认主机隔离、命令允许列表、资源限制和审计策略后，才应使用 `--execute`。
+
+如果希望真实节点代理也像后台拓扑一样持续消费任务，需要保持代理进程运行，并显式开启执行：
+
+```powershell
+python -B main.py real-agent `
+  --config configs\tianjun.example.toml `
+  --server http://127.0.0.1:8024 `
+  --node-config examples\real_node_agent.example.json `
+  --execute
+```
 
 ### 8. 离线 smoke test
 

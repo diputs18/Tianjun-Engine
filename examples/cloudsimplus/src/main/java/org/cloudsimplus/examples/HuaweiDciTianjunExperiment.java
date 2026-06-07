@@ -22,10 +22,11 @@ import org.cloudsimplus.core.CloudSimPlus;
 import org.cloudsimplus.datacenters.Datacenter;
 import org.cloudsimplus.datacenters.DatacenterSimple;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge;
+import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.LeaseResult;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.NetworkPath;
-import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.SchedulingResult;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.SimNode;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.SimTask;
+import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.SimTaskProgress;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.SimTaskResult;
 import org.cloudsimplus.hosts.Host;
 import org.cloudsimplus.hosts.HostSimple;
@@ -43,10 +44,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Runs a three-access-point DCI topology against the Tianjun HTTP control plane.
@@ -81,8 +84,11 @@ public final class HuaweiDciTianjunExperiment {
     private final Map<String, Vm> vmByNodeId;
     private final Map<String, SimNode> nodeById;
     private final Map<Long, SimTask> taskByCloudletId;
+    private final Map<String, Long> cloudletIdByTaskId;
     private final Map<Long, String> selectedNodeByCloudletId;
     private final Map<Long, Vm> selectedVmByCloudletId;
+    private final Set<Long> submittedCloudletIds;
+    private final Set<Long> reportedResultCloudletIds;
     private final Random random;
     private final Gson gson;
     private final String disturbanceScenario;
@@ -115,8 +121,11 @@ public final class HuaweiDciTianjunExperiment {
         this.vmByNodeId = new LinkedHashMap<>();
         this.nodeById = new LinkedHashMap<>();
         this.taskByCloudletId = new LinkedHashMap<>();
+        this.cloudletIdByTaskId = new LinkedHashMap<>();
         this.selectedNodeByCloudletId = new LinkedHashMap<>();
         this.selectedVmByCloudletId = new LinkedHashMap<>();
+        this.submittedCloudletIds = new HashSet<>();
+        this.reportedResultCloudletIds = new HashSet<>();
         this.datacenters = createDatacenters();
         this.broker = new DatacenterBrokerSimple(simulation);
         this.topology = configureDciTopology();
@@ -138,11 +147,9 @@ public final class HuaweiDciTianjunExperiment {
         broker.setDatacenterMapper((lastDatacenter, vm) -> datacenters.get(siteIndexForVm(vm)));
         broker.submitVmList(vmList);
         registerTianjunNodes();
+        submitTasksToTianjun();
+        pollLeasesAndSubmitCloudlets(0.0);
         simulation.addOnClockTickListener(this::onClockTick);
-        bindTasksFromTianjunDecisions();
-        broker.submitCloudletList(
-            cloudletList.stream().filter(cloudlet -> selectedVmByCloudletId.containsKey(cloudlet.getId())).toList()
-        );
 
         writeSnapshot(0.0, "registered");
         simulation.start();
@@ -245,23 +252,46 @@ public final class HuaweiDciTianjunExperiment {
         System.out.printf("Registered physical DCI topology and %d attached compute nodes with topology-derived paths.%n", nodeById.size());
     }
 
-    private void bindTasksFromTianjunDecisions() {
-        int mapped = 0;
+    private void submitTasksToTianjun() {
         for (int index = 0; index < cloudletList.size(); index++) {
             final Cloudlet cloudlet = cloudletList.get(index);
             final SimTask task = taskForCloudlet(cloudlet, index);
-            final SchedulingResult decision = bridge.commitSchedule(task);
-            final Vm selectedVm = vmByNodeId.get(decision.nodeId());
-            if (selectedVm == null || selectedVm == Vm.NULL) {
+            taskByCloudletId.put(cloudlet.getId(), task);
+            cloudletIdByTaskId.put(task.taskId(), cloudlet.getId());
+            bridge.submitTask(task);
+        }
+        System.out.printf("Submitted %d DCI tasks to Tianjun pending queue.%n", taskByCloudletId.size());
+    }
+
+    private int pollLeasesAndSubmitCloudlets(final double tick) {
+        int mapped = 0;
+        broker.setVmMapper(cloudlet -> selectedVmByCloudletId.getOrDefault(cloudlet.getId(), Vm.NULL));
+        for (final var node : nodeById.values()) {
+            final LeaseResult lease = bridge.requestLease(node.nodeId());
+            if (lease == null) {
                 continue;
             }
-            selectedVmByCloudletId.put(cloudlet.getId(), selectedVm);
-            selectedNodeByCloudletId.put(cloudlet.getId(), decision.nodeId());
-            taskByCloudletId.put(cloudlet.getId(), task);
+            final Long cloudletId = cloudletIdByTaskId.get(lease.taskId());
+            if (cloudletId == null) {
+                continue;
+            }
+            final Cloudlet cloudlet = cloudletById(cloudletId);
+            final Vm selectedVm = vmByNodeId.get(lease.nodeId());
+            if (cloudlet == null || selectedVm == null || selectedVm == Vm.NULL || submittedCloudletIds.contains(cloudletId)) {
+                continue;
+            }
+            selectedVmByCloudletId.put(cloudletId, selectedVm);
+            selectedNodeByCloudletId.put(cloudletId, lease.nodeId());
+            submittedCloudletIds.add(cloudletId);
+            broker.submitCloudletList(List.of(cloudlet));
+            reportProgress(cloudlet, tick, "leased", 0.0, "CloudSim lease acquired; cloudlet submitted to VM.");
             mapped++;
         }
         broker.setVmMapper(cloudlet -> selectedVmByCloudletId.getOrDefault(cloudlet.getId(), Vm.NULL));
-        System.out.printf("Tianjun mapped %d/%d DCI tasks.%n", mapped, cloudletList.size());
+        if (mapped > 0) {
+            System.out.printf("Tianjun leased and submitted %d new DCI tasks; total submitted: %d/%d.%n", mapped, submittedCloudletIds.size(), cloudletList.size());
+        }
+        return mapped;
     }
 
     private void onClockTick(final EventInfo event) {
@@ -270,6 +300,8 @@ public final class HuaweiDciTianjunExperiment {
             return;
         }
         sendHeartbeats(tick);
+        pollLeasesAndSubmitCloudlets(tick);
+        reportActiveProgress(tick);
         try {
             writeSnapshot(tick, "running");
         } catch (IOException exception) {
@@ -290,11 +322,15 @@ public final class HuaweiDciTianjunExperiment {
 
     private void reportResults() {
         for (final var cloudlet : broker.getCloudletFinishedList()) {
+            if (reportedResultCloudletIds.contains(cloudlet.getId())) {
+                continue;
+            }
             final var task = taskByCloudletId.get(cloudlet.getId());
             final String nodeId = selectedNodeByCloudletId.get(cloudlet.getId());
             if (task == null || nodeId == null) {
                 continue;
             }
+            reportProgress(cloudlet, simulation.clock(), "finished", 1.0, "CloudSim cloudlet finished; reporting final result.");
             final double duration = Math.max(1.0, cloudlet.getFinishTime() - cloudlet.getStartTime());
             bridge.reportResult(new SimTaskResult(
                 nodeId,
@@ -306,7 +342,64 @@ public final class HuaweiDciTianjunExperiment {
                 cloudlet.isFinished() ? 0 : 1,
                 duration * nodeById.get(nodeId).costPerTick()
             ));
+            reportedResultCloudletIds.add(cloudlet.getId());
         }
+    }
+
+    private void reportActiveProgress(final double tick) {
+        for (final var cloudlet : cloudletList) {
+            if (!submittedCloudletIds.contains(cloudlet.getId()) || reportedResultCloudletIds.contains(cloudlet.getId())) {
+                continue;
+            }
+            if (cloudlet.isFinished()) {
+                continue;
+            }
+            final double start = Math.max(0.0, cloudlet.getStartTime());
+            final SimTask task = taskByCloudletId.get(cloudlet.getId());
+            if (task == null) {
+                continue;
+            }
+            final double elapsed = Math.max(0.0, tick - start);
+            final double progress = Math.min(0.98, elapsed / Math.max(1.0, task.estimatedDuration()));
+            reportProgress(cloudlet, tick, "executing", progress, "CloudSim cloudlet execution in progress.");
+        }
+    }
+
+    private void reportProgress(
+        final Cloudlet cloudlet,
+        final double tick,
+        final String stage,
+        final double progress,
+        final String message
+    ) {
+        final SimTask task = taskByCloudletId.get(cloudlet.getId());
+        final String nodeId = selectedNodeByCloudletId.get(cloudlet.getId());
+        final Vm vm = selectedVmByCloudletId.get(cloudlet.getId());
+        if (task == null || nodeId == null || vm == null || vm == Vm.NULL) {
+            return;
+        }
+        bridge.reportProgress(new SimTaskProgress(
+            nodeId,
+            task.taskId(),
+            stage,
+            cloudlet.isFinished() ? "succeeded" : "running",
+            progress,
+            message,
+            tick,
+            vm.getCpuPercentUtilization(),
+            vm.getRam().getPercentUtilization(),
+            vm.getBw().getPercentUtilization(),
+            0.0
+        ));
+    }
+
+    private Cloudlet cloudletById(final long cloudletId) {
+        for (final var cloudlet : cloudletList) {
+            if (cloudlet.getId() == cloudletId) {
+                return cloudlet;
+            }
+        }
+        return null;
     }
 
     private SimNode simNodeForVm(final Vm vm, final int index) {

@@ -17,3 +17,15 @@ src/main/resources/huawei-dci-reference.brite
 - `south`：广州/深圳，连接到 `DC3`
 
 `DC1/DC2` 遵循项目 README 中描述的公开案例抽象。`DC3` 是用于三区域实验的可复现模拟扩展，不是声称的生产网络站点。
+
+## Tianjun 租约执行链路
+
+该示例现在使用 Tianjun 控制平面的租约协议，而不是一次性批量提交调度结果：
+
+1. `HuaweiDciTianjunExperiment` 启动后注册 DCI 物理拓扑和 24 个仿真 VM 节点。
+2. 每个 Cloudlet 会转换为 Tianjun 任务并通过 `/tasks` 写入 `pending_queue`。
+3. 仿真 VM 节点持续发送 `/nodes/heartbeat`，并通过 `/leases/next` 领取待执行任务。
+4. 领取租约后，示例才把对应 Cloudlet 提交给 CloudSim Plus 执行，并通过 `/task-runs/progress` 上报阶段、进度和模拟资源利用率。
+5. Cloudlet 完成后，示例通过 `/task-runs/result` 回传最终执行结果，控制平面再写入执行记录。
+
+因此 Dashboard 拓扑页可以根据 `/report` 中的 `active_runs`、`recent_progress_events`、调度决策和节点 inventory 实时更新 DCI 路径与 Leaf/Cluster/VM 高亮。
