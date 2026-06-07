@@ -1,0 +1,109 @@
+{
+  "cluster": {
+    "name": "dci-runtime-topology",
+    "description": "Long-running DCI simulation topology for embedded or standalone Tianjun demos."
+  },
+  "time_scale": 0.08,
+  "physical_topology": {
+    "topology_id": "huawei_public_case_reference_dci_runtime_v1",
+    "topology_nodes": ["USER", "PE1", "PE2", "PE3", "Border1", "Border2", "Border3", "IPCORE", "DC1", "DC2", "DC3"],
+    "topology_edges": [
+      {"source": "USER", "target": "PE1", "propagation_delay_ms": 1.8, "bandwidth_mbps": 2000},
+      {"source": "USER", "target": "PE2", "propagation_delay_ms": 2.2, "bandwidth_mbps": 1800},
+      {"source": "USER", "target": "PE3", "propagation_delay_ms": 2.0, "bandwidth_mbps": 1900},
+      {"source": "PE1", "target": "Border1", "propagation_delay_ms": 1.4, "bandwidth_mbps": 4000},
+      {"source": "PE2", "target": "Border2", "propagation_delay_ms": 1.6, "bandwidth_mbps": 3800},
+      {"source": "PE3", "target": "Border3", "propagation_delay_ms": 1.5, "bandwidth_mbps": 3900},
+      {"source": "Border1", "target": "IPCORE", "propagation_delay_ms": 6.2, "bandwidth_mbps": 10000},
+      {"source": "Border2", "target": "IPCORE", "propagation_delay_ms": 6.5, "bandwidth_mbps": 10000},
+      {"source": "Border3", "target": "IPCORE", "propagation_delay_ms": 6.1, "bandwidth_mbps": 10000},
+      {"source": "Border1", "target": "DC1", "propagation_delay_ms": 1.2, "bandwidth_mbps": 8000},
+      {"source": "Border2", "target": "DC2", "propagation_delay_ms": 1.3, "bandwidth_mbps": 7600},
+      {"source": "Border3", "target": "DC3", "propagation_delay_ms": 1.2, "bandwidth_mbps": 7800}
+    ],
+    "compute_attachments": {
+      "dci-dc1-beijing-vm-0": "DC1",
+      "dci-dc1-beijing-vm-1": "DC1",
+      "dci-dc1-beijing-vm-2": "DC1",
+      "dci-dc1-beijing-vm-3": "DC1",
+      "dci-dc1-hangzhou-vm-0": "DC1",
+      "dci-dc1-hangzhou-vm-1": "DC1",
+      "dci-dc1-hangzhou-vm-2": "DC1",
+      "dci-dc1-hangzhou-vm-3": "DC1",
+      "dci-dc2-chengdu-vm-0": "DC2",
+      "dci-dc2-chengdu-vm-1": "DC2",
+      "dci-dc2-chengdu-vm-2": "DC2",
+      "dci-dc2-chengdu-vm-3": "DC2",
+      "dci-dc2-chongqing-vm-0": "DC2",
+      "dci-dc2-chongqing-vm-1": "DC2",
+      "dci-dc2-chongqing-vm-2": "DC2",
+      "dci-dc2-chongqing-vm-3": "DC2",
+      "dci-dc3-guangzhou-vm-0": "DC3",
+      "dci-dc3-guangzhou-vm-1": "DC3",
+      "dci-dc3-guangzhou-vm-2": "DC3",
+      "dci-dc3-guangzhou-vm-3": "DC3",
+      "dci-dc3-shenzhen-vm-0": "DC3",
+      "dci-dc3-shenzhen-vm-1": "DC3",
+      "dci-dc3-shenzhen-vm-2": "DC3",
+      "dci-dc3-shenzhen-vm-3": "DC3"
+    },
+    "provenance": {
+      "source": "Tianjun embedded runtime demo",
+      "purpose": "persistent local topology that can consume Hermes pending tasks through leases"
+    }
+  },
+  "links": [
+    {"source_region": "east", "target_region": "dc1", "latency_ms": {"p50": 2.4, "jitter": 0.5}, "bandwidth_mbps": {"p50": 3600, "jitter": 160}, "packet_loss": 0.0005, "path_reliability": 0.998},
+    {"source_region": "east", "target_region": "dc2", "latency_ms": {"p50": 16.3, "jitter": 2.1}, "bandwidth_mbps": {"p50": 2400, "jitter": 260}, "packet_loss": 0.002, "path_reliability": 0.994},
+    {"source_region": "east", "target_region": "dc3", "latency_ms": {"p50": 16.1, "jitter": 1.9}, "bandwidth_mbps": {"p50": 2600, "jitter": 240}, "packet_loss": 0.0018, "path_reliability": 0.995},
+    {"source_region": "west", "target_region": "dc1", "latency_ms": {"p50": 16.3, "jitter": 2.2}, "bandwidth_mbps": {"p50": 2300, "jitter": 280}, "packet_loss": 0.0022, "path_reliability": 0.993},
+    {"source_region": "west", "target_region": "dc2", "latency_ms": {"p50": 2.6, "jitter": 0.6}, "bandwidth_mbps": {"p50": 3500, "jitter": 170}, "packet_loss": 0.0006, "path_reliability": 0.998},
+    {"source_region": "west", "target_region": "dc3", "latency_ms": {"p50": 17.0, "jitter": 2.4}, "bandwidth_mbps": {"p50": 2200, "jitter": 300}, "packet_loss": 0.0024, "path_reliability": 0.992},
+    {"source_region": "south", "target_region": "dc1", "latency_ms": {"p50": 16.1, "jitter": 1.9}, "bandwidth_mbps": {"p50": 2600, "jitter": 240}, "packet_loss": 0.0018, "path_reliability": 0.995},
+    {"source_region": "south", "target_region": "dc2", "latency_ms": {"p50": 17.0, "jitter": 2.4}, "bandwidth_mbps": {"p50": 2200, "jitter": 300}, "packet_loss": 0.0024, "path_reliability": 0.992},
+    {"source_region": "south", "target_region": "dc3", "latency_ms": {"p50": 2.5, "jitter": 0.5}, "bandwidth_mbps": {"p50": 3550, "jitter": 165}, "packet_loss": 0.0005, "path_reliability": 0.998}
+  ],
+  "workload_profiles": {
+    "batch": {
+      "execution_time": {"base_seconds": 2, "per_cpu_second": 0.45, "per_memory_gb_second": 0.03, "per_input_gb_second": 0.2, "minimum_seconds": 2, "maximum_seconds": 36},
+      "capacity": {"qps_per_cpu": 10, "qps_per_gpu": 0},
+      "pricing": {"on_demand_per_hour": 8, "spot_per_hour": 4}
+    },
+    "batch_cpu": {
+      "execution_time": {"base_seconds": 2, "per_cpu_second": 0.45, "per_memory_gb_second": 0.03, "per_input_gb_second": 0.2, "minimum_seconds": 2, "maximum_seconds": 36},
+      "capacity": {"qps_per_cpu": 10, "qps_per_gpu": 0},
+      "pricing": {"on_demand_per_hour": 8, "spot_per_hour": 4}
+    },
+    "inference": {
+      "execution_time": {"base_seconds": 3, "per_cpu_second": 0.3, "per_gpu_second": 0.8, "per_memory_gb_second": 0.02, "minimum_seconds": 3, "maximum_seconds": 45},
+      "capacity": {"qps_per_gpu": 120, "qps_per_cpu": 12, "max_batch_size": 8},
+      "pricing": {"on_demand_per_hour": 18, "spot_per_hour": 9}
+    }
+  },
+  "nodes": [
+    {"node_id": "dci-dc1-beijing-vm-0", "region": "dc1", "location": "beijing", "service_region": "east", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "latency-sensitive"], "capacity": {"cpu": 8, "memory": 32, "gpu": 0, "storage": 120}, "cost_per_tick": 0.9, "base_reliability": 0.985, "health_score": 0.94, "performance_factors": {"batch": 1.12, "batch_cpu": 1.12, "inference": 0.95}},
+    {"node_id": "dci-dc1-beijing-vm-1", "region": "dc1", "location": "beijing", "service_region": "east", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "latency-sensitive"], "capacity": {"cpu": 8, "memory": 32, "gpu": 0, "storage": 120}, "cost_per_tick": 0.92, "base_reliability": 0.984, "health_score": 0.935, "performance_factors": {"batch": 1.08, "batch_cpu": 1.08, "inference": 0.95}},
+    {"node_id": "dci-dc1-beijing-vm-2", "region": "dc1", "location": "beijing", "service_region": "east", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 160}, "cost_per_tick": 1.05, "base_reliability": 0.982, "health_score": 0.91, "performance_factors": {"batch": 1.18, "batch_cpu": 1.18, "inference": 1.0}},
+    {"node_id": "dci-dc1-beijing-vm-3", "region": "dc1", "location": "beijing", "service_region": "east", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 160}, "cost_per_tick": 1.06, "base_reliability": 0.981, "health_score": 0.91, "performance_factors": {"batch": 1.15, "batch_cpu": 1.15, "inference": 1.0}},
+    {"node_id": "dci-dc1-hangzhou-vm-0", "region": "dc1", "location": "hangzhou", "service_region": "east", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "low-latency"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 200}, "cost_per_tick": 1.12, "base_reliability": 0.983, "health_score": 0.891, "performance_factors": {"batch": 1.24, "batch_cpu": 1.24, "inference": 1.05}},
+    {"node_id": "dci-dc1-hangzhou-vm-1", "region": "dc1", "location": "hangzhou", "service_region": "east", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "low-latency"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 200}, "cost_per_tick": 1.1, "base_reliability": 0.984, "health_score": 0.899, "performance_factors": {"batch": 1.28, "batch_cpu": 1.28, "inference": 1.05}},
+    {"node_id": "dci-dc1-hangzhou-vm-2", "region": "dc1", "location": "hangzhou", "service_region": "east", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "low-latency"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 1.0, "base_reliability": 0.982, "health_score": 0.889, "performance_factors": {"batch": 1.2, "batch_cpu": 1.2, "inference": 1.02}},
+    {"node_id": "dci-dc1-hangzhou-vm-3", "region": "dc1", "location": "hangzhou", "service_region": "east", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "low-latency"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 1.01, "base_reliability": 0.981, "health_score": 0.877, "performance_factors": {"batch": 1.16, "batch_cpu": 1.16, "inference": 1.0}},
+    {"node_id": "dci-dc2-chengdu-vm-0", "region": "dc2", "location": "chengdu", "service_region": "west", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 0.96, "base_reliability": 0.982, "health_score": 0.902, "performance_factors": {"batch": 1.1, "batch_cpu": 1.1, "inference": 0.98}},
+    {"node_id": "dci-dc2-chengdu-vm-1", "region": "dc2", "location": "chengdu", "service_region": "west", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 0.95, "base_reliability": 0.983, "health_score": 0.922, "performance_factors": {"batch": 1.12, "batch_cpu": 1.12, "inference": 0.98}},
+    {"node_id": "dci-dc2-chengdu-vm-2", "region": "dc2", "location": "chengdu", "service_region": "west", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 220}, "cost_per_tick": 1.08, "base_reliability": 0.984, "health_score": 0.926, "performance_factors": {"batch": 1.2, "batch_cpu": 1.2, "inference": 1.0}},
+    {"node_id": "dci-dc2-chengdu-vm-3", "region": "dc2", "location": "chengdu", "service_region": "west", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 220}, "cost_per_tick": 1.09, "base_reliability": 0.985, "health_score": 0.944, "performance_factors": {"batch": 1.22, "batch_cpu": 1.22, "inference": 1.0}},
+    {"node_id": "dci-dc2-chongqing-vm-0", "region": "dc2", "location": "chongqing", "service_region": "west", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "reliable"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 220}, "cost_per_tick": 1.07, "base_reliability": 0.986, "health_score": 0.953, "performance_factors": {"batch": 1.2, "batch_cpu": 1.2, "inference": 1.0}},
+    {"node_id": "dci-dc2-chongqing-vm-1", "region": "dc2", "location": "chongqing", "service_region": "west", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "reliable"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 220}, "cost_per_tick": 1.07, "base_reliability": 0.987, "health_score": 0.959, "performance_factors": {"batch": 1.22, "batch_cpu": 1.22, "inference": 1.0}},
+    {"node_id": "dci-dc2-chongqing-vm-2", "region": "dc2", "location": "chongqing", "service_region": "west", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "reliable"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 0.98, "base_reliability": 0.986, "health_score": 0.957, "performance_factors": {"batch": 1.14, "batch_cpu": 1.14, "inference": 0.98}},
+    {"node_id": "dci-dc2-chongqing-vm-3", "region": "dc2", "location": "chongqing", "service_region": "west", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "reliable"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 0.99, "base_reliability": 0.987, "health_score": 0.96, "performance_factors": {"batch": 1.16, "batch_cpu": 1.16, "inference": 0.98}},
+    {"node_id": "dci-dc3-guangzhou-vm-0", "region": "dc3", "location": "guangzhou", "service_region": "south", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 220}, "cost_per_tick": 1.05, "base_reliability": 0.985, "health_score": 0.95, "performance_factors": {"batch": 1.18, "batch_cpu": 1.18, "inference": 1.0}},
+    {"node_id": "dci-dc3-guangzhou-vm-1", "region": "dc3", "location": "guangzhou", "service_region": "south", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 220}, "cost_per_tick": 1.05, "base_reliability": 0.984, "health_score": 0.947, "performance_factors": {"batch": 1.16, "batch_cpu": 1.16, "inference": 1.0}},
+    {"node_id": "dci-dc3-guangzhou-vm-2", "region": "dc3", "location": "guangzhou", "service_region": "south", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 0.97, "base_reliability": 0.982, "health_score": 0.93, "performance_factors": {"batch": 1.1, "batch_cpu": 1.1, "inference": 0.98}},
+    {"node_id": "dci-dc3-guangzhou-vm-3", "region": "dc3", "location": "guangzhou", "service_region": "south", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 0.98, "base_reliability": 0.981, "health_score": 0.917, "performance_factors": {"batch": 1.08, "batch_cpu": 1.08, "inference": 0.98}},
+    {"node_id": "dci-dc3-shenzhen-vm-0", "region": "dc3", "location": "shenzhen", "service_region": "south", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "low-latency"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 220}, "cost_per_tick": 1.08, "base_reliability": 0.983, "health_score": 0.905, "performance_factors": {"batch": 1.2, "batch_cpu": 1.2, "inference": 1.02}},
+    {"node_id": "dci-dc3-shenzhen-vm-1", "region": "dc3", "location": "shenzhen", "service_region": "south", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "low-latency"], "capacity": {"cpu": 16, "memory": 64, "gpu": 0, "storage": 220}, "cost_per_tick": 1.08, "base_reliability": 0.982, "health_score": 0.895, "performance_factors": {"batch": 1.18, "batch_cpu": 1.18, "inference": 1.02}},
+    {"node_id": "dci-dc3-shenzhen-vm-2", "region": "dc3", "location": "shenzhen", "service_region": "south", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "low-latency"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 1.0, "base_reliability": 0.981, "health_score": 0.888, "performance_factors": {"batch": 1.1, "batch_cpu": 1.1, "inference": 1.0}},
+    {"node_id": "dci-dc3-shenzhen-vm-3", "region": "dc3", "location": "shenzhen", "service_region": "south", "labels": ["dci", "cloudsim", "cloudsimplus", "cpu", "low-latency"], "capacity": {"cpu": 12, "memory": 48, "gpu": 0, "storage": 180}, "cost_per_tick": 1.01, "base_reliability": 0.981, "health_score": 0.886, "performance_factors": {"batch": 1.08, "batch_cpu": 1.08, "inference": 1.0}}
+  ]
+}

@@ -17,6 +17,9 @@ class DirectControlPlaneClient:
     def register_node(self, node: Node) -> dict[str, Any]:
         return self.control_plane.register_node(node_from_dict(node.to_dict()))
 
+    def register_topology(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.control_plane.register_topology(payload)
+
     def submit_task(self, task: Task) -> dict[str, Any]:
         return self.control_plane.submit_task(task_from_dict(task.to_dict()))
 
@@ -71,6 +74,9 @@ class HttpControlPlaneClient:
 
     def register_node(self, node: Node) -> dict[str, Any]:
         return self._post_json("/nodes/register", node.to_dict())
+
+    def register_topology(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._post_json("/topology/register", payload)
 
     def submit_task(self, task: Task) -> dict[str, Any]:
         return self._post_json("/tasks", task.to_dict())

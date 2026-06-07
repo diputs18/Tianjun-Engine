@@ -20,7 +20,7 @@ from tianjun.execution.runtime_demo import run_runtime_demo
 from tianjun.scenarios import load_scenario_payload, node_from_dict, task_from_dict
 from tianjun.domain import ExecutionMode
 from tianjun.inventory import load_inventory_config
-from tianjun.simulation import run_simulation_backend
+from tianjun.simulation import BackgroundSimulationBackend, run_simulation_backend
 
 
 def add_llm_options(parser: argparse.ArgumentParser) -> None:
@@ -145,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--scenario", type=Path, help="Optional demo scenario to preload. Omitted by default for a clean control plane.")
     serve.add_argument("--demo", action="store_true", help="Preload examples/runtime_scenario.json demo nodes and tasks.")
     serve.add_argument("--inventory", type=Path, help="Config-driven simulated inventory JSON/TOML/YAML to register at startup.")
+    serve.add_argument("--auto-sim-backend", action="store_true", help="Start an embedded long-running simulation backend with --inventory.")
+    serve.add_argument("--sim-node-id", action="append", help="Limit embedded simulation backend to one node id; repeat to include multiple nodes.")
+    serve.add_argument("--sim-poll-interval", type=float, help="Embedded simulation backend poll interval in seconds.")
+    serve.add_argument("--sim-time-scale", type=float, help="Embedded simulation acceleration factor. Smaller is faster.")
+    serve.add_argument("--sim-verbose", action="store_true", help="Print concise embedded simulation backend logs.")
     serve.add_argument("--default-execution-mode", choices=[item.value for item in ExecutionMode], help="Default execution mode for chat/policy-generated tasks when no explicit execution payload is provided.")
     serve.add_argument("--state-db", type=Path)
     serve.add_argument("--heartbeat-timeout-seconds", type=float)
@@ -305,11 +310,17 @@ def main() -> None:
         default_execution_mode = first_present(args.default_execution_mode, app_config.get("server.default_execution_mode"), app_config.get("simulation.default_execution_mode"))
         if default_execution_mode:
             control_plane.policy_generator.default_execution_mode = ExecutionMode(str(default_execution_mode))
+        auto_sim_backend = bool(
+            args.auto_sim_backend
+            or config_bool(app_config.get("simulation.auto_start"), default=False)
+            or config_bool(app_config.get("server.auto_sim_backend"), default=False)
+        )
+        if auto_sim_backend and inventory is None:
+            inventory = config_path("configs/dci_runtime_topology.example.json")
         if inventory:
-            # Validate the inventory path/configuration, but do not register its
-            # nodes here. The dashboard should discover resources only after the
-            # CloudSimPlus/simulation backend reports them.
-            load_inventory_config(inventory)
+            inventory_config = load_inventory_config(inventory)
+        else:
+            inventory_config = None
         if scenario and not control_plane.tasks:
             payload = load_scenario_payload(scenario)
             for node_data in payload.get("nodes", []):
@@ -318,13 +329,46 @@ def main() -> None:
                 control_plane.submit_task(task_from_dict(task_data))
         chat_runtime = ChatRuntime.with_llm_settings(control_plane, resolved_llm_settings(args, app_config))
         server = build_http_server(control_plane, host, port, chat_runtime=chat_runtime)
+        background_sim: BackgroundSimulationBackend | None = None
+        if auto_sim_backend:
+            if inventory_config is None:
+                raise ValueError("embedded simulation backend requires --inventory or simulation.inventory.")
+            configured_node_ids = app_config.get("simulation.node_ids")
+            if isinstance(configured_node_ids, str):
+                configured_node_ids = [item.strip() for item in configured_node_ids.split(",") if item.strip()]
+
+            def sim_log(message: str) -> None:
+                if args.sim_verbose or config_bool(app_config.get("simulation.verbose"), default=False):
+                    print(f"[sim] {message}", flush=True)
+
+            background_sim = BackgroundSimulationBackend(
+                config=inventory_config,
+                control_plane=control_plane,
+                node_ids=args.sim_node_id or configured_node_ids,
+                poll_interval_seconds=float(first_present(
+                    args.sim_poll_interval,
+                    app_config.get("simulation.poll_interval_seconds"),
+                    default=1.0,
+                )),
+                time_scale=float(first_present(
+                    args.sim_time_scale,
+                    app_config.get("simulation.time_scale"),
+                    default=0.08,
+                )),
+                log=sim_log,
+            )
+            background_sim.start()
         print(f"Control plane listening on http://{host}:{port}")
         print(f"Dashboard available at http://{host}:{port}/dashboard")
+        if background_sim is not None:
+            print(f"Embedded simulation backend active with {len(background_sim.node_ids)} nodes.")
         try:
             server.serve_forever()
         except KeyboardInterrupt:
             pass
         finally:
+            if background_sim is not None:
+                background_sim.stop()
             server.server_close()
             if state_store is not None:
                 state_store.close()

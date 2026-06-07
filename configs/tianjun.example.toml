@@ -51,6 +51,14 @@ server = "http://127.0.0.1:8024"
 max_cycles = 30
 poll_interval_seconds = 1.0
 
+[simulation]
+server = "http://127.0.0.1:8024"
+inventory = "${TIANJUN_HOME}/configs/dci_runtime_topology.example.json"
+auto_start = false
+poll_interval_seconds = 1.0
+time_scale = 0.08
+verbose = false
+
 [real_agent]
 server = "http://127.0.0.1:8024"
 node_config = "${TIANJUN_HOME}/examples/real_node_agent.example.json"

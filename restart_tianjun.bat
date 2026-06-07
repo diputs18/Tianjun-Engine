@@ -37,8 +37,8 @@ if errorlevel 1 (
 
 echo Starting Tianjun Engine control plane...
 echo Dashboard: %URL%
-echo Starting control plane...
-start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --default-execution-mode simulation --host %HOST% --port %PORT%
+echo Starting control plane with embedded DCI simulation backend...
+start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%CONFIG%" --default-execution-mode simulation --host %HOST% --port %PORT% --auto-sim-backend
 
 echo Waiting for control plane health check...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -52,6 +52,5 @@ if errorlevel 1 (
 start "" "%URL%"
 
 echo Tianjun Engine control plane is running in a separate window.
-echo No simulated nodes are started automatically.
-echo Start CloudSim Plus, sim-backend, or a node agent manually when you want nodes to appear.
+echo Embedded DCI simulated nodes are running and will pull pending tasks automatically.
 pause

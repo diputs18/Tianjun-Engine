@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import time
+from threading import Event, Thread
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from ..application.control_plane import CentralControlPlane
 from ..domain import Node, Task
 from ..execution.executors import ExecutionResult, ExecutorRegistry
 from ..inventory import load_inventory_config, nodes_from_inventory
-from ..node_agent.clients import HttpControlPlaneClient
+from ..node_agent.clients import DirectControlPlaneClient, HttpControlPlaneClient
 from ..scenarios import task_from_dict
 
 LogFn = Callable[[str], None]
@@ -246,6 +248,78 @@ class SimulatedNodeRuntime:
         return normalized
 
 
+def _register_topology_if_present(client: Any, config: dict[str, Any], log: LogFn) -> None:
+    topology = config.get("physical_topology") or config.get("topology")
+    if not isinstance(topology, dict):
+        return
+    client.register_topology(topology)
+    log(f"topology online: {topology.get('topology_id', 'physical_topology')}")
+
+
+class BackgroundSimulationBackend:
+    """Embedded simulation backend for one-process demos.
+
+    The control plane remains authoritative. This background runtime only acts
+    like a group of simulated node agents: register topology/nodes, heartbeat,
+    pull leases and report task progress/results.
+    """
+
+    def __init__(
+        self,
+        *,
+        config: dict[str, Any],
+        control_plane: CentralControlPlane,
+        node_ids: list[str] | None = None,
+        poll_interval_seconds: float = 1.0,
+        time_scale: float | None = None,
+        log: LogFn | None = None,
+    ) -> None:
+        wanted = set(node_ids or [])
+        nodes = [node for node in nodes_from_inventory(config) if not wanted or node.node_id in wanted]
+        if not nodes:
+            raise ValueError("background simulation backend has no nodes to register; check config or node filters.")
+        self.config = config
+        self.client = DirectControlPlaneClient(control_plane)
+        self.runtime = SimulatedNodeRuntime(
+            nodes=nodes,
+            client=self.client,
+            executors=ExecutorRegistry(simulation_config=config),
+            poll_interval_seconds=poll_interval_seconds,
+            time_scale=float(time_scale if time_scale is not None else config.get("time_scale", 0.08)),
+            log=log or (lambda message: None),
+        )
+        self.poll_interval_seconds = poll_interval_seconds
+        self.log = log or (lambda message: None)
+        self._stop = Event()
+        self._thread: Thread | None = None
+
+    @property
+    def node_ids(self) -> list[str]:
+        return [node.node_id for node in self.runtime.nodes]
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        _register_topology_if_present(self.client, self.config, self.log)
+        self.runtime.register_nodes()
+        self._thread = Thread(target=self._run, name="tianjun-background-sim", daemon=True)
+        self._thread.start()
+        self.log(f"background simulation backend running with {len(self.node_ids)} nodes")
+
+    def stop(self, timeout: float = 5.0) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=timeout)
+
+    def _run(self) -> None:
+        try:
+            while not self._stop.is_set():
+                self.runtime.tick()
+                self._stop.wait(max(0.0, self.poll_interval_seconds))
+        finally:
+            self.runtime.mark_nodes_offline()
+
+
 def run_simulation_backend(
     *,
     config_path: str | Path,
@@ -272,6 +346,7 @@ def run_simulation_backend(
             print(f"[sim] {message}", flush=True)
 
     client = HttpControlPlaneClient(server)
+    _register_topology_if_present(client, config, log)
     runtime = SimulatedNodeRuntime(
         nodes=nodes,
         client=client,
