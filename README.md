@@ -59,9 +59,25 @@ Invoke-RestMethod http://127.0.0.1:8024/health
 Invoke-RestMethod http://127.0.0.1:8024/report
 ```
 
-### 4. 可选：启动模拟节点后端
+### 4. 启动 Java CloudSimPlus 仿真节点
 
-在第二个终端运行：
+标准演示链路推荐使用 Java CloudSimPlus 仿真节点，而不是 Python `sim-backend`。CloudSimPlus 桥接器和参考实验位于 `examples/cloudsimplus/`：
+
+```text
+examples/cloudsimplus/src/main/java/org/cloudsimplus/examples/HuaweiDciTianjunExperiment.java
+examples/cloudsimplus/src/main/java/org/cloudsimplus/examples/tianjun/TianjunHttpBridge.java
+examples/cloudsimplus/src/main/resources/huawei-dci-reference.brite
+```
+
+将这些文件放入本地 CloudSim Plus Examples 工程对应路径后运行实验，并把 Tianjun 控制平面地址作为第一个参数传入：
+
+```powershell
+java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 normal
+```
+
+该实验会创建 24 个仿真 VM，注册 DCI 拓扑和节点，持续发送心跳，通过 Tianjun 控制平面提交调度任务，并在 CloudSimPlus 仿真完成后回传执行结果。
+
+Python `sim-backend` 只保留为开发调试用的轻量后备入口，不作为标准演示启动方式，也不会被 `tianjun.bat start` 自动启动。确需本地快速调试租约链路时，可在单独终端手动运行：
 
 ```powershell
 python -B main.py sim-backend `
@@ -71,11 +87,7 @@ python -B main.py sim-backend `
   --verbose
 ```
 
-`sim-backend` 是本地轻量演示后端，需要手动启动。它会注册多地域 CPU/GPU 模拟节点，持续发送心跳、轮询 `/leases/next`，并在收到任务租约后通过 `/task-runs/progress` 和 `/task-runs/result` 上报执行进度与结果。停止该进程时，模拟节点会主动上报离线状态。
-
-CloudSimPlus 桥接器和参考实验位于 `examples/cloudsimplus/`，与 Python `sim-backend` 是两条不同接入路径：前者用于 Java 仿真实验与 DCI 数据生成，后者用于快速本地演示控制平面租约链路。
-
-如果只想短跑验证，可加 `--max-cycles 3`：
+如果只想短跑验证 Python 后备入口，可加 `--max-cycles 3`：
 
 ```powershell
 python -B main.py sim-backend `
