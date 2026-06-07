@@ -18,6 +18,35 @@
   padding-bottom: 2px;
 }
 
+.path-metrics {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.path-metric-card {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0.5px solid rgba(14, 165, 233, .2);
+  border-radius: 8px;
+  background: rgba(240, 249, 255, .76);
+}
+
+.path-metric-card span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-gray-400);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.path-metric-card b {
+  display: block;
+  color: #075985;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
 .network-topology-shell {
   width: 100%;
   min-width: 820px;
@@ -1158,6 +1187,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .path-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .topology-layout > aside {
     min-height: auto;
   }
@@ -1173,5 +1206,11 @@
   .topology-map-card,
   .topology-canvas {
     overflow-x: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .path-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

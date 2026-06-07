@@ -4,14 +4,51 @@ let activeTopologyKey = "global";
 let selectedDetail = null;
 let resizeHandler = null;
 let latestTopologyReport = null;
+let livePathContext = null;
 
 const schedulerStatus = {
   task: "inference-task-027",
   source: "User-Access",
-  target: "DC2 / 深圳资源区",
+  target: "DC2 / 成都资源区",
   strategy: "延迟优先 + 负载均衡",
   link: "正常",
   gnn: "0.91",
+};
+
+const dcZoneModel = {
+  dc1: {
+    dcName: "DC1",
+    region: "东部",
+    border: "Border1",
+    pe: "PE1",
+    gateway: "DC1-GW",
+    zones: {
+      beijing: { side: "left", leaf: "leaf-a", cluster: "cluster-a", label: "北京资源区", clusterName: "北京计算集群" },
+      hangzhou: { side: "right", leaf: "leaf-c", cluster: "cluster-b", label: "杭州资源区", clusterName: "杭州计算集群" },
+    },
+  },
+  dc2: {
+    dcName: "DC2",
+    region: "西部",
+    border: "Border2",
+    pe: "PE2",
+    gateway: "DC2-GW",
+    zones: {
+      chengdu: { side: "left", leaf: "leaf-a", cluster: "cluster-a", label: "成都资源区", clusterName: "成都计算集群" },
+      chongqing: { side: "right", leaf: "leaf-c", cluster: "cluster-b", label: "重庆资源区", clusterName: "重庆计算集群" },
+    },
+  },
+  dc3: {
+    dcName: "DC3",
+    region: "华南",
+    border: "Border3",
+    pe: "PE3",
+    gateway: "DC3-GW",
+    zones: {
+      guangzhou: { side: "left", leaf: "leaf-a", cluster: "cluster-a", label: "广州资源区", clusterName: "广州计算集群" },
+      shenzhen: { side: "right", leaf: "leaf-c", cluster: "cluster-b", label: "深圳资源区", clusterName: "深圳计算集群" },
+    },
+  },
 };
 
 const globalTopology = {
@@ -31,15 +68,15 @@ const globalTopology = {
   nodes: [
     node("user-access", "User-Access", "用户业务接入点", "access", "access", 50, 10, "业务请求入口与调度流量接入", "3ms · 10Gbps", "正常"),
     node("border1", "Border1", "DC1 侧出口路由", "border", "border", 23, 27, "东部数据中心边界出口", "40Gbps · 0.5~0.7ms", "正常"),
-    node("border2", "Border2", "DC2 侧入口路由", "border", "border", 72, 27, "华南数据中心边界入口", "40Gbps · 0.5~0.7ms", "正常"),
+    node("border2", "Border2", "DC2 侧入口路由", "border", "border", 72, 27, "西部数据中心边界入口", "40Gbps · 0.5~0.7ms", "正常"),
     node("pe1", "PE1", "DC1 侧 MPLS VPN 边缘", "pe", "pe", 23, 44, "Provider Edge 边缘路由器", "40Gbps", "正常"),
     node("pe3", "PE3（枢纽）", "DC2/DC3 侧 VPN + 分叉", "pe", "pe", 72, 44, "跨域 VPN 枢纽与分支调度入口", "20Gbps", "正常"),
     node("p-core-a", "P-Core-A", "MPLS 标签交换 · 6ms", "core", "core", 40, 61, "Provider Core 骨干路由器", "10Gbps · 6ms", "正常"),
     node("p-core-b", "P-Core-B", "MPLS 标签交换 · 6ms", "core", "core", 58, 61, "Provider Core 骨干路由器", "10Gbps · 6ms", "拥塞"),
     node("dc1", "DC1（东部）", "北京 · 杭州 · 8 节点", "dc", "dc", 23, 82, "东部资源池，可下钻查看内部调度资源", "40Gbps · 0.5~0.7ms", "正常", "dc1", { region: "东部", zones: 2, vmTotal: 8, avgCpu: 42, tasks: 14, scheduleState: "可调度" }),
-    node("dc2", "DC2（华南）", "广州 · 深圳 · 8 节点", "dc", "dc", 72, 82, "华南资源池，可下钻查看内部调度资源", "40Gbps", "正常", "dc2", { region: "华南", zones: 2, vmTotal: 8, avgCpu: 58, tasks: 18, scheduleState: "调度中" }),
-    node("border3", "Border3", "DC3 分支边界 · 1.0ms", "border", "border", 87, 61, "西部数据中心分支入口路由", "1.0ms", "正常"),
-    node("dc3", "DC3（西部）", "成都 · 重庆 · 8 节点", "dc", "dc", 87, 82, "西部资源池，可下钻查看内部调度资源", "分支链路 · Border3 1.0ms", "正常", "dc3", { region: "西部", zones: 2, vmTotal: 8, avgCpu: 47, tasks: 13, scheduleState: "可调度" }),
+    node("dc2", "DC2（西部）", "成都 · 重庆 · 8 节点", "dc", "dc", 72, 82, "西部资源池，可下钻查看内部调度资源", "40Gbps", "正常", "dc2", { region: "西部", zones: 2, vmTotal: 8, avgCpu: 58, tasks: 18, scheduleState: "调度中" }),
+    node("border3", "Border3", "DC3 分支边界 · 1.0ms", "border", "border", 87, 61, "华南数据中心分支入口路由", "1.0ms", "正常"),
+    node("dc3", "DC3（华南）", "广州 · 深圳 · 8 节点", "dc", "dc", 87, 82, "华南资源池，可下钻查看内部调度资源", "分支链路 · Border3 1.0ms", "正常", "dc3", { region: "华南", zones: 2, vmTotal: 8, avgCpu: 47, tasks: 13, scheduleState: "可调度" }),
   ],
   links: [
     link("user-access", "pe3", "access", "3ms · 10Gbps", "接入链路", { showLabel: true, labelAnchor: "mid" }),
@@ -51,7 +88,7 @@ const globalTopology = {
     link("pe3", "border2", "main", "20Gbps · 1.2ms", "PE 到边界主链路", { showLabel: false }),
     link("border2", "dc2", "main", "40Gbps · 0.5~0.7ms", "DC 出入口链路", { showLabel: true, labelAnchor: "right" }),
     link("pe3", "border3", "branch", "Border3 · 1.0ms", "DC3 分支链路", { showLabel: false }),
-    link("border3", "dc3", "branch", "分支链路", "西部数据中心分支链路", { showLabel: false }),
+    link("border3", "dc3", "branch", "分支链路", "华南数据中心分支链路", { showLabel: false }),
   ],
   footer: [
     "点击任意数据中心可查看内部节点",
@@ -86,36 +123,36 @@ const dcTopologies = {
     key: "dc2",
     dcName: "DC2",
     title: "DC2 数据中心内部拓扑",
-    subtitle: "华南数据中心 Spine-Leaf Fabric 与服务支撑拓扑",
-    region: "华南",
+    subtitle: "西部数据中心 Spine-Leaf Fabric 与服务支撑拓扑",
+    region: "西部",
     border: "Border2",
-    pe: "PE3",
+    pe: "PE2",
     gateway: "DC2-GW",
     zones: [
-      zone("guangzhou", "广州资源区", ["Leaf-GZ-1", "Leaf-GZ-2"], "广州计算集群", "高负载", "congested", 76, 68, 13),
-      zone("shenzhen", "深圳资源区", ["Leaf-SZ-1", "Leaf-SZ-2"], "深圳计算集群", "正在调度", "scheduling", 39, 48, 5),
+      zone("chengdu", "成都资源区", ["Leaf-CD-1", "Leaf-CD-2"], "成都计算集群", "正在调度", "scheduling", 58, 51, 9),
+      zone("chongqing", "重庆资源区", ["Leaf-CQ-1", "Leaf-CQ-2"], "重庆计算集群", "可调度", "ok", 34, 45, 4),
     ],
-    path: "User-Access → DC2 → 深圳计算集群 / VM-02",
-    internalPath: "DC2-GW → Spine-A → Fabric Bus → Leaf-SZ-1 → 深圳计算集群 → VM-02",
-    routeLeaf: "leaf-c",
-    routeCluster: "cluster-b",
+    path: "User-Access → DC2 → 成都计算集群 / VM-02",
+    internalPath: "DC2-GW → Spine-A → Fabric Bus → Leaf-CD-1 → 成都计算集群 → VM-02",
+    routeLeaf: "leaf-a",
+    routeCluster: "cluster-a",
     routeVm: "VM-02",
   }),
   dc3: makeDcTopology({
     key: "dc3",
     dcName: "DC3",
     title: "DC3 数据中心内部拓扑",
-    subtitle: "西部数据中心 Spine-Leaf Fabric 与服务支撑拓扑",
-    region: "西部",
+    subtitle: "华南数据中心 Spine-Leaf Fabric 与服务支撑拓扑",
+    region: "华南",
     border: "Border3",
     pe: "PE3",
     gateway: "DC3-GW",
     zones: [
-      zone("chengdu", "成都资源区", ["Leaf-CD-1", "Leaf-CD-2"], "成都计算集群", "正在调度", "scheduling", 58, 51, 9),
-      zone("chongqing", "重庆资源区", ["Leaf-CQ-1", "Leaf-CQ-2"], "重庆计算集群", "可调度", "ok", 34, 45, 4),
+      zone("guangzhou", "广州资源区", ["Leaf-GZ-1", "Leaf-GZ-2"], "广州计算集群", "高负载", "congested", 76, 68, 13),
+      zone("shenzhen", "深圳资源区", ["Leaf-SZ-1", "Leaf-SZ-2"], "深圳计算集群", "正在调度", "scheduling", 39, 48, 5),
     ],
-    path: "User-Access → DC3 → 成都计算集群 / VM-02",
-    internalPath: "DC3-GW → Spine-A → Fabric Bus → Leaf-CD-1 → 成都计算集群 → VM-02",
+    path: "User-Access → DC3 → 广州计算集群 / VM-02",
+    internalPath: "DC3-GW → Spine-A → Fabric Bus → Leaf-GZ-1 → 广州计算集群 → VM-02",
     routeLeaf: "leaf-a",
     routeCluster: "cluster-a",
     routeVm: "VM-02",
@@ -160,7 +197,7 @@ function normalizeGlobalTopology() {
     link("border2", "pe2", "main", "40Gbps · 0.5~0.7ms", "出口 B 到 PE2", { showLabel: false }),
     link("pe2", "dc2", "main", "40Gbps · 0.5~0.7ms", "PE2 到 DC2 资源池", { showLabel: true, labelAnchor: "right" }),
     link("border3", "pe3", "main", "40Gbps · 0.5~0.7ms", "分支出口到 PE3", { showLabel: false }),
-    link("pe3", "dc3", "main", "40Gbps", "PE3 到 DC3 西部资源池", { showLabel: false }),
+    link("pe3", "dc3", "main", "40Gbps", "PE3 到 DC3 华南资源池", { showLabel: false }),
     link("pe1", "pe2", "main", "VPN 互联", "PE1 与 PE2 跨域 VPN 互联", { showLabel: true, labelAnchor: "below" }),
     link("pe2", "pe3", "main", "VPN 分支互联", "PE2 与 PE3 分支 VPN 互联", { showLabel: true, labelAnchor: "below" }),
   ];
@@ -259,11 +296,225 @@ function makeDcTopology(config) {
   };
 }
 
+function updateLiveTopology(report) {
+  livePathContext = buildLivePathContext(report);
+  if (!livePathContext) return;
+
+  schedulerStatus.task = livePathContext.taskId;
+  schedulerStatus.source = livePathContext.source;
+  schedulerStatus.target = livePathContext.targetLabel;
+  schedulerStatus.strategy = livePathContext.strategy;
+  schedulerStatus.link = livePathContext.linkStatus;
+  schedulerStatus.gnn = livePathContext.gnn;
+
+  const targetRoute = globalRouteForTargetDc(livePathContext.dcKey);
+  globalTopology.currentRoute = targetRoute.nodes;
+  globalTopology.currentPathText = livePathContext.globalPathText;
+  globalTopology.footer = [
+    `实时来源：${livePathContext.sourceKind} / tick ${livePathContext.tick ?? "--"}`,
+    `目标节点：${livePathContext.nodeId}`,
+    `链路画像：${livePathContext.latencyText} / 风险 ${livePathContext.riskText}`,
+  ];
+
+  const dcTopology = dcTopologies[livePathContext.dcKey];
+  if (!dcTopology) return;
+  dcTopology.routeLeaf = livePathContext.leafId;
+  dcTopology.routeCluster = livePathContext.clusterId;
+  dcTopology.routeVm = livePathContext.vmName;
+  dcTopology.vmId = livePathContext.vmId;
+  dcTopology.currentPath = livePathContext.globalPathText.replace("实时调度路径：", "");
+  dcTopology.internalPath = `${dcTopology.nodes.find((item) => item.id === "gw")?.name ?? dcTopology.dcName} → Spine-A → Fabric Bus → ${livePathContext.leafLabel} → ${livePathContext.clusterName} → ${livePathContext.vmName}`;
+  dcTopology.currentRoute = ["gw", "spine-a", "fabric-bus", livePathContext.leafId, livePathContext.clusterId, livePathContext.vmId];
+  dcTopology.footer = [
+    `当前路径：${dcTopology.internalPath}`,
+    `实时任务：${livePathContext.taskId} / 阶段 ${livePathContext.stage}`,
+    `路径指标：${livePathContext.latencyText} / ${livePathContext.bandwidthText} / 稳定性 ${livePathContext.gnn}`,
+  ];
+  dcTopology.zones = dcTopology.zones.map((zoneInfo) => {
+    const matching = livePathContext.zoneLabel === zoneInfo.name;
+    return {
+      ...zoneInfo,
+      scheduleState: matching ? livePathContext.zoneState : zoneInfo.scheduleState,
+      status: matching ? livePathContext.zoneStatus : zoneInfo.status,
+      tasks: livePathContext.zoneTaskCounts.get(zoneInfo.id) ?? zoneInfo.tasks,
+      cpu: livePathContext.zoneCpu.get(zoneInfo.id) ?? zoneInfo.cpu,
+      memory: livePathContext.zoneMemory.get(zoneInfo.id) ?? zoneInfo.memory,
+    };
+  });
+  for (const item of dcTopology.nodes) {
+    if (item.id === livePathContext.clusterId && item.metrics) {
+      item.metrics = dcTopology.zones.find((zoneInfo) => zoneInfo.name === livePathContext.zoneLabel) ?? item.metrics;
+      item.status = livePathContext.zoneState;
+      item.health = livePathContext.zoneStatus;
+    }
+    if (item.id === "scheduler" && item.scheduler) {
+      item.scheduler.latestPath = livePathContext.globalPathText.replace("实时调度路径：", "");
+      item.scheduler.gnnScore = livePathContext.gnn;
+      item.scheduler.assignedTasks = Number(report?.totals?.running ?? 0) + Number(report?.totals?.pending ?? 0);
+      item.scheduler.avoidance = livePathContext.linkStatus === "拥塞" ? "正在规避高风险链路" : "当前路径风险可控";
+    }
+  }
+}
+
+function buildLivePathContext(report) {
+  if (!report) return null;
+  const nodes = Array.isArray(report.nodes) ? report.nodes : [];
+  const nodeByNodeId = new Map(nodes.map((nodeItem) => [nodeItem.node_id, nodeItem]));
+  const active = latestBy([...(report.active_runs ?? [])], "updated_at") ?? latestBy([...(report.active_runs ?? [])], "tick");
+  const progressEvents = [...(report.recent_progress_events ?? [])];
+  const progressCandidate = active
+    ? (latestBy(progressEvents.filter((item) => item.task_id === active.task_id), "updated_at") ?? latestBy(progressEvents.filter((item) => item.task_id === active.task_id), "tick"))
+    : (latestBy(progressEvents, "updated_at") ?? latestBy(progressEvents, "tick"));
+  const progress = active
+    ? progressCandidate
+    : (Number(progressCandidate?.tick ?? -1) >= Number(report.tick ?? 0) - 2 ? progressCandidate : null);
+  const decision = latestBy([...(report.recent_decisions ?? [])], "tick");
+  const record = [...(report.execution_records ?? report.recent_records ?? [])].at(-1);
+  const pending = [...(report.pending_task_queue ?? [])].at(-1);
+  const source = active ? "active_run" : progress ? "progress" : decision ? "decision" : record ? "record" : pending ? "pending" : "inventory";
+  const payload = active ?? progress ?? decision ?? record ?? pending ?? {};
+  const task = payload.task ?? pending ?? {};
+  const nodeId = payload.node_id ?? payload.target_node_id ?? task.target_node_id ?? task.last_scheduled_node ?? firstOnlineNodeId(nodes);
+  const node = nodeByNodeId.get(nodeId) ?? {};
+  const parsed = parseDciNode(nodeId, node);
+  if (!parsed.dcKey) return null;
+  const zoneModel = dcZoneModel[parsed.dcKey]?.zones?.[parsed.location] ?? firstZoneModel(parsed.dcKey);
+  const vmNumber = parsed.vmIndex == null ? 2 : parsed.vmIndex + 1;
+  const vmName = `VM-${String(vmNumber).padStart(2, "0")}`;
+  const vmId = `${zoneModel.cluster}-vm-${String(vmNumber).padStart(2, "0")}`;
+  const snapshot = payload.network_snapshot ?? decision?.network_snapshot ?? {};
+  const latency = firstNumber(snapshot.deterministic_latency_ms, snapshot.stable_latency_ms, snapshot.robust_latency_ms, payload.network_delay_ticks, payload.metrics?.network_latency_ms);
+  const risk = firstNumber(snapshot.uncertainty, payload.network_risk);
+  const bandwidth = firstNumber(snapshot.guaranteed_bandwidth_mbps, payload.effective_bandwidth_mbps);
+  const gnn = firstNumber(snapshot.gnn_stability_score, snapshot.feature_fusion_score, snapshot.model_prediction?.gnn_stability_score);
+  const utilization = payload.metrics?.simulated_utilization ?? {};
+  const cpu = percentFrom(utilization.cpu, node.cpu_utilization, node.used_cpu_ratio);
+  const memory = percentFrom(utilization.memory, node.memory_utilization, node.used_memory_ratio);
+  const stage = payload.stage ?? (record ? "completed" : pending ? "pending" : "ready");
+  const runningTaskIds = new Set((report.active_runs ?? []).map((item) => item.task_id));
+  const zoneTaskCounts = zoneAggregate(nodes, report, "tasks");
+  const zoneCpu = zoneAggregate(nodes, report, "cpu");
+  const zoneMemory = zoneAggregate(nodes, report, "memory");
+  if (cpu != null) zoneCpu.set(parsed.location, Math.max(zoneCpu.get(parsed.location) ?? 0, cpu));
+  if (memory != null) zoneMemory.set(parsed.location, Math.max(zoneMemory.get(parsed.location) ?? 0, memory));
+  if (runningTaskIds.has(payload.task_id)) {
+    zoneTaskCounts.set(parsed.location, Math.max(1, zoneTaskCounts.get(parsed.location) ?? 0));
+  }
+  const running = source === "active_run" || source === "progress";
+  const linkStatus = risk != null && risk > 0.28 ? "拥塞" : running ? "调度中" : "正常";
+  const sourceKind = {
+    active_run: "正在执行",
+    progress: "最新进度",
+    decision: "最新决策",
+    record: "最新执行记录",
+    pending: "待调度任务",
+    inventory: "在线拓扑",
+  }[source];
+  const taskId = payload.task_id ?? task.task_id ?? "等待任务";
+  const dcName = dcZoneModel[parsed.dcKey]?.dcName ?? parsed.dcKey.toUpperCase();
+  const targetLabel = `${dcName} / ${zoneModel.label} / ${vmName}`;
+  return {
+    sourceKind,
+    taskId,
+    nodeId,
+    dcKey: parsed.dcKey,
+    zoneLabel: zoneModel.label,
+    clusterName: zoneModel.clusterName,
+    clusterId: zoneModel.cluster,
+    leafId: zoneModel.leaf,
+    leafLabel: nodeName(zoneModel.leaf, parsed.location),
+    vmName,
+    vmId,
+    tick: payload.tick ?? report.tick,
+    stage,
+    source: task.source_region ?? task.data_region ?? "User-Access",
+    targetLabel,
+    strategy: decision?.policy_name ?? task.task_type ?? payload.task_type ?? "实时租约调度",
+    linkStatus,
+    gnn: gnn == null ? "--" : `${Math.round(gnn * 100)}%`,
+    riskText: risk == null ? "--" : `${Math.round(risk * 100)}%`,
+    latencyText: latency == null ? "--" : `${Number(latency).toFixed(1)}ms`,
+    bandwidthText: bandwidth == null ? "--" : `${Math.round(Number(bandwidth))}Mbps`,
+    globalPathText: `实时调度路径：User-Access → ${dcName} → ${zoneModel.clusterName} / ${vmName}`,
+    zoneState: running ? "正在调度" : "可调度",
+    zoneStatus: running ? "scheduling" : "ok",
+    zoneTaskCounts,
+    zoneCpu,
+    zoneMemory,
+  };
+}
+
+function latestBy(items, key) {
+  return items.filter(Boolean).sort((a, b) => Number(a?.[key] ?? 0) - Number(b?.[key] ?? 0)).at(-1);
+}
+
+function firstNumber(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
+function percentFrom(...values) {
+  const value = firstNumber(...values);
+  if (value == null) return null;
+  return Math.round(value <= 1 ? value * 100 : value);
+}
+
+function parseDciNode(nodeId = "", node = {}) {
+  const match = String(nodeId).match(/^dci-dc(\d+)-([a-z]+)-vm-(\d+)$/i);
+  const dcKey = match ? `dc${match[1]}` : String(node.region ?? "").match(/^dc\d+$/i)?.[0]?.toLowerCase();
+  return {
+    dcKey,
+    location: String(match?.[2] ?? node.location ?? "").toLowerCase(),
+    vmIndex: match ? Number(match[3]) : null,
+  };
+}
+
+function firstZoneModel(dcKey) {
+  const zones = Object.values(dcZoneModel[dcKey]?.zones ?? {});
+  return zones[0] ?? { leaf: "leaf-a", cluster: "cluster-a", label: "资源区", clusterName: "计算集群" };
+}
+
+function firstOnlineNodeId(nodes) {
+  return nodes.find((node) => node.online !== false)?.node_id ?? "";
+}
+
+function zoneAggregate(nodes, report, metric) {
+  const result = new Map();
+  for (const node of nodes) {
+    const parsed = parseDciNode(node.node_id, node);
+    if (!parsed.location) continue;
+    if (metric === "tasks") {
+      const count = Array.isArray(node.running_tasks) ? node.running_tasks.length : 0;
+      result.set(parsed.location, (result.get(parsed.location) ?? 0) + count);
+    } else if (metric === "cpu") {
+      const value = percentFrom(node.cpu_utilization, node.used_cpu_ratio);
+      if (value != null) result.set(parsed.location, Math.max(result.get(parsed.location) ?? 0, value));
+    } else if (metric === "memory") {
+      const value = percentFrom(node.memory_utilization, node.used_memory_ratio);
+      if (value != null) result.set(parsed.location, Math.max(result.get(parsed.location) ?? 0, value));
+    }
+  }
+  for (const run of report?.active_runs ?? []) {
+    const parsed = parseDciNode(run.node_id, {});
+    if (parsed.location) result.set(parsed.location, Math.max(1, result.get(parsed.location) ?? 0));
+  }
+  return result;
+}
+
+function nodeName(leafId, location) {
+  const suffix = leafId.endsWith("a") || leafId.endsWith("b") ? "1" : "2";
+  return `Leaf-${String(location || "zone").toUpperCase()}-${suffix}`;
+}
+
 function currentTopology() {
   return activeTopologyKey === "global" ? globalTopology : dcTopologies[activeTopologyKey] ?? globalTopology;
 }
 
 function currentTargetDcKey() {
+  if (livePathContext?.dcKey) return livePathContext.dcKey;
   const match = String(schedulerStatus.target ?? "").match(/\bDC(\d+)\b/i);
   return match ? `dc${match[1]}` : null;
 }
@@ -276,11 +527,11 @@ function globalRouteForTargetDc(targetDcKey) {
     },
     dc2: {
       nodes: ["user-access", "border2", "pe2", "dc2"],
-      pathText: "当前任务调度路径：User-Access → DC2 → 深圳计算集群 / VM-02",
+      pathText: "当前任务调度路径：User-Access → DC2 → 成都计算集群 / VM-02",
     },
     dc3: {
       nodes: ["user-access", "border3", "pe3", "dc3"],
-      pathText: "当前任务调度路径：User-Access → DC3 → 成都计算集群 / VM-02",
+      pathText: "当前任务调度路径：User-Access → DC3 → 广州计算集群 / VM-02",
     },
   };
   return routes[targetDcKey] ?? routes.dc2;
@@ -336,7 +587,7 @@ function isRouteLink(topology, item) {
   return route.some((id, index) => {
     const next = route[index + 1];
     return next && ((item.source === id && item.target === next) || (item.source === next && item.target === id));
-  }) || item.type.includes("route");
+  }) || (topology.kind === "global" && item.type.includes("route"));
 }
 
 function renderGlobalLinks(topology) {
@@ -534,8 +785,9 @@ function renderGatewayBridge(topology) {
 }
 
 function renderSpineRow(topology) {
+  const target = topology.key === currentTargetDcKey();
   return `<div class="dc-spine-wrap">
-    <button class="dc-link-stem route" type="button" data-link="gw-spine-a" title="DC 网关到 Spine-A" aria-label="DC 网关到 Spine-A"></button>
+    <button class="dc-link-stem ${target ? "route" : ""}" type="button" data-link="gw-spine-a" title="DC 网关到 Spine-A" aria-label="DC 网关到 Spine-A"></button>
     <button class="dc-link-stem" type="button" data-link="gw-spine-b" title="DC 网关到 Spine-B" aria-label="DC 网关到 Spine-B"></button>
     <div class="dc-spine-grid">
       ${renderDcNode(topology, "spine-a")}
@@ -546,8 +798,9 @@ function renderSpineRow(topology) {
 
 function renderFabricAndZones(topology) {
   const [leftZone, rightZone] = topology.zones;
+  const target = topology.key === currentTargetDcKey();
   return `<div class="dc-fabric-wrap">
-    <button class="fabric-bus ${selectedClass("spine-a-fabric-bus")}" type="button" data-link="spine-a-fabric-bus" title="Spine-A / Spine-B 双上行冗余连接全部 Leaf 节点">
+    <button class="fabric-bus ${target ? "route" : ""} ${selectedClass("spine-a-fabric-bus")}" type="button" data-link="spine-a-fabric-bus" title="Spine-A / Spine-B 双上行冗余连接全部 Leaf 节点">
       <span>本地交换网络：25Gbps · 0.8ms</span>
     </button>
     <div class="dc-zone-grid">
@@ -560,10 +813,11 @@ function renderFabricAndZones(topology) {
 function renderZone(topology, zoneInfo, side) {
   const leafIds = side === "left" ? ["leaf-a", "leaf-b"] : ["leaf-c", "leaf-d"];
   const clusterId = side === "left" ? "cluster-a" : "cluster-b";
+  const target = topology.key === currentTargetDcKey();
   return `<section class="resource-zone">
     <h4>${escapeHtml(zoneInfo.name)}</h4>
     <div class="zone-leaf-grid">
-      ${leafIds.map((id) => `<div class="leaf-slot">${renderDownlink(topology, `fabric-bus-${id}`, id === topology.routeLeaf)}${renderDcNode(topology, id, "compact")}</div>`).join("")}
+      ${leafIds.map((id) => `<div class="leaf-slot">${renderDownlink(topology, `fabric-bus-${id}`, target && id === topology.routeLeaf)}${renderDcNode(topology, id, "compact")}</div>`).join("")}
     </div>
     ${renderClusterCard(topology, clusterId, zoneInfo)}
   </section>`;
@@ -573,7 +827,7 @@ function renderClusterCard(topology, id, zoneInfo) {
   const item = nodeById(topology, id);
   const route = id === topology.routeCluster;
   const tooltip = `${item.name} / CPU ${zoneInfo.cpu}% / 内存 ${zoneInfo.memory}% / 任务 ${zoneInfo.tasks}`;
-  return `<article class="compute-card ${statusClass(zoneInfo.scheduleState)}" role="button" tabindex="0" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
+  return `<article class="compute-card ${statusClass(zoneInfo.scheduleState)} ${route && topology.key === currentTargetDcKey() ? "route-node" : ""}" role="button" tabindex="0" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
     <span class="status-dot ${escapeHtml(zoneInfo.status)}"></span>
     <span class="compute-title">${escapeHtml(item.name)}</span>
     <span class="compute-metrics">
@@ -590,7 +844,7 @@ function renderClusterCard(topology, id, zoneInfo) {
 function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
   const vmName = `VM-${String(index + 1).padStart(2, "0")}`;
   const vmId = `${clusterId}-vm-${String(index + 1).padStart(2, "0")}`;
-  const active = topology.key === currentTargetDcKey() && routeCluster && vmName === topology.routeVm;
+  const active = topology.key === currentTargetDcKey() && routeCluster && vmId === topology.vmId;
   const selected = selectedDetail?.kind === "vm" && selectedDetail.id === vmId;
   const cpu = Math.min(92, Math.max(12, zoneInfo.cpu + (index - 1) * 6));
   const memory = Math.min(90, Math.max(18, zoneInfo.memory + (index % 2 === 0 ? -4 : 5)));
@@ -610,10 +864,11 @@ function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
 }
 
 function renderSupportBus(topology) {
+  const target = topology.key === currentTargetDcKey();
   return `<div class="support-wrap">
     <div class="support-feed">
-      <button class="support-feed-line route" type="button" data-link="cluster-a-service-bus" title="计算集群到服务支撑总线"></button>
-      <button class="support-feed-line" type="button" data-link="cluster-b-service-bus" title="计算集群到服务支撑总线"></button>
+      <button class="support-feed-line ${target && topology.routeCluster === "cluster-a" ? "route" : ""}" type="button" data-link="cluster-a-service-bus" title="计算集群到服务支撑总线"></button>
+      <button class="support-feed-line ${target && topology.routeCluster === "cluster-b" ? "route" : ""}" type="button" data-link="cluster-b-service-bus" title="计算集群到服务支撑总线"></button>
     </div>
     <button class="service-bus" type="button" data-link="service-bus-scheduler" title="存储 / 调度控制 / 监控管理通过服务支撑总线连通">服务支撑总线</button>
     <div class="support-grid">
@@ -744,6 +999,22 @@ function renderOverviewDetails(topology) {
   </div>`;
 }
 
+function renderPathMetrics() {
+  if (!livePathContext) return "";
+  const items = [
+    ["数据来源", livePathContext.sourceKind],
+    ["目标节点", livePathContext.nodeId],
+    ["执行阶段", livePathContext.stage],
+    ["路径时延", livePathContext.latencyText],
+    ["有效带宽", livePathContext.bandwidthText],
+    ["路径风险", livePathContext.riskText],
+  ];
+  return items.map(([label, value]) => `<article class="path-metric-card">
+    <span>${escapeHtml(label)}</span>
+    <b>${escapeHtml(value)}</b>
+  </article>`).join("");
+}
+
 function renderDcNodeDetails(item) {
   return `<div class="topology-detail-card">
     <h3>数据中心详情</h3>
@@ -840,7 +1111,7 @@ function renderTopologyEmpty(container, report) {
   if (detailPanel) {
     detailPanel.innerHTML = `<article class="topology-detail-card">
       <h3>拓扑尚未生成</h3>
-      <p>这里不会再使用静态 DC1/DC2/DC3 假数据兜底。请先启动 CloudSimPlus 桥接器或真实节点 Agent 后再查看全局与数据中心内部拓扑。</p>
+      <p>这里不会再使用静态 DC1/DC2/DC3 假数据兜底。请先导入仿真 inventory 或启动仿真节点后再查看全局与数据中心内部拓扑。</p>
       ${detailRow("数据来源", "report.nodes / report.physical_topology")}
       ${detailRow("当前状态", "等待仿真节点导入")}
     </article>`;
@@ -917,10 +1188,11 @@ export function renderTopology(_report, container) {
     if (metricsPanel) metricsPanel.innerHTML = "";
     return;
   }
+  updateLiveTopology(report);
   const topology = currentTopology();
   const detailPanel = document.getElementById("topologyDetailPanel");
   const metricsPanel = document.getElementById("pathMetrics");
   renderScene(topology, container);
   bindInteractions(topology, container, detailPanel);
-  if (metricsPanel) metricsPanel.innerHTML = "";
+  if (metricsPanel) metricsPanel.innerHTML = renderPathMetrics();
 }
