@@ -101,6 +101,10 @@ start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%TJ_CONFI
 
 call :wait_health
 
+if "%TJ_START_MCP%"=="1" (
+  start "Tianjun MCP Server" cmd /k python -B main.py mcp-server --config "%TJ_CONFIG%" --server "%TJ_BASE_URL%"
+)
+
 if "%TJ_OPEN_DASHBOARD%"=="1" (
   start "" "%TJ_URL%"
 )
@@ -109,9 +113,10 @@ echo.
 echo Tianjun Engine control plane is running:
 echo   Control plane: %TJ_BASE_URL%
 echo   Dashboard:     %TJ_URL%
+if "%TJ_START_MCP%"=="1" echo   MCP server:    enabled
 echo.
-echo Sim backend and MCP server are optional manual processes.
-echo See README.md for their commands.
+echo Sim backend is an optional manual process.
+echo See README.md for its command.
 exit /b 0
 
 :smoke

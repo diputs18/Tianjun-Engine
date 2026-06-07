@@ -38,7 +38,7 @@ tianjun.bat open
 tianjun.bat smoke
 ```
 
-`tianjun.bat start` 只会在 LLM 校验通过后启动控制平面并打开 Dashboard，不会自动启动模拟节点后端或 MCP server。`tianjun.bat smoke` 只做离线 smoke test，不代表完整启动。
+`tianjun.bat start` 会在 LLM 校验通过后启动控制平面、MCP server 并打开 Dashboard，不会自动启动模拟节点后端。`tianjun.bat smoke` 只做离线 smoke test，不代表完整启动。
 
 ### 3. 启动控制平面
 
