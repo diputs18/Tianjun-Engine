@@ -95,28 +95,23 @@ if errorlevel 10 exit /b 0
 :start_checked_python
 call :check_llm
 
-echo Starting Tianjun Engine full local stack...
+echo Starting Tianjun Engine control plane...
 echo Dashboard: %TJ_URL%
 start "Tianjun Control Plane" cmd /k python -B main.py serve --config "%TJ_CONFIG%" --default-execution-mode simulation --host %TJ_HOST% --port %TJ_PORT%
 
 call :wait_health
-
-start "Tianjun Sim Backend" cmd /k python -B main.py sim-backend --config "%TJ_CONFIG%" --server "%TJ_BASE_URL%" --inventory "%TJ_SIM_INVENTORY%" --verbose
-
-if "%TJ_START_MCP%"=="1" (
-  start "Tianjun MCP Server" cmd /k python -B main.py mcp-server --config "%TJ_CONFIG%" --server "%TJ_BASE_URL%"
-)
 
 if "%TJ_OPEN_DASHBOARD%"=="1" (
   start "" "%TJ_URL%"
 )
 
 echo.
-echo Tianjun Engine full local stack is running:
+echo Tianjun Engine control plane is running:
 echo   Control plane: %TJ_BASE_URL%
 echo   Dashboard:     %TJ_URL%
-echo   Sim backend:   %TJ_SIM_INVENTORY%
-if "%TJ_START_MCP%"=="1" echo   MCP server:    enabled
+echo.
+echo Sim backend and MCP server are optional manual processes.
+echo See README.md for their commands.
 exit /b 0
 
 :smoke

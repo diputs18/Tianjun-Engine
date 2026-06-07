@@ -38,7 +38,7 @@ tianjun.bat open
 tianjun.bat smoke
 ```
 
-`tianjun.bat start` 只会在 LLM 校验通过后启动控制平面、模拟节点后端、Dashboard，以及可选 MCP server。`tianjun.bat smoke` 只做离线 smoke test，不代表完整启动。
+`tianjun.bat start` 只会在 LLM 校验通过后启动控制平面并打开 Dashboard，不会自动启动模拟节点后端或 MCP server。`tianjun.bat smoke` 只做离线 smoke test，不代表完整启动。
 
 ### 3. 启动控制平面
 
@@ -59,7 +59,7 @@ Invoke-RestMethod http://127.0.0.1:8024/health
 Invoke-RestMethod http://127.0.0.1:8024/report
 ```
 
-### 4. 启动模拟节点后端
+### 4. 可选：启动模拟节点后端
 
 在第二个终端运行：
 
@@ -71,7 +71,9 @@ python -B main.py sim-backend `
   --verbose
 ```
 
-`sim-backend` 会注册多地域 CPU/GPU 模拟节点，持续发送心跳、轮询 `/leases/next`，并在收到任务租约后通过 `/task-runs/progress` 和 `/task-runs/result` 上报执行进度与结果。停止该进程时，模拟节点会主动上报离线状态。
+`sim-backend` 是本地轻量演示后端，需要手动启动。它会注册多地域 CPU/GPU 模拟节点，持续发送心跳、轮询 `/leases/next`，并在收到任务租约后通过 `/task-runs/progress` 和 `/task-runs/result` 上报执行进度与结果。停止该进程时，模拟节点会主动上报离线状态。
+
+CloudSimPlus 桥接器和参考实验位于 `examples/cloudsimplus/`，与 Python `sim-backend` 是两条不同接入路径：前者用于 Java 仿真实验与 DCI 数据生成，后者用于快速本地演示控制平面租约链路。
 
 如果只想短跑验证，可加 `--max-cycles 3`：
 
@@ -92,7 +94,7 @@ python -B main.py sim-backend `
 http://127.0.0.1:8024/dashboard
 ```
 
-Dashboard 是静态 HTML/CSS/JS，无构建步骤。节点/拓扑页面应能看到模拟节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由模拟节点通过租约、进度和结果回报推进。
+Dashboard 是静态 HTML/CSS/JS，无构建步骤。手动启动 `sim-backend`、CloudSimPlus 桥接器或真实节点代理后，节点/拓扑页面应能看到已注册节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由节点侧进程通过租约、进度和结果回报推进。
 
 ### 6. 启动 MCP 工具服务
 
