@@ -493,9 +493,12 @@ class ComputeNetworkPolicyGenerator:
         current_tick: int,
         policy_id: str | None = None,
         execution: TaskExecutionSpec | None = None,
+        avoid_node_ids: set[str] | None = None,
     ) -> tuple[ComputeNetworkPolicy, Task]:
         policy_id = policy_id or self._new_policy_id()
         task = self.task_from_requirement(requirement, task_id=f"task_{policy_id}", execution=execution)
+        if avoid_node_ids:
+            task.forbidden_nodes.update(str(node_id) for node_id in avoid_node_ids if str(node_id))
         node_list = list(nodes)
         decision = scheduler.select_node(task, node_list, current_tick=current_tick)
         node_by_id = {node.node_id: node for node in node_list}

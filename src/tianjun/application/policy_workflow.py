@@ -100,8 +100,10 @@ class PolicyWorkflowService:
             execution = None if execution_payload is None else execution_from_dict(execution_payload)
             profiles = self.normalize_option_profiles(option_profiles)
             options: list[dict[str, Any]] = []
+            selected_nodes: set[str] = set()
             for index, profile in enumerate(profiles):
                 requirement = self.requirement_for_option_profile(base_requirement, profile)
+                avoid_node_ids = set(selected_nodes)
                 policy, task = control.policy_generator.draft_policy(
                     requirement,
                     scheduler=control.scheduler,
@@ -109,7 +111,23 @@ class PolicyWorkflowService:
                     current_tick=control.current_tick(),
                     policy_id=f"{control.policy_generator._new_policy_id()}_{profile}",
                     execution=execution,
+                    avoid_node_ids=avoid_node_ids,
                 )
+                diversity_note = ""
+                if policy.status == "failed" and avoid_node_ids:
+                    policy, task = control.policy_generator.draft_policy(
+                        requirement,
+                        scheduler=control.scheduler,
+                        nodes=control.nodes.values(),
+                        current_tick=control.current_tick(),
+                        policy_id=f"{control.policy_generator._new_policy_id()}_{profile}",
+                        execution=execution,
+                    )
+                    diversity_note = "已尝试避开前序方案节点，但当前约束下没有其它可行候选，已回退到该策略取向的最优节点。"
+                elif policy.selected_compute.node_id in selected_nodes:
+                    diversity_note = "该节点在当前候选池中同时满足本方案的关键目标，因此与其它方案收敛到同一推荐节点。"
+                if policy.selected_compute.node_id:
+                    selected_nodes.add(policy.selected_compute.node_id)
                 control.policies[policy.policy_id] = policy
                 control.policy_tasks[policy.policy_id] = task
                 policy_payload = policy.to_dict()
@@ -120,6 +138,7 @@ class PolicyWorkflowService:
                         profile=profile,
                         policy=policy_payload,
                         simulation=simulation,
+                        diversity_note=diversity_note,
                     )
                 )
             recommended = self.recommended_policy_option(options)
@@ -309,6 +328,7 @@ class PolicyWorkflowService:
         profile: str,
         policy: dict[str, Any],
         simulation: dict[str, Any],
+        diversity_note: str = "",
     ) -> dict[str, Any]:
         effect = policy.get("expected_effect") or {}
         latency = effect.get("latency") or {}
@@ -336,6 +356,7 @@ class PolicyWorkflowService:
             "sla_probability": quality.get("sla_probability"),
             "security_score": security.get("security_score"),
             "total_score": compute.get("score"),
+            "diversity_note": diversity_note,
             "risks": list(simulation.get("risks") or (policy.get("explanation") or {}).get("risks") or []),
             "policy": policy,
             "simulation": simulation,

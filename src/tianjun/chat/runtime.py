@@ -1122,8 +1122,8 @@ def _policy_options_response(comparison: dict[str, Any]) -> str:
         "",
         "我基于同一份需求生成了多个可选策略。底层调度仍由确定性评分完成，Hermes 负责组织方案、解释取舍，并等待你选择。",
         "",
-        "| 方案 | 策略取向 | 推荐节点 | 稳定时延 | 预计成本 | SLA 概率 | 结论 |",
-        "| --- | --- | --- | ---: | ---: | ---: | --- |",
+        "| 方案 | 策略取向 | 推荐节点 | 稳定时延 | 预计成本 | SLA 概率 | 结论 | 说明 |",
+        "| --- | --- | --- | ---: | ---: | ---: | --- | --- |",
     ]
     for option in options:
         conclusion = "可选"
@@ -1132,7 +1132,7 @@ def _policy_options_response(comparison: dict[str, Any]) -> str:
         elif recommended.get("policy_id") == option.get("policy_id"):
             conclusion = "推荐"
         lines.append(
-            "| {label} | {profile} | `{node}` | `{latency} ms` | `{cost}` | `{sla}` | **{conclusion}** |".format(
+            "| {label} | {profile} | `{node}` | `{latency} ms` | `{cost}` | `{sla}` | **{conclusion}** | {note} |".format(
                 label=option.get("label", "--"),
                 profile=option.get("profile_name", option.get("profile", "--")),
                 node=option.get("selected_node") or "--",
@@ -1140,6 +1140,7 @@ def _policy_options_response(comparison: dict[str, Any]) -> str:
                 cost=_format_number(option.get("expected_cost")),
                 sla=_format_percent(option.get("sla_probability")),
                 conclusion=conclusion,
+                note=option.get("diversity_note") or "按本方案权重独立评分",
             )
         )
     lines.extend(["", "**推荐判断**", f"- {comparison.get('explanation') or '请根据业务目标选择一个方案。'}"])

@@ -137,6 +137,7 @@ def test_control_plane_generates_comparable_policy_options() -> None:
         "cost_first",
         "balanced_reliability",
     }
+    assert len({option["selected_node"] for option in comparison["options"] if option["selected_node"]}) > 1
     assert comparison["recommended_policy_id"]
     assert all(option["policy_id"] in control.policies for option in comparison["options"])
 
@@ -146,7 +147,7 @@ def test_chat_runtime_outputs_markdown_options_and_requires_selection() -> None:
     result = chat.start("华南分析任务，4 核 8GB，不需要 GPU，预算 30，时延 80ms，安全中等")
     assert result["action"] == "compare_policy_options"
     assert "### 多方案策略对比" in result["message"]
-    assert "| 方案 | 策略取向 | 推荐节点 |" in result["message"]
+    assert "| 方案 | 策略取向 | 推荐节点 | 稳定时延 | 预计成本 | SLA 概率 | 结论 | 说明 |" in result["message"]
     assert result["requires_user_button"] is False
     session = result["session"]
     assert session["pending_option_selection"] is True
