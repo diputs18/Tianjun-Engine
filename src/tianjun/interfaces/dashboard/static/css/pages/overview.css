@@ -58,6 +58,18 @@
   font-size: var(--font-size-xs);
 }
 
+.capacity-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .35rem;
+  white-space: nowrap;
+}
+
+.capacity-label small {
+  color: var(--color-gray-400);
+  font-size: .72rem;
+}
+
 .capacity-metric {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -84,6 +96,14 @@
 
 .capacity-metric.danger .capacity-track i {
   background: var(--color-danger-500);
+}
+
+.capacity-metric.unavailable .capacity-track i {
+  background: var(--color-gray-300);
+}
+
+.capacity-metric.unavailable b {
+  color: var(--color-gray-400);
 }
 
 .queue-columns {

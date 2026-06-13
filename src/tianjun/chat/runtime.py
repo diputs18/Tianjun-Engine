@@ -1117,34 +1117,38 @@ def _questions_response(requirement_session: dict[str, Any]) -> str:
 def _policy_options_response(comparison: dict[str, Any]) -> str:
     options = comparison.get("options") or []
     recommended = comparison.get("recommended_option") or {}
+    recommended_label = recommended.get("label", "--")
     lines = [
         "### 多方案策略对比",
         "",
-        "我基于同一份需求生成了多个可选策略。底层调度仍由确定性评分完成，Hermes 负责组织方案、解释取舍，并等待你选择。",
+        f"**推荐结论：** 优先选择方案 `{recommended_label}`。Hermes 生成的是策略层方案，底层节点选择仍由确定性调度器评分完成。",
         "",
-        "| 方案 | 策略取向 | 推荐节点 | 稳定时延 | 预计成本 | SLA 概率 | 结论 | 说明 |",
-        "| --- | --- | --- | ---: | ---: | ---: | --- | --- |",
+        "说明：A/B/C 分别代表不同策略取向；每个方案会独立得到一个推荐节点，不等于同一个候选节点池。",
+        "",
+        "#### 方案总览",
+        "",
+        "| 方案 | 策略重点 | 推荐节点 | 稳定时延 | 预计成本 | SLA 概率 | 状态 |",
+        "| --- | --- | --- | ---: | ---: | ---: | --- |",
     ]
     for option in options:
-        conclusion = "可选"
+        status = "可选"
         if not option.get("feasible"):
-            conclusion = "不可下发"
+            status = "不可下发"
         elif recommended.get("policy_id") == option.get("policy_id"):
-            conclusion = "推荐"
+            status = "推荐"
         lines.append(
-            "| {label} | {profile} | `{node}` | `{latency} ms` | `{cost}` | `{sla}` | **{conclusion}** | {note} |".format(
+            "| {label} | {profile} | `{node}` | `{latency} ms` | `{cost}` | `{sla}` | **{status}** |".format(
                 label=option.get("label", "--"),
                 profile=option.get("profile_name", option.get("profile", "--")),
                 node=option.get("selected_node") or "--",
                 latency=_format_number(option.get("expected_latency_ms")),
                 cost=_format_number(option.get("expected_cost")),
                 sla=_format_percent(option.get("sla_probability")),
-                conclusion=conclusion,
-                note=option.get("diversity_note") or "按本方案权重独立评分",
+                status=status,
             )
         )
-    lines.extend(["", "**推荐判断**", f"- {comparison.get('explanation') or '请根据业务目标选择一个方案。'}"])
-    lines.extend(["", "**怎么选择**"])
+    lines.extend(["", "#### 推荐判断", f"- {comparison.get('explanation') or '请根据业务目标选择一个方案。'}"])
+    lines.extend(["", "#### 方案解读"])
     for option in options:
         if not option.get("feasible"):
             reason = "当前约束下没有可执行候选"
@@ -1154,11 +1158,16 @@ def _policy_options_response(comparison: dict[str, Any]) -> str:
             reason = "适合预算敏感、可接受略高时延的批处理或离线分析场景"
         else:
             reason = "适合希望兼顾稳定性、SLA 和成本的默认生产型选择"
-        lines.append(f"- **方案 {option.get('label')}（{option.get('profile_name')}）**：{reason}。")
+        note = option.get("diversity_note") or "按本方案权重独立评分。"
+        selected_node = option.get("selected_node") or "--"
+        lines.append(
+            f"- **方案 {option.get('label')}（{option.get('profile_name')}）**："
+            f"推荐节点 `{selected_node}`，{reason}；{note}"
+        )
     lines.extend(
         [
             "",
-            "**下一步**",
+            "#### 下一步",
             "- 回复 `选 A`、`选 B`、`选 C`，或直接说 `用低成本方案`、`用推荐方案`。",
             "- 选择后我会锁定对应策略，并开启 **正式下发** 按钮；聊天文本仍不会直接提交任务。",
         ]

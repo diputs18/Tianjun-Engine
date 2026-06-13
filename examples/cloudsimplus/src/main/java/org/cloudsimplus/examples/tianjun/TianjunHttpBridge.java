@@ -22,6 +22,8 @@ public class TianjunHttpBridge {
     private static final Pattern STATUS_PATTERN = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern SCORE_PATTERN = Pattern.compile("\"total_score\"\\s*:\\s*([0-9.]+)");
     private static final Pattern LEASE_TASK_PATTERN = Pattern.compile("\"lease\"\\s*:\\s*\\{\\s*\"task_id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern ESTIMATED_DURATION_PATTERN = Pattern.compile("\"estimated_duration\"\\s*:\\s*([0-9]+)");
+    private static final Pattern PREDICTED_COST_PATTERN = Pattern.compile("\"predicted_cost\"\\s*:\\s*([0-9.]+)");
 
     private final HttpClient client;
     private final String server;
@@ -150,7 +152,13 @@ public class TianjunHttpBridge {
         if (taskId.isBlank()) {
             return null;
         }
-        return new LeaseResult(taskId, matchString(NODE_ID_PATTERN, response, nodeId), response);
+        return new LeaseResult(
+            taskId,
+            matchString(NODE_ID_PATTERN, response, nodeId),
+            response,
+            matchInt(ESTIMATED_DURATION_PATTERN, response, 2),
+            matchDouble(PREDICTED_COST_PATTERN, response, 4.0)
+        );
     }
 
     public void reportProgress(final SimTaskProgress progress) {
@@ -202,7 +210,7 @@ public class TianjunHttpBridge {
               "region": "%s",
               "location": "%s",
               "service_region": "%s",
-              "labels": ["cloudsim", "cpu", "%s", "latency-sensitive"],
+              "labels": ["cloudsim", "cpu", "gpu", "%s", "latency-sensitive"],
               "capacity": {"cpu": %.4f, "memory": %.4f, "gpu": %.4f, "storage": %.4f},
               "cost_per_tick": %.4f,
               "base_reliability": %.4f,
@@ -267,7 +275,7 @@ public class TianjunHttpBridge {
               "region": "%s",
               "location": "%s",
               "service_region": "%s",
-              "labels": ["cloudsim", "cpu", "%s", "latency-sensitive"],
+              "labels": ["cloudsim", "cpu", "gpu", "%s", "latency-sensitive"],
               "performance_factors": {"inference": %.4f, "batch_cpu": %.4f, "analytics": %.4f, "streaming": %.4f},
               "network_paths": %s,
               "sim_tick": %.4f,
@@ -460,6 +468,11 @@ public class TianjunHttpBridge {
         return matcher.find() ? Double.parseDouble(matcher.group(1)) : fallback;
     }
 
+    private static int matchInt(final Pattern pattern, final String text, final int fallback) {
+        final Matcher matcher = pattern.matcher(text);
+        return matcher.find() ? Integer.parseInt(matcher.group(1)) : fallback;
+    }
+
     private static double clamp(final double value, final double min, final double max) {
         return Math.max(min, Math.min(max, value));
     }
@@ -538,7 +551,7 @@ public class TianjunHttpBridge {
         }
     }
 
-    public record LeaseResult(String taskId, String nodeId, String rawJson) {
+    public record LeaseResult(String taskId, String nodeId, String rawJson, int estimatedDuration, double predictedCost) {
     }
 
     public record SimTaskProgress(

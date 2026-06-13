@@ -297,6 +297,7 @@ function makeDcTopology(config) {
 }
 
 function updateLiveTopology(report) {
+  updateResourceTopology(report);
   livePathContext = buildLivePathContext(report);
   if (!livePathContext) return;
 
@@ -339,6 +340,7 @@ function updateLiveTopology(report) {
       tasks: livePathContext.zoneTaskCounts.get(zoneInfo.id) ?? zoneInfo.tasks,
       cpu: livePathContext.zoneCpu.get(zoneInfo.id) ?? zoneInfo.cpu,
       memory: livePathContext.zoneMemory.get(zoneInfo.id) ?? zoneInfo.memory,
+      gpu: livePathContext.zoneGpu.get(zoneInfo.id) ?? zoneInfo.gpu,
     };
   });
   for (const item of dcTopology.nodes) {
@@ -353,6 +355,50 @@ function updateLiveTopology(report) {
       item.scheduler.assignedTasks = Number(report?.totals?.running ?? 0) + Number(report?.totals?.pending ?? 0);
       item.scheduler.avoidance = livePathContext.linkStatus === "拥塞" ? "正在规避高风险链路" : "当前路径风险可控";
     }
+  }
+}
+
+function updateResourceTopology(report) {
+  const nodes = Array.isArray(report?.nodes) ? report.nodes : [];
+  if (!nodes.length) return;
+  const dcStats = aggregateResources(nodes, "dc");
+  const zoneStats = aggregateResources(nodes, "zone");
+
+  for (const item of globalTopology.nodes) {
+    if (!item?.drilldown) continue;
+    const stats = dcStats.get(item.drilldown);
+    if (!stats) continue;
+    item.vmTotal = stats.nodes;
+    item.avgCpu = stats.cpuPercent;
+    item.avgMemory = stats.memoryPercent;
+    item.tasks = stats.tasks;
+    item.gpuUsed = stats.gpuUsed;
+    item.gpuTotal = stats.gpuTotal;
+    item.gpuPercent = stats.gpuPercent;
+    item.scheduleState = stats.cpuPercent >= 75 || stats.gpuPercent >= 80 ? "高负载" : "可调度";
+    item.status = item.scheduleState;
+    item.subtitle = `${stats.nodes} nodes`;
+  }
+
+  for (const [dcKey, topology] of Object.entries(dcTopologies)) {
+    topology.zones = topology.zones.map((zoneInfo) => {
+      const stats = zoneStats.get(`${dcKey}:${zoneInfo.id}`);
+      if (!stats) return zoneInfo;
+      return {
+        ...zoneInfo,
+        vmCount: stats.nodes || zoneInfo.vmCount,
+        tasks: stats.tasks,
+        cpu: stats.cpuPercent,
+        memory: stats.memoryPercent,
+        gpu: {
+          used: stats.gpuUsed,
+          total: stats.gpuTotal,
+          percent: stats.gpuPercent,
+        },
+        scheduleState: stats.cpuPercent >= 75 || stats.gpuPercent >= 80 ? "高负载" : "可调度",
+        status: stats.cpuPercent >= 75 || stats.gpuPercent >= 80 ? "congested" : "ok",
+      };
+    });
   }
 }
 
@@ -395,6 +441,7 @@ function buildLivePathContext(report) {
   const zoneTaskCounts = zoneAggregate(nodes, report, "tasks");
   const zoneCpu = zoneAggregate(nodes, report, "cpu");
   const zoneMemory = zoneAggregate(nodes, report, "memory");
+  const zoneGpu = zoneAggregate(nodes, report, "gpu");
   if (cpu != null) zoneCpu.set(parsed.location, Math.max(zoneCpu.get(parsed.location) ?? 0, cpu));
   if (memory != null) zoneMemory.set(parsed.location, Math.max(zoneMemory.get(parsed.location) ?? 0, memory));
   if (runningTaskIds.has(payload.task_id)) {
@@ -441,6 +488,7 @@ function buildLivePathContext(report) {
     zoneTaskCounts,
     zoneCpu,
     zoneMemory,
+    zoneGpu,
   };
 }
 
@@ -460,6 +508,54 @@ function percentFrom(...values) {
   const value = firstNumber(...values);
   if (value == null) return null;
   return Math.round(value <= 1 ? value * 100 : value);
+}
+
+function ratioPercent(used, total) {
+  const safeTotal = Number(total);
+  if (!Number.isFinite(safeTotal) || safeTotal <= 0) return 0;
+  return Math.round(Math.max(0, Number(used) || 0) / safeTotal * 100);
+}
+
+function resourceUsed(node, key) {
+  const capacity = Number(node?.capacity?.[key] ?? 0);
+  const available = Number(node?.available?.[key] ?? capacity);
+  return Math.max(0, capacity - available);
+}
+
+function aggregateResources(nodes, scope) {
+  const result = new Map();
+  for (const node of nodes) {
+    const parsed = parseDciNode(node.node_id, node);
+    if (!parsed.dcKey || (scope === "zone" && !parsed.location)) continue;
+    const key = scope === "zone" ? `${parsed.dcKey}:${parsed.location}` : parsed.dcKey;
+    const bucket = result.get(key) ?? {
+      nodes: 0,
+      cpuUsed: 0,
+      cpuTotal: 0,
+      memoryUsed: 0,
+      memoryTotal: 0,
+      gpuUsed: 0,
+      gpuTotal: 0,
+      tasks: 0,
+    };
+    bucket.nodes += 1;
+    bucket.cpuTotal += Number(node?.capacity?.cpu ?? 0);
+    bucket.cpuUsed += resourceUsed(node, "cpu");
+    bucket.memoryTotal += Number(node?.capacity?.memory ?? 0);
+    bucket.memoryUsed += resourceUsed(node, "memory");
+    bucket.gpuTotal += Number(node?.capacity?.gpu ?? 0);
+    bucket.gpuUsed += resourceUsed(node, "gpu");
+    bucket.tasks += Array.isArray(node.running_tasks) ? node.running_tasks.length : 0;
+    result.set(key, bucket);
+  }
+  for (const bucket of result.values()) {
+    bucket.cpuPercent = ratioPercent(bucket.cpuUsed, bucket.cpuTotal);
+    bucket.memoryPercent = ratioPercent(bucket.memoryUsed, bucket.memoryTotal);
+    bucket.gpuUsed = Math.round(bucket.gpuUsed);
+    bucket.gpuTotal = Math.round(bucket.gpuTotal);
+    bucket.gpuPercent = ratioPercent(bucket.gpuUsed, bucket.gpuTotal);
+  }
+  return result;
 }
 
 function parseDciNode(nodeId = "", node = {}) {
@@ -495,6 +591,14 @@ function zoneAggregate(nodes, report, metric) {
     } else if (metric === "memory") {
       const value = percentFrom(node.memory_utilization, node.used_memory_ratio);
       if (value != null) result.set(parsed.location, Math.max(result.get(parsed.location) ?? 0, value));
+    } else if (metric === "gpu") {
+      const current = result.get(parsed.location) ?? { used: 0, total: 0, percent: 0 };
+      current.used += resourceUsed(node, "gpu");
+      current.total += Number(node?.capacity?.gpu ?? 0);
+      current.used = Math.round(current.used);
+      current.total = Math.round(current.total);
+      current.percent = ratioPercent(current.used, current.total);
+      result.set(parsed.location, current);
     }
   }
   for (const run of report?.active_runs ?? []) {
@@ -502,6 +606,36 @@ function zoneAggregate(nodes, report, metric) {
     if (parsed.location) result.set(parsed.location, Math.max(1, result.get(parsed.location) ?? 0));
   }
   return result;
+}
+
+function normalizeGpu(value) {
+  if (!value || typeof value !== "object") return { used: 0, total: 0, percent: 0 };
+  const used = Math.round(Number(value.used ?? 0));
+  const total = Math.round(Number(value.total ?? 0));
+  return { used, total, percent: ratioPercent(used, total) };
+}
+
+function gpuSummary(value) {
+  if (value && typeof value === "object" && ("gpuUsed" in value || "gpuTotal" in value)) {
+    const used = Math.round(Number(value.gpuUsed ?? 0));
+    const total = Math.round(Number(value.gpuTotal ?? 0));
+    return total > 0 ? `${used}/${total} (${ratioPercent(used, total)}%)` : "0/0";
+  }
+  const gpu = normalizeGpu(value?.gpu ?? value);
+  return gpu.total > 0 ? `${gpu.used}/${gpu.total} (${gpu.percent}%)` : "0/0";
+}
+
+function vmGpuFor(zoneInfo, index) {
+  const gpu = normalizeGpu(zoneInfo.gpu);
+  const vmCount = Math.max(1, Number(zoneInfo.vmCount ?? 1));
+  if (gpu.total <= 0) return { used: 0, total: 0, percent: 0 };
+  const baseTotal = Math.max(1, Math.floor(gpu.total / vmCount));
+  const remainder = gpu.total % vmCount;
+  const total = baseTotal + (index < remainder ? 1 : 0);
+  const baseUsed = Math.floor(gpu.used / vmCount);
+  const usedRemainder = gpu.used % vmCount;
+  const used = Math.min(total, baseUsed + (index < usedRemainder ? 1 : 0));
+  return { used, total, percent: ratioPercent(used, total) };
 }
 
 function nodeName(leafId, location) {
@@ -826,12 +960,14 @@ function renderZone(topology, zoneInfo, side) {
 function renderClusterCard(topology, id, zoneInfo) {
   const item = nodeById(topology, id);
   const route = id === topology.routeCluster;
+  const gpu = gpuSummary(zoneInfo.gpu);
   const tooltip = `${item.name} / CPU ${zoneInfo.cpu}% / 内存 ${zoneInfo.memory}% / 任务 ${zoneInfo.tasks}`;
   return `<article class="compute-card ${statusClass(zoneInfo.scheduleState)} ${route && topology.key === currentTargetDcKey() ? "route-node" : ""}" role="button" tabindex="0" data-node="${escapeHtml(id)}" title="${escapeHtml(tooltip)}">
     <span class="status-dot ${escapeHtml(zoneInfo.status)}"></span>
     <span class="compute-title">${escapeHtml(item.name)}</span>
     <span class="compute-metrics">
       <b>CPU ${escapeHtml(zoneInfo.cpu)}%</b>
+      <b>GPU ${escapeHtml(gpu)}</b>
       <b>内存 ${escapeHtml(zoneInfo.memory)}%</b>
       <b>任务 ${escapeHtml(zoneInfo.tasks)}</b>
     </span>
@@ -848,6 +984,7 @@ function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
   const selected = selectedDetail?.kind === "vm" && selectedDetail.id === vmId;
   const cpu = Math.min(92, Math.max(12, zoneInfo.cpu + (index - 1) * 6));
   const memory = Math.min(90, Math.max(18, zoneInfo.memory + (index % 2 === 0 ? -4 : 5)));
+  const gpu = vmGpuFor(zoneInfo, index);
   const state = active ? "正在调度" : cpu > 78 ? "高负载" : "可调度";
   return `<button class="vm-node ${active ? "route-vm" : ""} ${selected ? "selected" : ""}" type="button"
       data-vm="${escapeHtml(vmId)}"
@@ -856,6 +993,9 @@ function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
       data-name="${escapeHtml(vmName)}"
       data-cpu="${cpu}"
       data-memory="${memory}"
+      data-gpu-used="${gpu.used}"
+      data-gpu-total="${gpu.total}"
+      data-gpu-percent="${gpu.percent}"
       data-state="${escapeHtml(state)}"
       data-task-count="${active ? 1 : Math.max(0, Math.floor(zoneInfo.tasks / zoneInfo.vmCount) - (index % 2))}"
       title="${escapeHtml(`${vmName} / ${zoneInfo.name} / CPU ${cpu}% / 内存 ${memory}% / ${state}`)}">
@@ -972,6 +1112,7 @@ function renderDetails(topology) {
 
 function renderVmDetails(vm) {
   const cluster = nodeById(currentTopology(), vm.clusterId);
+  const gpuDetail = detailRow("GPU", `${vm.gpuUsed ?? 0}/${vm.gpuTotal ?? 0} (${vm.gpuPercent ?? 0}%)`);
   return `<div class="topology-detail-card">
     <h3>VM 节点详情</h3>
     ${detailRow("节点名称", vm.name)}
@@ -980,6 +1121,7 @@ function renderVmDetails(vm) {
     ${detailRow("节点职责", "任务执行 / 算力资源实例")}
     ${detailRow("CPU 使用率", `${vm.cpu}%`)}
     ${detailRow("内存使用率", `${vm.memory}%`)}
+    ${gpuDetail}
     ${detailRow("当前任务数", `${vm.taskCount} 个`)}
     ${detailRow("调度状态", vm.state)}
     ${detailRow("推荐状态", vm.state === "高负载" ? "暂不推荐" : "可作为候选执行节点")}
@@ -1016,7 +1158,9 @@ function renderPathMetrics() {
 }
 
 function renderDcNodeDetails(item) {
+  const gpuDetail = item?.gpuTotal != null ? detailRow("GPU", `${item.gpuUsed ?? 0}/${item.gpuTotal ?? 0} (${item.gpuPercent ?? 0}%)`) : "";
   return `<div class="topology-detail-card">
+    ${gpuDetail}
     <h3>数据中心详情</h3>
     ${detailRow("数据中心名称", item?.name)}
     ${detailRow("所属区域", item?.region ?? item?.subtitle)}
@@ -1031,9 +1175,11 @@ function renderDcNodeDetails(item) {
 function renderMetricRows(item) {
   if (!item?.metrics) return "";
   const metrics = item.metrics;
+  const gpuDetail = detailRow("GPU", gpuSummary(metrics.gpu));
   const available = Math.max(0, metrics.vmCount - Math.ceil(metrics.tasks / 5));
   const highLoad = metrics.cpu > 70 ? 2 : metrics.cpu > 55 ? 1 : 0;
-  return `${detailRow("VM 数量", `${metrics.vmCount} 个`)}
+  return `${gpuDetail}
+    ${detailRow("VM 数量", `${metrics.vmCount} 个`)}
     ${detailRow("CPU 使用率", `${metrics.cpu}%`)}
     ${detailRow("内存使用率", `${metrics.memory}%`)}
     ${detailRow("当前任务数", `${metrics.tasks} 个`)}
@@ -1131,6 +1277,9 @@ function bindInteractions(topology, container, detailPanel) {
         name: element.dataset.name,
         cpu: element.dataset.cpu,
         memory: element.dataset.memory,
+        gpuUsed: element.dataset.gpuUsed,
+        gpuTotal: element.dataset.gpuTotal,
+        gpuPercent: element.dataset.gpuPercent,
         state: element.dataset.state,
         taskCount: element.dataset.taskCount,
       };

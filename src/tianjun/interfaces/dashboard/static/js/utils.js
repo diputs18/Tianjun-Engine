@@ -154,6 +154,88 @@ export function renderInlineMarkdown(text) {
   return escapeHtml(text).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
+export function renderMarkdown(text) {
+  const lines = String(text ?? "").replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      const level = Math.min(4, Math.max(3, heading[1].length + 2));
+      blocks.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    if (isMarkdownTable(lines, index)) {
+      const { html, nextIndex } = renderMarkdownTable(lines, index);
+      blocks.push(html);
+      index = nextIndex;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      const items = [];
+      while (index < lines.length && /^[-*]\s+/.test(lines[index].trim())) {
+        items.push(`<li>${renderInlineMarkdown(lines[index].trim().replace(/^[-*]\s+/, ""))}</li>`);
+        index += 1;
+      }
+      blocks.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    const paragraph = [];
+    while (
+      index < lines.length
+      && lines[index].trim()
+      && !/^(#{1,4})\s+/.test(lines[index].trim())
+      && !/^[-*]\s+/.test(lines[index].trim())
+      && !isMarkdownTable(lines, index)
+    ) {
+      paragraph.push(renderInlineMarkdown(lines[index].trim()));
+      index += 1;
+    }
+    blocks.push(`<p>${paragraph.join("<br>")}</p>`);
+  }
+
+  return blocks.join("");
+}
+
+function isMarkdownTable(lines, index) {
+  const current = lines[index]?.trim() ?? "";
+  const divider = lines[index + 1]?.trim() ?? "";
+  return current.startsWith("|") && /^\|?(\s*:?-{3,}:?\s*\|)+\s*$/.test(divider);
+}
+
+function splitMarkdownTableRow(line) {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+}
+
+function renderMarkdownTable(lines, index) {
+  const headers = splitMarkdownTableRow(lines[index]);
+  const rows = [];
+  index += 2;
+  while (index < lines.length && lines[index].trim().startsWith("|")) {
+    rows.push(splitMarkdownTableRow(lines[index]));
+    index += 1;
+  }
+  const head = headers.map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`).join("");
+  const body = rows.map((row) => `<tr>${headers.map((_, cellIndex) => `<td>${renderInlineMarkdown(row[cellIndex] ?? "")}</td>`).join("")}</tr>`).join("");
+  return {
+    html: `<div class="md-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`,
+    nextIndex: index,
+  };
+}
+
 export function compactText(value, max = 18) {
   const text = String(value ?? "-");
   return text.length > max ? `${text.slice(0, max - 1)}...` : text;

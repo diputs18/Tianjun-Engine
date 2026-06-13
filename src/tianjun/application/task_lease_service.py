@@ -132,6 +132,10 @@ class TaskLeaseService:
             if node is None or not node.online:
                 return None
 
+            for lease in list(control.leases.values()):
+                if lease.node_id == node_id and lease.task_id not in control.task_progress:
+                    return lease.to_dict()
+
             tick = control.current_tick()
             ordered_task_ids = sorted(
                 control.pending_queue,
