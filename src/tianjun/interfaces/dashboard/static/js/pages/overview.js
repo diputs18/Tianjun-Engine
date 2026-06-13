@@ -114,16 +114,22 @@ function renderCapacity(report) {
       </div>
       ${renderCapacityMetric("CPU", dc.cpu)}
       ${renderCapacityMetric("内存", dc.memory)}
-      ${renderCapacityMetric("任务槽位", dc.slots)}
+      ${renderCapacityMetric("GPU", dc.gpu)}
     </article>`).join("");
 }
 
-function renderCapacityMetric(label, value) {
-  const tone = value > 0.82 ? "danger" : value > 0.62 ? "warning" : "success";
-  return `<div class="capacity-metric ${tone}">
-    <span>${escapeHtml(label)}</span>
-    <div class="capacity-track"><i style="width:${Math.max(4, Math.min(100, value * 100))}%"></i></div>
-    <b>${pct(value, 0)}</b>
+function renderCapacityMetric(label, metric) {
+  const value = typeof metric === "number" ? metric : Number(metric?.value ?? 0);
+  const unavailable = Boolean(metric?.unavailable);
+  const tone = unavailable ? "unavailable" : value > 0.82 ? "danger" : value > 0.62 ? "warning" : "success";
+  const text = metric?.text ?? pct(value, 0);
+  const detail = metric?.detail ? `<small>${escapeHtml(metric.detail)}</small>` : "";
+  const title = metric?.title ? ` title="${escapeHtml(metric.title)}"` : "";
+  const barWidth = value <= 0 ? 0 : Math.max(4, Math.min(100, value * 100));
+  return `<div class="capacity-metric ${tone}"${title}>
+    <span class="capacity-label">${escapeHtml(label)}${detail}</span>
+    <div class="capacity-track"><i style="width:${barWidth}%"></i></div>
+    <b>${escapeHtml(text)}</b>
   </div>`;
 }
 
@@ -146,7 +152,7 @@ function capacityByDc(report) {
       nodes: nodesInDc,
       cpu: avg((node) => resourceValue(node, "cpu")),
       memory: avg((node) => resourceValue(node, "memory")),
-      slots: avg((node) => node.slot_utilization ?? node.task_slot_utilization ?? nodeLoadFallback(node)),
+      gpu: gpuCapacitySummary(nodesInDc),
     };
   });
 }
@@ -159,11 +165,71 @@ function dcKey(node) {
 
 function resourceValue(node, key) {
   const direct = node[`${key}_utilization`] ?? node[`${key}_used_ratio`] ?? node[`${key}_usage`];
-  if (direct !== undefined && Number(direct) > 0) return Number(direct);
-  const cap = Number(node.resources?.[key] ?? node.capacity?.[key] ?? 0);
-  const used = Number(node.used_resources?.[key] ?? node.allocations?.[key] ?? 0);
-  if (cap > 0 && used > 0) return used / cap;
+  if (direct !== undefined && Number.isFinite(Number(direct))) return clamp01(Number(direct));
+  const cap = resourceCapacity(node, key);
+  const used = resourceUsed(node, key, cap);
+  if (cap > 0 && used !== null) return clamp01(used / cap);
+  if (key === "gpu") return 0;
   return key === "cpu" ? nodeLoadFallback(node) : nodeLoadFallback(node) * 0.82;
+}
+
+function gpuCapacitySummary(nodes) {
+  const total = nodes.reduce((sum, node) => sum + resourceCapacity(node, "gpu"), 0);
+  if (total <= 0) {
+    const telemetryValues = nodes
+      .map((node) => node.gpu_utilization ?? node.gpu_used_ratio ?? node.gpu_usage)
+      .filter((value) => value !== undefined && Number.isFinite(Number(value)))
+      .map((value) => clamp01(Number(value)));
+    if (telemetryValues.length) {
+      const value = telemetryValues.reduce((sum, item) => sum + item, 0) / telemetryValues.length;
+      return {
+        value,
+        text: pct(value, 0),
+        detail: "遥测",
+        title: "当前节点未注册 GPU 总量，使用遥测占用率展示。",
+      };
+    }
+    return {
+      value: 0,
+      text: "无",
+      detail: "0 / 0",
+      unavailable: true,
+      title: "该资源池暂未注册 GPU 容量。",
+    };
+  }
+
+  const used = nodes.reduce((sum, node) => {
+    const cap = resourceCapacity(node, "gpu");
+    if (cap <= 0) return sum;
+    const nodeUsed = resourceUsed(node, "gpu", cap);
+    return sum + Math.max(0, nodeUsed ?? 0);
+  }, 0);
+  const value = clamp01(used / total);
+  return {
+    value,
+    text: pct(value, 0),
+    detail: `${fmt(used, 0)} / ${fmt(total, 0)}`,
+    title: `GPU 已占用 ${fmt(used, 0)} / ${fmt(total, 0)}`,
+  };
+}
+
+function resourceCapacity(node, key) {
+  const raw = node.resources?.[key] ?? node.capacity?.[key] ?? 0;
+  return Math.max(0, Number(raw) || 0);
+}
+
+function resourceUsed(node, key, cap) {
+  const usedRaw = node.used_resources?.[key] ?? node.allocations?.[key];
+  if (usedRaw !== undefined && Number.isFinite(Number(usedRaw))) return Math.max(0, Number(usedRaw));
+  const availableRaw = node.available?.[key] ?? node.free_resources?.[key];
+  if (availableRaw !== undefined && Number.isFinite(Number(availableRaw))) {
+    return Math.max(0, cap - Number(availableRaw));
+  }
+  return null;
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
 }
 
 function nodeLoadFallback(node) {

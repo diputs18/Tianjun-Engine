@@ -91,6 +91,16 @@ def test_task_lease_service_handles_task_lifecycle_through_facade() -> None:
     assert scheduled["lease"]["node_id"] == "node-a"
     assert control_plane.task_lease_service.active_lease_count == 1
     assert control_plane.tasks["task-a"].status == TaskStatus.RUNNING
+    delivered = control_plane.request_lease("node-a")
+    assert delivered is not None
+    assert delivered["task_id"] == "task-a"
+    control_plane.report_task_progress(
+        node_id="node-a",
+        task_id="task-a",
+        stage="executing",
+        status="running",
+        progress=0.5,
+    )
     assert control_plane.request_lease("node-a") is None
 
 

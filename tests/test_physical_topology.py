@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tianjun.domain import NetworkPathProfile, Node, PhysicalTopology, PolicyState, ResourceVector, Task
+from tianjun.domain import NetworkPathProfile, Node, PhysicalTopology, PolicyState, ResourceVector, RunningTask, Task
 from tianjun.ml.runtime import ModelPrediction
 from tianjun.scheduling.engine import ClosedLoopAdaptiveScheduler
 
@@ -94,3 +94,33 @@ def test_service_region_filters_nodes_without_replacing_physical_attachment() ->
     assert west_dc2_b.can_host_now(task)
     assert not east_dc1.can_host_now(task)
     assert not south_dc3.can_host_now(task)
+
+
+def test_scheduler_spreads_work_away_from_hot_datacenter() -> None:
+    scheduler = ClosedLoopAdaptiveScheduler(PolicyState())
+    dc1_a = node("dc1-a", "dc1", "beijing")
+    dc1_b = node("dc1-b", "dc1", "hangzhou")
+    dc2_a = node("dc2-a", "dc2", "chengdu")
+    for index, hot_node in enumerate((dc1_a, dc1_b)):
+        hot_node.running_tasks[f"hot-{index}"] = RunningTask(
+            task_id=f"hot-{index}",
+            node_id=hot_node.node_id,
+            allocation=ResourceVector(cpu=6, memory=24, storage=10),
+            start_tick=0,
+            predicted_duration=20,
+            actual_duration=0,
+            finish_tick=20,
+            success_probability=0.99,
+        )
+    task = Task(
+        task_id="spread",
+        task_type="analytics",
+        demand=ResourceVector(cpu=1, memory=2, storage=1),
+        estimated_duration=3,
+    )
+
+    decision = scheduler.select_node(task, [dc1_a, dc1_b, dc2_a], current_tick=0)
+
+    assert decision is not None
+    assert decision.node_id == "dc2-a"
+    assert decision.network_snapshot["queue"]["region_pressure"] < 0.5

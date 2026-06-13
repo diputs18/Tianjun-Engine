@@ -5,7 +5,17 @@ from statistics import mean
 from typing import Any, Iterable
 
 from ..ml.runtime import TrainedModelRuntime, get_default_model_runtime
-from ..domain import METRIC_KEYS, Node, PhysicalTopology, PolicyState, SchedulingDecision, Task, clamp, normalize_weights
+from ..domain import (
+    METRIC_KEYS,
+    Node,
+    PhysicalTopology,
+    PolicyState,
+    ResourceVector,
+    SchedulingDecision,
+    Task,
+    clamp,
+    normalize_weights,
+)
 
 
 class ClosedLoopAdaptiveScheduler:
@@ -32,6 +42,7 @@ class ClosedLoopAdaptiveScheduler:
     ) -> SchedulingDecision | None:
         candidate_pool = list(nodes)
         neighbor_pool = list(topology_nodes) if topology_nodes is not None else candidate_pool
+        region_pressure = self._region_pressure_by_node(neighbor_pool, task)
         raw_metrics: dict[str, dict[str, float]] = {}
         candidate_details: dict[str, dict[str, Any]] = {}
         candidates: list[Node] = []
@@ -62,7 +73,12 @@ class ClosedLoopAdaptiveScheduler:
                     * float(network_snapshot["delivery_probability"])
                     * float(network_snapshot["deterministic_confidence"]),
                 ),
-                "balance": self._balance_raw(node, task, queue_snapshot),
+                "balance": self._balance_raw(
+                    node,
+                    task,
+                    queue_snapshot,
+                    region_pressure.get(node.node_id, node.dominant_utilization_after(task.demand)),
+                ),
                 "fragmentation": node.fragmentation_after(task.demand),
                 "locality": node.locality_score(task),
                 "network": self._network_raw(task, network_snapshot),
@@ -75,6 +91,7 @@ class ClosedLoopAdaptiveScheduler:
                 "predicted_cost": float(predicted_cost),
                 "network_snapshot": network_snapshot,
                 "queue_snapshot": queue_snapshot,
+                "region_pressure": region_pressure.get(node.node_id, 0.0),
             }
 
         if task.budget is not None:
@@ -110,6 +127,10 @@ class ClosedLoopAdaptiveScheduler:
             # the task can still run there.
             if task.demand.gpu <= 0 and node.capacity.gpu > 0:
                 score -= 0.75
+            fleet_pressure = float(candidate_details[node.node_id].get("region_pressure", 0.0))
+            score -= fleet_pressure * 1.10
+            if fleet_pressure >= 0.72:
+                score -= (fleet_pressure - 0.72) * 3.0
             return score
 
         best_node = max(
@@ -119,15 +140,18 @@ class ClosedLoopAdaptiveScheduler:
                 metric_scores[node.node_id]["network"],
                 metric_scores[node.node_id]["performance"],
                 metric_scores[node.node_id]["reliability"],
+                -float(candidate_details[node.node_id].get("region_pressure", 0.0)),
             ),
         )
         total_score = adjusted_total(best_node)
         detail = candidate_details[best_node.node_id]
         decision_snapshot = dict(detail["network_snapshot"])
-        decision_snapshot["queue"] = detail["queue_snapshot"]
+        queue_detail = dict(detail["queue_snapshot"])
+        queue_detail["region_pressure"] = float(detail.get("region_pressure", 0.0))
+        decision_snapshot["queue"] = queue_detail
         decision_snapshot["adaptive_scoring_formula"] = (
             "score=sum(w_k*s_k); completion penalizes predicted finish time; "
-            "balance penalizes dominant utilization, queue depth, and queued work."
+            "balance penalizes dominant utilization, queue depth, queued work, and hot DC pressure."
         )
         explanation = self._build_explanation(
             task,
@@ -173,16 +197,41 @@ class ClosedLoopAdaptiveScheduler:
             budget_penalty += ((predicted_cost - task.budget) / max(task.budget, 1.0)) * 3.0
         return 1.0 / max(0.1, predicted_cost * budget_penalty)
 
-    def _balance_raw(self, node: Node, task: Task, queue_snapshot: dict[str, float]) -> float:
+    def _balance_raw(
+        self,
+        node: Node,
+        task: Task,
+        queue_snapshot: dict[str, float],
+        region_pressure: float,
+    ) -> float:
         resource_pressure = node.dominant_utilization_after(task.demand)
         queue_depth_pressure = float(queue_snapshot["queue_depth_pressure"])
         queued_work_pressure = float(queue_snapshot["queued_work_pressure"])
         pressure = (
-            (resource_pressure * 0.45)
-            + (queue_depth_pressure * 0.35)
-            + (queued_work_pressure * 0.20)
+            (resource_pressure * 0.34)
+            + (queue_depth_pressure * 0.26)
+            + (queued_work_pressure * 0.16)
+            + (region_pressure * 0.24)
         )
         return clamp(1.0 - pressure)
+
+    def _region_pressure_by_node(self, nodes: Iterable[Node], task: Task) -> dict[str, float]:
+        grouped: dict[str, dict[str, ResourceVector]] = {}
+        node_regions: dict[str, str] = {}
+        for node in nodes:
+            region = node.region or node.service_region or node.location or "default"
+            node_regions[node.node_id] = region
+            bucket = grouped.setdefault(region, {"capacity": ResourceVector(), "used": ResourceVector()})
+            bucket["capacity"] = bucket["capacity"] + node.capacity
+            bucket["used"] = bucket["used"] + node.used()
+
+        pressures: dict[str, float] = {}
+        for node_id, region in node_regions.items():
+            bucket = grouped[region]
+            pressures[node_id] = clamp(
+                (bucket["used"] + task.demand).dominant_share_against(bucket["capacity"])
+            )
+        return pressures
 
     def _queue_snapshot(
         self,

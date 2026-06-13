@@ -224,6 +224,81 @@
   background: var(--color-primary-50);
 }
 
+.md-body h3,
+.md-body h4 {
+  margin: var(--space-sm) 0 var(--space-xs);
+  color: var(--color-gray-950);
+  letter-spacing: 0;
+}
+
+.md-body h3 {
+  font-size: 1rem;
+}
+
+.md-body h4 {
+  font-size: .92rem;
+}
+
+.md-body p,
+.md-body ul {
+  margin: var(--space-xs) 0;
+}
+
+.md-body ul {
+  padding-left: 1.15rem;
+}
+
+.md-body li {
+  margin: .25rem 0;
+}
+
+.md-body strong {
+  color: var(--color-gray-950);
+}
+
+.md-body code {
+  padding: .08rem .28rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-gray-100);
+  color: var(--color-primary-700);
+  font-size: .92em;
+}
+
+.md-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: var(--space-sm) 0;
+  border: 0.0625rem solid var(--color-gray-200);
+  border-radius: var(--radius-sm);
+}
+
+.md-body table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 42rem;
+  font-size: .9rem;
+  background: var(--color-bg-card);
+}
+
+.md-body th,
+.md-body td {
+  padding: .55rem .65rem;
+  border-bottom: 0.0625rem solid var(--color-gray-200);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.md-body th {
+  color: var(--color-gray-700);
+  background: var(--color-gray-50);
+  font-weight: 700;
+}
+
+.md-body tr:last-child td {
+  border-bottom: 0;
+}
+
 .composer {
   border: 0.0625rem solid var(--color-gray-200);
   border-radius: var(--radius-md);

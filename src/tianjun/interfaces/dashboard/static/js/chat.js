@@ -1,6 +1,6 @@
 import { commitHermesPolicy, streamHermesChat } from "./api.js";
 import { emit, rememberIntentPayload, state } from "./state.js";
-import { escapeHtml, renderInlineMarkdown } from "./utils.js";
+import { escapeHtml, renderMarkdown } from "./utils.js";
 
 const STEPS = [
   ["understand", "解析业务目标", "识别任务类型与约束"],
@@ -265,8 +265,7 @@ export function updateAgentRuntimeStatus() {
 }
 
 function renderText(text) {
-  const html = escapeHtml(text).split(/\n{2,}/).map((part) => `<p>${renderInlineMarkdown(part).replace(/\n/g, "<br>")}</p>`).join("");
-  return `<div class="md-body">${html}</div>`;
+  return `<div class="md-body">${renderMarkdown(text)}</div>`;
 }
 
 function welcomeMessage() {

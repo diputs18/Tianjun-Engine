@@ -69,7 +69,8 @@ public final class HuaweiDciTianjunExperiment {
     private static final int VMS_PER_LOCATION = 4;
     private static final int DEFAULT_CLOUDLETS = 36;
     private static final long DEFAULT_SEED = 20260527L;
-    private static final double HEARTBEAT_INTERVAL_SECONDS = 5.0;
+    private static final double HEARTBEAT_INTERVAL_SECONDS = 2.0;
+    private static final long LISTENER_POLL_MILLIS = 350L;
     private static final double LOCAL_FABRIC_LATENCY_MS = 0.8;
     private static final double LOCAL_FABRIC_BANDWIDTH_MBPS = 25_000.0;
     private static final double DCI_BOTTLENECK_BANDWIDTH_MBPS = 10_000.0;
@@ -94,6 +95,7 @@ public final class HuaweiDciTianjunExperiment {
     private final String disturbanceScenario;
     private final String experimentRunId;
     private final BufferedWriter snapshotWriter;
+    private final boolean listenAfterBatch;
     private double lastHeartbeatTick = -1.0;
 
     public static void main(final String[] args) throws IOException {
@@ -102,7 +104,8 @@ public final class HuaweiDciTianjunExperiment {
         final int cloudlets = args.length > 2 ? Integer.parseInt(args[2]) : DEFAULT_CLOUDLETS;
         final long seed = args.length > 3 ? Long.parseLong(args[3]) : DEFAULT_SEED;
         final Path output = Path.of(args.length > 4 ? args[4] : "output/huawei-dci-topology-snapshots.jsonl");
-        new HuaweiDciTianjunExperiment(server, scenario, cloudlets, seed, output).run();
+        final boolean listenAfterBatch = args.length <= 5 || !"once".equalsIgnoreCase(args[5]);
+        new HuaweiDciTianjunExperiment(server, scenario, cloudlets, seed, output, listenAfterBatch).run();
     }
 
     private HuaweiDciTianjunExperiment(
@@ -110,10 +113,12 @@ public final class HuaweiDciTianjunExperiment {
         final String disturbanceScenario,
         final int cloudletCount,
         final long seed,
-        final Path outputPath
+        final Path outputPath,
+        final boolean listenAfterBatch
     ) throws IOException {
         this.simulation = new CloudSimPlus();
         this.bridge = new TianjunHttpBridge(server);
+        this.listenAfterBatch = listenAfterBatch;
         this.disturbanceScenario = disturbanceScenario.toLowerCase(Locale.ROOT);
         this.experimentRunId = "dci-" + this.disturbanceScenario + "-" + seed;
         this.random = new Random(seed);
@@ -152,11 +157,14 @@ public final class HuaweiDciTianjunExperiment {
         simulation.addOnClockTickListener(this::onClockTick);
 
         writeSnapshot(0.0, "registered");
-        simulation.start();
-        sendHeartbeats(simulation.clock());
-        reportResults();
-        writeSnapshot(simulation.clock(), "finished");
-        snapshotWriter.close();
+        try {
+            simulation.start();
+        } finally {
+            sendHeartbeats(simulation.clock());
+            reportResults();
+            writeSnapshot(simulation.clock(), "finished");
+            snapshotWriter.close();
+        }
 
         final var finished = broker.getCloudletFinishedList();
         System.out.printf("=== Huawei-reference DCI Tianjun experiment (%s) ===%n", disturbanceScenario);
@@ -164,6 +172,9 @@ public final class HuaweiDciTianjunExperiment {
         System.out.printf("Simulation nodes: %d, submitted tasks: %d, finished: %d%n", vmList.size(), cloudletList.size(), finished.size());
         System.out.printf("Max cross-site propagation baseline: %.3f ms, DCI bottleneck: %.0f Mbps%n", maxCrossSiteBaseLatencyMs(), DCI_BOTTLENECK_BANDWIDTH_MBPS);
         new CloudletsTableBuilder(finished).build();
+        if (listenAfterBatch) {
+            listenForExternalLeases();
+        }
     }
 
     private List<Datacenter> createDatacenters() {
@@ -183,7 +194,7 @@ public final class HuaweiDciTianjunExperiment {
             final int pes = 32;
             final long mips = site == 0 ? 2400L : site == 1 ? 2250L : 2200L;
             final long ramMb = 131_072L;
-            final long bandwidthMbps = 25_000L;
+            final long bandwidthMbps = 120_000L;
             final long storageMb = 4_000_000L;
             final var peList = new ArrayList<Pe>();
             for (int pe = 0; pe < pes; pe++) {
@@ -215,7 +226,7 @@ public final class HuaweiDciTianjunExperiment {
                 final double mips = site == 0 ? 2200.0 : site == 1 ? 2120.0 : 2050.0;
                 final var vm = new VmSimple(mips, pes)
                     .setRam(16_384L + (index % 2) * 16_384L)
-                    .setBw(5_000L)
+                    .setBw(20_000L)
                     .setSize(200_000L)
                     .setDescription("dci-" + REGIONS[site] + "-" + LOCATIONS[locationIndex] + "-vm-" + index);
                 result.add(vm);
@@ -228,12 +239,12 @@ public final class HuaweiDciTianjunExperiment {
     private List<Cloudlet> createCloudlets(final int count) {
         final var result = new ArrayList<Cloudlet>();
         for (int index = 0; index < count; index++) {
-            final var cloudlet = new CloudletSimple(index, 80_000L + index % 8 * 20_000L, 1 + index % 4);
-            cloudlet.setFileSize(2_048L + index % 6 * 512L)
+            final var cloudlet = new CloudletSimple(index, 8_000L + index % 6 * 2_000L, 1 + index % 4);
+            cloudlet.setFileSize(512L + index % 4 * 128L)
                 .setOutputSize(1_024L)
-                .setUtilizationModelCpu(new UtilizationModelDynamic(0.40 + random.nextDouble() * 0.42))
-                .setUtilizationModelRam(new UtilizationModelDynamic(0.18 + random.nextDouble() * 0.25))
-                .setUtilizationModelBw(new UtilizationModelDynamic(0.12 + random.nextDouble() * 0.38));
+                .setUtilizationModelCpu(new UtilizationModelDynamic(0.24 + random.nextDouble() * 0.18))
+                .setUtilizationModelRam(new UtilizationModelDynamic(0.08 + random.nextDouble() * 0.12))
+                .setUtilizationModelBw(new UtilizationModelDynamic(0.04 + random.nextDouble() * 0.10));
             result.add(cloudlet);
         }
         return result;
@@ -267,12 +278,24 @@ public final class HuaweiDciTianjunExperiment {
         int mapped = 0;
         broker.setVmMapper(cloudlet -> selectedVmByCloudletId.getOrDefault(cloudlet.getId(), Vm.NULL));
         for (final var node : nodeById.values()) {
-            final LeaseResult lease = bridge.requestLease(node.nodeId());
+            final LeaseResult lease;
+            try {
+                lease = bridge.requestLease(node.nodeId());
+            } catch (IllegalStateException exception) {
+                System.err.printf(
+                    "WARN %.2f: Tianjun lease polling failed for %s; CloudSim will keep running and retry later. %s%n",
+                    tick,
+                    node.nodeId(),
+                    exception.getMessage()
+                );
+                continue;
+            }
             if (lease == null) {
                 continue;
             }
             final Long cloudletId = cloudletIdByTaskId.get(lease.taskId());
             if (cloudletId == null) {
+                executeExternalLease(lease, node, tick);
                 continue;
             }
             final Cloudlet cloudlet = cloudletById(cloudletId);
@@ -292,6 +315,117 @@ public final class HuaweiDciTianjunExperiment {
             System.out.printf("Tianjun leased and submitted %d new DCI tasks; total submitted: %d/%d.%n", mapped, submittedCloudletIds.size(), cloudletList.size());
         }
         return mapped;
+    }
+
+    private void listenForExternalLeases() {
+        System.out.println("Tianjun CloudSim listener is running. Press Ctrl+C or stop the IntelliJ run to exit.");
+        while (true) {
+            final double tick = Math.max(simulation.clock(), System.currentTimeMillis() / 1000.0);
+            sendSyntheticHeartbeats(tick);
+            int executed = 0;
+            for (final var node : nodeById.values()) {
+                final LeaseResult lease;
+                try {
+                    lease = bridge.requestLease(node.nodeId());
+                } catch (IllegalStateException exception) {
+                    System.err.printf(
+                        "WARN listener: lease polling failed for %s; retrying. %s%n",
+                        node.nodeId(),
+                        exception.getMessage()
+                    );
+                    continue;
+                }
+                if (lease == null) {
+                    continue;
+                }
+                final Long localCloudletId = cloudletIdByTaskId.get(lease.taskId());
+                if (localCloudletId != null) {
+                    continue;
+                }
+                executeExternalLease(lease, node, tick);
+                executed++;
+            }
+            if (executed > 0) {
+                System.out.printf("Tianjun listener executed %d externally submitted task(s).%n", executed);
+            }
+            try {
+                Thread.sleep(LISTENER_POLL_MILLIS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private void executeExternalLease(final LeaseResult lease, final SimNode node, final double tick) {
+        final double duration = externalDurationSeconds(lease);
+        reportExternalProgress(node.nodeId(), lease.taskId(), tick, "leased", 0.05, "Lease acquired by CloudSim listener.");
+        reportExternalProgress(node.nodeId(), lease.taskId(), tick + duration * 0.45, "executing", 0.65, "CloudSim listener executing external task.");
+        sleepQuietly(Math.min(450L, Math.max(120L, Math.round(duration * 120.0))));
+        reportResultWithRetry(new SimTaskResult(
+            node.nodeId(),
+            lease.taskId(),
+            true,
+            duration,
+            "CloudSim listener completed externally submitted Tianjun task.",
+            "",
+            0,
+            Math.min(lease.predictedCost(), duration * node.costPerTick())
+        ));
+    }
+
+    private double externalDurationSeconds(final LeaseResult lease) {
+        final int estimated = lease.estimatedDuration();
+        return Math.max(1.0, Math.min(4.0, estimated <= 0 ? 2.0 : Math.ceil(estimated / 3.0)));
+    }
+
+    private void reportExternalProgress(
+        final String nodeId,
+        final String taskId,
+        final double tick,
+        final String stage,
+        final double progress,
+        final String message
+    ) {
+        try {
+            bridge.reportProgress(new SimTaskProgress(
+                nodeId,
+                taskId,
+                stage,
+                "running",
+                progress,
+                message,
+                tick,
+                0.18 + progress * 0.25,
+                0.12 + progress * 0.18,
+                0.08 + progress * 0.16,
+                0.0
+            ));
+        } catch (IllegalStateException exception) {
+            System.err.printf("WARN listener: progress report failed for task %s. %s%n", taskId, exception.getMessage());
+        }
+    }
+
+    private void sendSyntheticHeartbeats(final double tick) {
+        for (final var node : nodeById.values()) {
+            final double wave = 0.5 + Math.sin(tick * 0.17 + node.index()) * 0.5;
+            bridge.tryHeartbeat(
+                node,
+                tick,
+                0.08 + wave * 0.18,
+                0.10 + wave * 0.12,
+                0.04 + wave * 0.10,
+                observedPaths(node, tick, 0.04 + wave * 0.10)
+            );
+        }
+    }
+
+    private static void sleepQuietly(final long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void onClockTick(final EventInfo event) {
@@ -332,7 +466,7 @@ public final class HuaweiDciTianjunExperiment {
             }
             reportProgress(cloudlet, simulation.clock(), "finished", 1.0, "CloudSim cloudlet finished; reporting final result.");
             final double duration = Math.max(1.0, cloudlet.getFinishTime() - cloudlet.getStartTime());
-            bridge.reportResult(new SimTaskResult(
+            final var result = new SimTaskResult(
                 nodeId,
                 task.taskId(),
                 cloudlet.isFinished(),
@@ -341,8 +475,10 @@ public final class HuaweiDciTianjunExperiment {
                 "",
                 cloudlet.isFinished() ? 0 : 1,
                 duration * nodeById.get(nodeId).costPerTick()
-            ));
-            reportedResultCloudletIds.add(cloudlet.getId());
+            );
+            if (reportResultWithRetry(result)) {
+                reportedResultCloudletIds.add(cloudlet.getId());
+            }
         }
     }
 
@@ -378,7 +514,7 @@ public final class HuaweiDciTianjunExperiment {
         if (task == null || nodeId == null || vm == null || vm == Vm.NULL) {
             return;
         }
-        bridge.reportProgress(new SimTaskProgress(
+        final var progressEvent = new SimTaskProgress(
             nodeId,
             task.taskId(),
             stage,
@@ -390,7 +526,43 @@ public final class HuaweiDciTianjunExperiment {
             vm.getRam().getPercentUtilization(),
             vm.getBw().getPercentUtilization(),
             0.0
-        ));
+        );
+        try {
+            bridge.reportProgress(progressEvent);
+        } catch (IllegalStateException exception) {
+            System.err.printf(
+                "WARN %.2f: Tianjun progress report failed for task %s; final result will still be attempted. %s%n",
+                tick,
+                task.taskId(),
+                exception.getMessage()
+            );
+        }
+    }
+
+    private boolean reportResultWithRetry(final SimTaskResult result) {
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                bridge.reportResult(result);
+                return true;
+            } catch (IllegalStateException exception) {
+                System.err.printf(
+                    "WARN %.2f: Tianjun result report failed for task %s, attempt %d/3. %s%n",
+                    simulation.clock(),
+                    result.taskId(),
+                    attempt,
+                    exception.getMessage()
+                );
+                if (attempt < 3) {
+                    try {
+                        Thread.sleep(250L * attempt);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private Cloudlet cloudletById(final long cloudletId) {
@@ -405,6 +577,7 @@ public final class HuaweiDciTianjunExperiment {
     private SimNode simNodeForVm(final Vm vm, final int index) {
         final int locationIndex = index / VMS_PER_LOCATION;
         final int site = LOCATION_SITES[locationIndex];
+        final double gpuCount = gpuCapacityForNode(site, index);
         return new SimNode(
             vm.getDescription(),
             REGIONS[site],
@@ -413,7 +586,7 @@ public final class HuaweiDciTianjunExperiment {
             index,
             vm.getPesNumber(),
             vm.getRam().getCapacity() / 1024.0,
-            0.0,
+            gpuCount,
             vm.getStorage().getCapacity() / 1024.0,
             vm.getBw().getCapacity(),
             1.10 + site * 0.08 + (index % VMS_PER_LOCATION) * 0.04,
@@ -423,19 +596,26 @@ public final class HuaweiDciTianjunExperiment {
         );
     }
 
+    private double gpuCapacityForNode(final int site, final int index) {
+        final double siteBonus = site == 0 ? 1.0 : 0.0;
+        final double anchorBonus = index % VMS_PER_LOCATION == 0 ? 1.0 : 0.0;
+        return 1.0 + siteBonus + anchorBonus;
+    }
+
     private SimTask taskForCloudlet(final Cloudlet cloudlet, final int index) {
         final String sourceRegion = REGIONS[index % REGIONS.length];
+        final boolean gpuAccelerated = index % 6 == 0 || index % 6 == 3;
         return new SimTask(
             experimentRunId + "-task-" + cloudlet.getId(),
-            index % 3 == 0 ? "inference" : index % 3 == 1 ? "analytics" : "batch_cpu",
+            gpuAccelerated ? "inference" : index % 3 == 1 ? "analytics" : "batch_cpu",
             Math.max(1.0, cloudlet.getPesNumber()),
             2.0 + index % 4 * 2.0,
-            0.0,
+            gpuAccelerated ? 1.0 : 0.0,
             Math.max(1.0, cloudlet.getFileSize() / 1024.0),
             Math.max(1, (int) Math.ceil(cloudlet.getLength() / 8_000.0)),
             5 + index % 5,
-            80.0,
-            100,
+            220.0,
+            180,
             sourceRegion,
             0.5 + index % 4 * 0.4,
             sourceRegion.equals("dc1") ? 25.0 : sourceRegion.equals("dc2") ? 28.0 : 30.0,

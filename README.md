@@ -77,6 +77,8 @@ java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 
 
 该实验会创建 24 个仿真 VM，注册 DCI 拓扑和节点，持续发送心跳，通过 Tianjun 控制平面提交调度任务，并在 CloudSimPlus 仿真完成后回传执行结果。它是当前推荐的后台常驻仿真拓扑：只要该 Java 进程持续运行，控制平面就可以实时接收待调度任务，节点会通过 `/leases/next` 领取任务，再通过 `/task-runs/progress` 和 `/task-runs/result` 推进执行状态。
 
+CloudSimPlus 示例节点会随注册请求上报 CPU、内存、GPU、存储、网络路径和服务区域信息。部分任务带有 GPU 需求，便于在资源池、调度决策、网络拓扑和执行详情中观察 GPU 容量、占用和候选节点约束。示例默认使用较短的 Cloudlet 批处理参数，并在批量任务完成后保持租约监听，用于演示 Dashboard 中持续调度、节点心跳、资源释放和执行记录流转。
+
 当前 Java CloudSimPlus 示例已经接入控制平面的真实租约执行链路：实验启动后会先通过 `/tasks` 把 Cloudlet 对应的任务写入 `pending_queue`，随后每个仿真 VM 作为节点持续心跳并轮询 `/leases/next`。拿到租约后，示例才把对应 Cloudlet 提交给 CloudSimPlus 执行；执行期间会通过 `/task-runs/progress` 上报阶段、进度和模拟资源利用率，完成后再通过 `/task-runs/result` 回传结果。因此 Dashboard 的拓扑页可以从 `/report` 中的 `active_runs`、`recent_progress_events` 和调度决策实时高亮当前 DCI 路径。
 
 任务下发后的状态流转如下：
@@ -95,6 +97,8 @@ http://127.0.0.1:8024/dashboard
 ```
 
 Dashboard 是静态 HTML/CSS/JS，无构建步骤。启动 CloudSimPlus 桥接器或真实节点代理后，节点/拓扑页面应能看到已注册节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由节点侧进程通过租约、进度和结果回报推进。拓扑页不再固定展示静态路径，而是优先读取 `/report` 中的 `active_runs`、`recent_progress_events`、`recent_decisions`、执行记录和待调度队列，实时高亮当前任务的全局 DCI 路径、数据中心内部 Leaf/Cluster/VM 路径以及路径时延、带宽、风险等指标。
+
+Dashboard 的资源总览会按 DC 聚合 CPU、内存和 GPU 使用率；网络拓扑会展示资源区和 VM 级别的 GPU 信息，并将路径风险、有效带宽、GNN 稳定性和最新调度来源作为实时指标呈现。调度器在候选节点评分中同时考虑节点负载、队列压力和同一 DC 的整体资源热度，使新任务在满足安全、地域、预算和资源约束的前提下更倾向分散到可用资源池。
 
 ### 6. 启动 MCP 工具服务
 
