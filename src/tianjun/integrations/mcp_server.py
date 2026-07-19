@@ -24,16 +24,18 @@ class TianjunHttpClient:
             auth_token=os.environ.get("TIANJUN_AUTH_TOKEN"),
         )
 
-    def get(self, path: str) -> dict[str, Any]:
-        return self._request("GET", path)
+    def get(self, path: str, *, tool_name: str | None = None) -> dict[str, Any]:
+        return self._request("GET", path, tool_name=tool_name)
 
-    def post(self, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        return self._request("POST", path, payload or {})
+    def post(self, path: str, payload: dict[str, Any] | None = None, *, tool_name: str | None = None) -> dict[str, Any]:
+        return self._request("POST", path, payload or {}, tool_name=tool_name)
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None, *, tool_name: str | None = None) -> dict[str, Any]:
         url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
         data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "X-Tianjun-Caller": "external_mcp"}
+        if tool_name:
+            headers["X-Tianjun-Tool"] = tool_name
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
@@ -168,6 +170,67 @@ def create_mcp(client: TianjunHttpClient | None = None) -> Any:
                 "message": "调度将为现有任务创建执行租约；请先向用户确认，再以 confirmed=true 调用。",
             }
         return http.post(f"/tasks/{task_id}/schedule", {"confirmed": True})
+
+    @tool
+    def import_task_batch(
+        batch_name: str,
+        tasks: list[dict[str, Any]],
+        client_batch_id: str = "",
+        defaults: dict[str, Any] | None = None,
+        batch_preferences: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """导入并原子校验JSON批任务；不会立即调度或创建租约。"""
+        return http.post("/task-batches/import", {
+            "batch_name": batch_name,
+            "client_batch_id": client_batch_id,
+            "defaults": defaults or {},
+            "batch_preferences": batch_preferences or {},
+            "tasks": tasks,
+        }, tool_name="import_task_batch")
+
+    @tool
+    def get_task_batch(batch_id: str) -> dict[str, Any]:
+        """读取批次、任务、最近预演方案和执行状态。"""
+        return http.get(f"/task-batches/{batch_id}", tool_name="get_task_batch")
+
+    @tool
+    def get_batch_actual_metrics(batch_id: str) -> dict[str, Any]:
+        """Read measured JCT, makespan, utilization, energy and operational carbon for an executed batch."""
+        return http.get(
+            f"/task-batches/{batch_id}/metrics",
+            tool_name="get_batch_actual_metrics",
+        )
+
+    @tool
+    def preview_batch_schedule(batch_id: str, strategy: str = "B4-pareto-tchebycheff") -> dict[str, Any]:
+        """联合预演整个批次，返回任务节点映射、碳排放、SLA和碎片指标。"""
+        return http.post(f"/task-batches/{batch_id}/preview", {"strategy": strategy}, tool_name="preview_batch_schedule")
+
+    @tool
+    def compare_batch_strategies(batch_id: str, strategies: list[str] | None = None) -> dict[str, Any]:
+        """比较B0、B1、B3和B4等批调度策略，不创建租约。"""
+        return http.post(f"/task-batches/{batch_id}/compare", {"strategies": strategies or []}, tool_name="compare_batch_strategies")
+
+    @tool
+    def commit_batch_schedule(
+        batch_id: str,
+        plan_id: str,
+        resource_snapshot_version: int,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """确认批方案。只有用户明确确认后才会原子预留资源并创建租约。"""
+        if not confirmed:
+            return {
+                "status": "need_confirmation",
+                "batch_id": batch_id,
+                "plan_id": plan_id,
+                "message": "批调度将创建多个执行租约；请先确认，再以 confirmed=true 调用。",
+            }
+        return http.post(f"/task-batches/{batch_id}/commit", {
+            "plan_id": plan_id,
+            "resource_snapshot_version": resource_snapshot_version,
+            "confirmed": True,
+        }, tool_name="commit_batch_schedule")
 
     return mcp
 

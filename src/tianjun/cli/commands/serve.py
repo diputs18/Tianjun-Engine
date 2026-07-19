@@ -4,10 +4,10 @@ from argparse import Namespace
 
 from tianjun.application.bootstrap import build_control_plane
 from tianjun.chat import ChatRuntime
-from tianjun.config import TianjunConfig, config_path, first_present
+from tianjun.config import TianjunConfig, first_present
 from tianjun.domain import ExecutionMode
 from tianjun.interfaces.http.server import build_http_server
-from tianjun.scenarios import load_scenario_payload, node_from_dict, task_from_dict
+from tianjun.scenarios import load_scenario_payload, node_from_dict, scenario_nodes, scenario_tasks, task_from_dict
 from tianjun.storage.sqlite_state_store import SQLiteStateStore
 from tianjun.cli import require_model, resolved_llm_settings, resolved_model_dir, resolved_path_setting
 
@@ -16,8 +16,7 @@ def handle(args: Namespace, app_config: TianjunConfig) -> None:
     host = str(first_present(args.host, app_config.get("server.host"), app_config.get("control_plane.host"), default="127.0.0.1"))
     port = int(first_present(args.port, app_config.get("server.port"), app_config.get("control_plane.port"), default=8024))
     scenario = resolved_path_setting(args.scenario, app_config, "server.scenario", "control_plane.scenario")
-    if args.demo and scenario is None:
-        scenario = config_path("examples/runtime_scenario.json")
+    use_builtin_demo = bool(args.demo and scenario is None)
     state_db = resolved_path_setting(args.state_db, app_config, "server.state_db", "control_plane.state_db")
     heartbeat_timeout = float(first_present(
         args.heartbeat_timeout_seconds,
@@ -48,6 +47,11 @@ def handle(args: Namespace, app_config: TianjunConfig) -> None:
             control_plane.register_node(node_from_dict(node_data))
         for task_data in payload.get("tasks", []):
             control_plane.submit_task(task_from_dict(task_data))
+    elif use_builtin_demo and not control_plane.tasks:
+        for node in scenario_nodes():
+            control_plane.register_node(node)
+        for task in scenario_tasks():
+            control_plane.submit_task(task)
     chat_runtime = ChatRuntime.with_llm_settings(control_plane, resolved_llm_settings(args, app_config))
     server = build_http_server(control_plane, host, port, chat_runtime=chat_runtime)
     print(f"Control plane listening on http://{host}:{port}")

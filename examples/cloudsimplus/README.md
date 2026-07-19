@@ -8,6 +8,8 @@
 src/main/java/org/cloudsimplus/examples/HuaweiDciTianjunExperiment.java
 src/main/java/org/cloudsimplus/examples/tianjun/TianjunHttpBridge.java
 src/main/resources/huawei-dci-reference.brite
+src/main/resources/tianjun-power-profiles.json
+src/main/resources/tianjun-carbon-intensity-trace.csv
 ```
 
 该实验创建了 24 个模拟计算 VM，并将三个 Hermes 部署区域映射到各一个模拟物理接入点：
@@ -29,3 +31,11 @@ src/main/resources/huawei-dci-reference.brite
 5. Cloudlet 完成后，示例通过 `/task-runs/result` 回传最终执行结果，控制平面再写入执行记录。
 
 因此 Dashboard 拓扑页可以根据 `/report` 中的 `active_runs`、`recent_progress_events`、调度决策和节点 inventory 实时更新 DCI 路径与 Leaf/Cluster/VM 高亮。
+
+## 功耗与运行碳口径
+
+- `.brite` 仍只保存网络拓扑，不混入碳数据。
+- 物理 Host 使用 `PowerModelHostSimple`；Host 空闲功耗只在站点层计算一次，任务只分摊其增量功耗。
+- 心跳上报瞬时功率、增量能耗、站点碳强度和信号时间戳。
+- 任务结果分别上报计算碳、网络碳和总运行碳，`carbon_scope` 固定为 `operational_only`。
+- 合成碳轨迹用于可重复主实验，不能当作真实电网历史数据。

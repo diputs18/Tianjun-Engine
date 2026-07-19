@@ -76,6 +76,11 @@ function updateTopnav(report, health) {
   const llm = health?.chat_runtime?.llm ?? {};
   document.getElementById("hermesLlmStatus").className = `badge ${llm.enabled ? "badge-success" : "badge-neutral"}`;
   document.getElementById("hermesLlmStatus").textContent = llm.enabled ? `当前模型 ${llm.settings?.model || "LLM 已启用"}` : "本地规则";
+  const mcpCall = report?.toolchain_runtime?.external_mcp_last_success;
+  const mcpStatus = document.getElementById("mcpStatus");
+  mcpStatus.className = `badge ${mcpCall ? "badge-success" : "badge-neutral"}`;
+  mcpStatus.textContent = mcpCall ? `外部 MCP · ${mcpCall.tool_name}` : "MCP 尚无成功调用";
+  mcpStatus.title = mcpCall ? `最近成功调用 ${new Date(mcpCall.timestamp * 1000).toLocaleString("zh-CN")}` : "进程启动不等于工具已连接";
   document.getElementById("autoRefreshStatus").textContent = "自动刷新中";
   document.getElementById("lastSync").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }

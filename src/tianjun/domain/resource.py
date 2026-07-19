@@ -8,10 +8,22 @@ from .common import RESOURCE_FIELDS, clamp
 
 @dataclass(slots=True)
 class ResourceVector:
+    """Shared capacity contract.
+
+    CPU/RAM/GPU/storage preserve the original public API.  The additional
+    fields make CloudSim's PE throughput and I/O resources explicit while
+    remaining backwards compatible because unspecified dimensions default to
+    zero and are ignored when a node does not model them.
+    """
+
     cpu: float = 0.0
     memory: float = 0.0
     gpu: float = 0.0
     storage: float = 0.0
+    mips: float = 0.0
+    gpu_memory: float = 0.0
+    storage_iops: float = 0.0
+    bandwidth: float = 0.0
 
     def fits_in(self, other: "ResourceVector") -> bool:
         return all(getattr(self, field) <= getattr(other, field) + 1e-9 for field in RESOURCE_FIELDS)
@@ -22,6 +34,10 @@ class ResourceVector:
             memory=max(0.0, self.memory),
             gpu=max(0.0, self.gpu),
             storage=max(0.0, self.storage),
+            mips=max(0.0, self.mips),
+            gpu_memory=max(0.0, self.gpu_memory),
+            storage_iops=max(0.0, self.storage_iops),
+            bandwidth=max(0.0, self.bandwidth),
         )
 
     def ratios_against(self, total: "ResourceVector") -> dict[str, float]:
@@ -54,6 +70,10 @@ class ResourceVector:
             memory=self.memory + other.memory,
             gpu=self.gpu + other.gpu,
             storage=self.storage + other.storage,
+            mips=self.mips + other.mips,
+            gpu_memory=self.gpu_memory + other.gpu_memory,
+            storage_iops=self.storage_iops + other.storage_iops,
+            bandwidth=self.bandwidth + other.bandwidth,
         )
 
     def __sub__(self, other: "ResourceVector") -> "ResourceVector":
@@ -62,4 +82,8 @@ class ResourceVector:
             memory=self.memory - other.memory,
             gpu=self.gpu - other.gpu,
             storage=self.storage - other.storage,
+            mips=self.mips - other.mips,
+            gpu_memory=self.gpu_memory - other.gpu_memory,
+            storage_iops=self.storage_iops - other.storage_iops,
+            bandwidth=self.bandwidth - other.bandwidth,
         )

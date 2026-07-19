@@ -6,7 +6,11 @@ from typing import Any, Iterable
 
 from ..ml.runtime import TrainedModelRuntime, get_default_model_runtime
 from ..domain import (
+    GROUP_INNER_WEIGHTS,
+    GROUP_KEYS,
     METRIC_KEYS,
+    METRIC_TO_GROUP,
+    OBJECTIVE_GROUPS,
     Node,
     PhysicalTopology,
     PolicyState,
@@ -19,6 +23,19 @@ from ..domain import (
 
 
 class ClosedLoopAdaptiveScheduler:
+    ENGINEERING_BOUNDS: dict[str, tuple[float, float]] = {
+        "performance": (0.0, 1.0),
+        "completion": (0.0, 1.0),
+        "cost": (0.0, 10.0),
+        "reliability": (0.0, 1.0),
+        "balance": (0.0, 1.0),
+        "fragmentation": (0.0, 1.0),
+        "locality": (0.0, 1.0),
+        "network": (0.0, 1.0),
+        "security": (0.0, 1.0),
+        "carbon": (0.0, 1.0),
+    }
+
     def __init__(
         self,
         policy_state: PolicyState,
@@ -39,9 +56,15 @@ class ClosedLoopAdaptiveScheduler:
         current_tick: int,
         *,
         topology_nodes: Iterable[Node] | None = None,
+        scoring_strategy: str = "weighted_sum",
+        active_metrics: Iterable[str] | None = None,
+        active_groups: Iterable[str] | None = None,
+        group_weight_overrides: dict[str, float] | None = None,
+        future_tasks: Iterable[Task] | None = None,
     ) -> SchedulingDecision | None:
         candidate_pool = list(nodes)
         neighbor_pool = list(topology_nodes) if topology_nodes is not None else candidate_pool
+        future_task_samples = [sample for sample in (future_tasks or ()) if sample.task_id != task.task_id]
         region_pressure = self._region_pressure_by_node(neighbor_pool, task)
         raw_metrics: dict[str, dict[str, float]] = {}
         candidate_details: dict[str, dict[str, Any]] = {}
@@ -58,10 +81,40 @@ class ClosedLoopAdaptiveScheduler:
             predicted_duration = node.predict_duration(task) + int(transfer_ticks)
             queue_snapshot = self._queue_snapshot(node, task, current_tick, predicted_duration)
             predicted_start_tick = int(queue_snapshot["predicted_start_tick"])
+            carbon_tick = predicted_start_tick
+            if task.allow_time_shift and task.deferrable_until_tick is not None:
+                latest_start = max(predicted_start_tick, int(task.deferrable_until_tick))
+                trace_ticks = [
+                    tick
+                    for tick in node.carbon_profile.carbon_intensity_trace
+                    if predicted_start_tick <= tick <= latest_start
+                ]
+                carbon_tick = min(
+                    {predicted_start_tick, latest_start, *trace_ticks},
+                    key=node.carbon_profile.intensity_at,
+                )
+                predicted_start_tick = carbon_tick
+                queue_snapshot["carbon_deferred_from_tick"] = int(queue_snapshot["predicted_start_tick"])
+                queue_snapshot["predicted_start_tick"] = predicted_start_tick
             predicted_finish_tick = predicted_start_tick + predicted_duration
             predicted_cost = max(1.0, predicted_duration - transfer_ticks) * node.cost_per_tick
+            carbon = node.predict_operational_carbon(task, predicted_duration, carbon_tick)
+            carbon["scheduled_carbon_tick"] = carbon_tick
+            predicted_carbon_g = float(carbon["operational_carbon_g"])
+            if task.carbon_budget_g is not None and predicted_carbon_g > float(task.carbon_budget_g):
+                continue
+            deadline_tick = task.effective_deadline_tick()
+            if deadline_tick is not None and predicted_finish_tick > deadline_tick:
+                continue
             candidates.append(node)
 
+            structural_fragmentation = node.fragmentation_after(task.demand)
+            future_fit_after = self._future_fit_after(node, task.demand, future_task_samples)
+            fragmentation_score = (
+                structural_fragmentation
+                if not future_task_samples
+                else 0.35 * structural_fragmentation + 0.65 * future_fit_after
+            )
             raw_metrics[node.node_id] = {
                 "performance": self._performance_raw(task, predicted_duration, predicted_finish_tick),
                 "completion": self._completion_raw(task, current_tick, predicted_finish_tick),
@@ -79,10 +132,11 @@ class ClosedLoopAdaptiveScheduler:
                     queue_snapshot,
                     region_pressure.get(node.node_id, node.dominant_utilization_after(task.demand)),
                 ),
-                "fragmentation": node.fragmentation_after(task.demand),
+                "fragmentation": clamp(fragmentation_score),
                 "locality": node.locality_score(task),
                 "network": self._network_raw(task, network_snapshot),
                 "security": self._security_raw(task, node, network_snapshot),
+                "carbon": 1.0 / (1.0 + predicted_carbon_g),
             }
             candidate_details[node.node_id] = {
                 "predicted_duration": float(predicted_duration),
@@ -92,6 +146,10 @@ class ClosedLoopAdaptiveScheduler:
                 "network_snapshot": network_snapshot,
                 "queue_snapshot": queue_snapshot,
                 "region_pressure": region_pressure.get(node.node_id, 0.0),
+                "carbon": carbon,
+                "structural_fragmentation_after": structural_fragmentation,
+                "future_fit_after": future_fit_after,
+                "future_fit_sample_count": len(future_task_samples),
             }
 
         if task.budget is not None:
@@ -118,19 +176,71 @@ class ClosedLoopAdaptiveScheduler:
             return None
 
         metric_scores = self._normalize_metric_matrix(raw_metrics)
-        weights = self._derive_task_weights(task, current_tick)
+        atomic_sources = self.weight_components(task, current_tick)
+        selected_metrics = tuple(key for key in (active_metrics or METRIC_KEYS) if key in METRIC_KEYS)
+        if not selected_metrics:
+            selected_metrics = METRIC_KEYS
+        weights = self._masked_weights(atomic_sources["final"], selected_metrics)
+        inner_group_weights = self.inner_group_weights(atomic_sources["final"])
+        group_scores = {
+            node_id: self.objective_group_scores(scores, inner_group_weights)
+            for node_id, scores in metric_scores.items()
+        }
+        group_sources = self.group_weight_components(task, current_tick, atomic_sources=atomic_sources)
+        selected_groups = tuple(key for key in (active_groups or GROUP_KEYS) if key in GROUP_KEYS)
+        if not selected_groups:
+            selected_groups = GROUP_KEYS
+        group_weights = self._masked_weights(group_sources["final"], selected_groups)
+        explicit_group_weights = group_weight_overrides is not None
+        if group_weight_overrides:
+            group_weights = self._masked_weights(group_weight_overrides, selected_groups)
+            group_sources = {
+                **group_sources,
+                "override": dict(group_weights),
+                "final": dict(group_weights),
+            }
+        hierarchical = scoring_strategy in {
+            "hierarchical_tchebycheff",
+            "B6-hierarchical-batch",
+        }
+
+        if hierarchical:
+            pareto_ids = self._pareto_front(group_scores, selected_groups)
+            candidates = [node for node in candidates if node.node_id in pareto_ids]
+        elif scoring_strategy in {"pareto_tchebycheff", "B4-pareto-tchebycheff"}:
+            pareto_ids = self._pareto_front(metric_scores, selected_metrics)
+            candidates = [node for node in candidates if node.node_id in pareto_ids]
 
         def adjusted_total(node: Node) -> float:
-            score = sum(metric_scores[node.node_id][key] * weights[key] for key in METRIC_KEYS)
+            if hierarchical:
+                score = self.tchebycheff_utility(
+                    group_scores[node.node_id],
+                    group_weights,
+                    selected_groups,
+                )
+                score -= self.security_risk_penalty(task, metric_scores[node.node_id]["security"])
+            elif scoring_strategy in {"pareto_tchebycheff", "B4-pareto-tchebycheff"}:
+                score = self.tchebycheff_utility(metric_scores[node.node_id], weights, selected_metrics)
+            else:
+                score = sum(metric_scores[node.node_id][key] * weights[key] for key in selected_metrics)
             # Avoid burning scarce GPU nodes for CPU-only jobs when a CPU-capable node exists.
             # This is a soft preference, not a hard constraint: if a region only has a GPU node,
             # the task can still run there.
             if task.demand.gpu <= 0 and node.capacity.gpu > 0:
                 score -= 0.75
             fleet_pressure = float(candidate_details[node.node_id].get("region_pressure", 0.0))
-            score -= fleet_pressure * 1.10
+            # An explicitly calibrated green profile may consolidate work in a
+            # lower-carbon region. Capacity remains a hard constraint; only
+            # the soft fleet-spreading penalty is relaxed in proportion to the
+            # requested green weight.
+            pressure_scale = (
+                max(0.25, 1.0 - 0.85 * float(group_weights.get("green_carbon", 0.0)))
+                if hierarchical and explicit_group_weights
+                else 1.0
+            )
+            score -= fleet_pressure * 1.10 * pressure_scale
             if fleet_pressure >= 0.72:
-                score -= (fleet_pressure - 0.72) * 3.0
+                score -= (fleet_pressure - 0.72) * 3.0 * pressure_scale
             return score
 
         best_node = max(
@@ -149,9 +259,38 @@ class ClosedLoopAdaptiveScheduler:
         queue_detail = dict(detail["queue_snapshot"])
         queue_detail["region_pressure"] = float(detail.get("region_pressure", 0.0))
         decision_snapshot["queue"] = queue_detail
+        decision_snapshot["carbon"] = dict(detail["carbon"])
+        decision_snapshot["structural_fragmentation_after"] = float(
+            detail.get("structural_fragmentation_after", 0.0)
+        )
+        decision_snapshot["future_fit_after"] = float(detail.get("future_fit_after", 0.0))
+        decision_snapshot["future_fit_sample_count"] = int(detail.get("future_fit_sample_count", 0))
+        decision_snapshot["scoring_strategy"] = scoring_strategy
+        decision_snapshot["active_atomic_metrics"] = list(selected_metrics)
+        decision_snapshot["active_objective_groups"] = list(selected_groups) if hierarchical else []
+        decision_snapshot["objective_hierarchy_version"] = "five-groups-v1" if hierarchical else "flat-ten-v1"
+        decision_snapshot["objective_groups"] = group_scores[best_node.node_id]
+        decision_snapshot["objective_group_weights"] = group_weights
+        decision_snapshot["objective_group_weight_sources"] = group_sources
+        decision_snapshot["green_pressure_scale"] = (
+            max(0.25, 1.0 - 0.85 * float(group_weights.get("green_carbon", 0.0)))
+            if hierarchical and explicit_group_weights
+            else 1.0
+        )
+        decision_snapshot["objective_group_inner_weights"] = inner_group_weights
+        decision_snapshot["security_risk_penalty"] = self.security_risk_penalty(
+            task, metric_scores[best_node.node_id]["security"]
+        )
+        fleet_pressure = float(detail.get("region_pressure", 0.0))
+        decision_snapshot["placement_penalties"] = {
+            "scarce_gpu": 0.12 if task.demand.gpu <= 0 and best_node.capacity.gpu > 0 else 0.0,
+            "region_pressure": min(0.18, fleet_pressure * 0.08),
+        }
+        decision_snapshot["normalization_bounds_version"] = "engineering-v1"
         decision_snapshot["adaptive_scoring_formula"] = (
-            "score=sum(w_k*s_k); completion penalizes predicted finish time; "
-            "balance penalizes dominant utilization, queue depth, queued work, and hot DC pressure."
+            "nested augmented Tchebycheff with task-adaptive inner weights over five semantic objective groups; security is a guardrail penalty"
+            if hierarchical
+            else "flat atomic objective scoring retained as an ablation baseline"
         )
         explanation = self._build_explanation(
             task,
@@ -173,6 +312,52 @@ class ClosedLoopAdaptiveScheduler:
             explanation=explanation,
             network_snapshot=decision_snapshot,
         )
+
+    def _future_fit_after(
+        self,
+        node: Node,
+        placed_demand: ResourceVector,
+        future_tasks: list[Task],
+    ) -> float:
+        """Estimate whether realistic future tasks still fit after this placement."""
+        if not future_tasks:
+            return 0.0
+        remaining = node.remaining_after(placed_demand)
+        trust_rank = {"low": 0, "medium": 1, "high": 2}
+        fits = 0
+        for sample in future_tasks:
+            if node.node_id in sample.forbidden_nodes:
+                continue
+            if sample.allowed_regions and not any(
+                node.matches_deployment_region(region) for region in sample.allowed_regions
+            ):
+                continue
+            if (
+                not sample.allow_region_shift
+                and sample.network_source()
+                and not node.matches_deployment_region(sample.network_source() or "")
+            ):
+                continue
+            if sample.preferred_labels and not sample.preferred_labels.issubset(node.labels):
+                continue
+            if trust_rank.get(node.trust_level, 0) < trust_rank.get(sample.security_level, 1):
+                continue
+            if sample.isolation_level not in node.isolation_levels:
+                continue
+            if sample.require_encrypted_transport and not node.encrypted_transport:
+                continue
+            if not sample.demand.fits_in(remaining):
+                continue
+            path = node.path_profile_for(sample.network_source())
+            if sample.max_latency_ms is not None and path.robust_latency_ms() > sample.max_latency_ms:
+                continue
+            if (
+                sample.min_bandwidth_mbps is not None
+                and path.guaranteed_bandwidth_mbps() < sample.min_bandwidth_mbps
+            ):
+                continue
+            fits += 1
+        return fits / len(future_tasks)
 
     def _performance_raw(self, task: Task, predicted_duration: int, predicted_finish_tick: int) -> float:
         delay_penalty = 1.0
@@ -270,52 +455,171 @@ class ClosedLoopAdaptiveScheduler:
         }
 
     def _derive_task_weights(self, task: Task, current_tick: int) -> dict[str, float]:
-        weights = self.policy_state.current_weights()
-        urgency = task.urgency_score(current_tick)
+        return self.weight_components(task, current_tick)["final"]
 
-        weights["performance"] += 0.18 * urgency
-        weights["completion"] += 0.14 + (0.18 * urgency)
-        weights["reliability"] += 0.10 * urgency
-        weights["balance"] += 0.08
+    def weight_components(self, task: Task, current_tick: int) -> dict[str, dict[str, float]]:
+        """Expose the auditable intent/SLA/data fusion used for one task."""
+        intent = self.policy_state.current_weights()
+        urgency = task.urgency_score(current_tick)
         for metric, boost in task.intent_weights.items():
-            if metric in weights:
-                weights[metric] += max(0.0, float(boost))
+            if metric in intent:
+                intent[metric] += max(0.0, float(boost))
+        if task.carbon_priority > 0:
+            intent["carbon"] += task.carbon_priority
+        intent = normalize_weights(intent)
+
+        sla = {key: 0.01 for key in METRIC_KEYS}
+        sla["performance"] += 0.18 * urgency
+        sla["completion"] += 0.14 + (0.18 * urgency)
+        sla["reliability"] += 0.10 * urgency
+        sla["balance"] += 0.08
         if task.deadline is not None:
-            weights["completion"] += 0.10
+            sla["completion"] += 0.10
         if task.budget is not None:
-            weights["cost"] += 0.24
+            sla["cost"] += 0.24
+        if task.carbon_budget_g is not None:
+            sla["carbon"] += 0.28
         if task.data_region is not None or task.preferred_labels:
-            weights["locality"] += 0.06
+            sla["locality"] += 0.06
         if task.demand.gpu > 0:
-            weights["fragmentation"] += 0.05
+            sla["fragmentation"] += 0.05
         if task.task_type in {"batch_cpu", "analytics"}:
-            weights["completion"] += 0.08
-            weights["balance"] += 0.06
+            sla["completion"] += 0.08
+            sla["balance"] += 0.06
         if (
             task.network_source() is not None
             or task.max_latency_ms is not None
             or task.min_bandwidth_mbps is not None
         ):
-            weights["network"] += 0.16
+            sla["network"] += 0.16
         if task.network_sensitivity >= 0.75 or task.task_type in {"streaming", "inference"}:
-            weights["network"] += 0.20
-            weights["performance"] += 0.05
+            sla["network"] += 0.20
+            sla["performance"] += 0.05
         elif task.network_sensitivity >= 0.5:
-            weights["network"] += 0.10
+            sla["network"] += 0.10
         if task.priority <= 4:
-            weights["cost"] += 0.14
-            weights["performance"] -= 0.12
-            weights["completion"] -= 0.06
-            weights["reliability"] -= 0.04
+            sla["cost"] += 0.14
         if task.security_level == "high":
-            weights["security"] += 0.22
-            weights["reliability"] += 0.08
-            weights["locality"] += 0.06
+            sla["security"] += 0.22
+            sla["reliability"] += 0.08
+            sla["locality"] += 0.06
         elif task.security_level == "medium":
-            weights["security"] += 0.10
+            sla["security"] += 0.10
         if task.allowed_regions or task.forbidden_nodes or task.require_encrypted_transport:
-            weights["security"] += 0.08
-        return normalize_weights(weights)
+            sla["security"] += 0.08
+        sla = normalize_weights(sla)
+        data = normalize_weights({
+            "performance": 0.12, "completion": 0.12, "cost": 0.08,
+            "reliability": 0.12, "balance": 0.12, "fragmentation": 0.10,
+            "locality": 0.07, "network": 0.11, "security": 0.08, "carbon": 0.08,
+        })
+        final = normalize_weights({
+            key: 0.4 * intent[key] + 0.4 * sla[key] + 0.2 * data[key]
+            for key in METRIC_KEYS
+        })
+        return {
+            "intent": intent,
+            "sla": sla,
+            "data": data,
+            "final": final,
+        }
+
+    def group_weight_components(
+        self,
+        task: Task,
+        current_tick: int,
+        *,
+        atomic_sources: dict[str, dict[str, float]] | None = None,
+    ) -> dict[str, dict[str, float]]:
+        """Fuse intent, SLA and data preferences at the semantic group layer."""
+        atomic = atomic_sources or self.weight_components(task, current_tick)
+        intent = self.policy_state.current_group_weights()
+        for key, boost in task.intent_weights.items():
+            group = key if key in GROUP_KEYS else METRIC_TO_GROUP.get(key)
+            if group is not None:
+                intent[group] += max(0.0, float(boost))
+        if task.carbon_priority > 0:
+            intent["green_carbon"] += task.carbon_priority
+        intent = normalize_weights(intent)
+
+        sla = self._aggregate_atomic_weights(atomic["sla"])
+        data = normalize_weights({
+            "sla_quality": 0.26,
+            "network_coordination": 0.20,
+            "resource_efficiency": 0.22,
+            "economic_cost": 0.12,
+            "green_carbon": 0.20,
+        })
+        final = normalize_weights({
+            key: 0.4 * intent[key] + 0.4 * sla[key] + 0.2 * data[key]
+            for key in GROUP_KEYS
+        })
+        return {"intent": intent, "sla": sla, "data": data, "final": final}
+
+    @staticmethod
+    def _aggregate_atomic_weights(weights: dict[str, float]) -> dict[str, float]:
+        grouped = {
+            group: sum(float(weights.get(metric, 0.0)) for metric in metrics)
+            for group, metrics in OBJECTIVE_GROUPS.items()
+        }
+        return normalize_weights(grouped)
+
+    @staticmethod
+    def _masked_weights(weights: dict[str, float], active_keys: Iterable[str]) -> dict[str, float]:
+        keys = tuple(active_keys)
+        return normalize_weights({key: float(weights.get(key, 0.0)) for key in keys})
+
+    @staticmethod
+    def inner_group_weights(
+        atomic_weights: dict[str, float],
+        *,
+        prior_ratio: float = 0.35,
+    ) -> dict[str, dict[str, float]]:
+        """Blend stable semantic priors with task-specific fused atomic weights."""
+        result: dict[str, dict[str, float]] = {}
+        for group, metrics in OBJECTIVE_GROUPS.items():
+            adaptive = normalize_weights({metric: float(atomic_weights.get(metric, 0.0)) for metric in metrics})
+            prior = GROUP_INNER_WEIGHTS[group]
+            result[group] = normalize_weights({
+                metric: prior_ratio * float(prior[metric]) + (1.0 - prior_ratio) * adaptive[metric]
+                for metric in metrics
+            })
+        return result
+
+    @classmethod
+    def objective_group_scores(
+        cls,
+        metric_scores: dict[str, float],
+        inner_weights: dict[str, dict[str, float]] | None = None,
+    ) -> dict[str, float]:
+        groups: dict[str, float] = {}
+        weights_by_group = inner_weights or GROUP_INNER_WEIGHTS
+        for group, metrics in OBJECTIVE_GROUPS.items():
+            if len(metrics) == 1:
+                groups[group] = clamp(float(metric_scores[metrics[0]]))
+                continue
+            inner = weights_by_group[group]
+            groups[group] = cls.tchebycheff_utility(metric_scores, inner, metrics)
+        return groups
+
+    @staticmethod
+    def tchebycheff_utility(
+        scores: dict[str, float],
+        weights: dict[str, float],
+        active_keys: Iterable[str],
+        *,
+        rho: float = 0.01,
+    ) -> float:
+        keys = tuple(active_keys)
+        if not keys:
+            return 0.0
+        distances = [float(weights[key]) * abs(1.0 - float(scores[key])) for key in keys]
+        return clamp(1.0 - (max(distances) + rho * sum(distances)))
+
+    @staticmethod
+    def security_risk_penalty(task: Task, security_score: float) -> float:
+        coefficient = {"low": 0.04, "medium": 0.08, "high": 0.14}.get(task.security_level, 0.08)
+        return coefficient * (1.0 - clamp(float(security_score)))
 
     def _normalize_metric_matrix(
         self,
@@ -325,16 +629,35 @@ class ClosedLoopAdaptiveScheduler:
             node_id: {} for node_id in metric_matrix
         }
         for metric in METRIC_KEYS:
-            values = [metrics[metric] for metrics in metric_matrix.values()]
-            minimum = min(values)
-            maximum = max(values)
+            minimum, maximum = self.ENGINEERING_BOUNDS[metric]
             span = maximum - minimum
             for node_id, metrics in metric_matrix.items():
-                if span <= 1e-9:
-                    normalized[node_id][metric] = 1.0
-                else:
-                    normalized[node_id][metric] = (metrics[metric] - minimum) / span
+                normalized[node_id][metric] = clamp((metrics[metric] - minimum) / max(span, 1e-9))
         return normalized
+
+    @staticmethod
+    def _pareto_front(
+        metric_scores: dict[str, dict[str, float]],
+        active_keys: Iterable[str],
+    ) -> set[str]:
+        keys = tuple(active_keys)
+        node_ids = list(metric_scores)
+        front: set[str] = set()
+        for node_id in node_ids:
+            dominated = False
+            current = metric_scores[node_id]
+            for other_id in node_ids:
+                if other_id == node_id:
+                    continue
+                other = metric_scores[other_id]
+                if all(other[key] >= current[key] for key in keys) and any(
+                    other[key] > current[key] for key in keys
+                ):
+                    dominated = True
+                    break
+            if not dominated:
+                front.add(node_id)
+        return front
 
     def _build_explanation(
         self,
@@ -346,6 +669,7 @@ class ClosedLoopAdaptiveScheduler:
     ) -> str:
         labels = {
             "performance": "性能",
+            "completion": "完成时效",
             "cost": "成本",
             "reliability": "可靠性",
             "balance": "负载均衡",
@@ -353,16 +677,34 @@ class ClosedLoopAdaptiveScheduler:
             "locality": "局部性",
             "network": "网络稳定性",
             "security": "安全",
+            "carbon": "运行碳",
         }
         contributions = sorted(
             (
-                (metric, metric_scores[metric] * weights[metric])
+                (metric, metric_scores[metric] * weights.get(metric, 0.0))
                 for metric in METRIC_KEYS
             ),
             key=lambda item: item[1],
             reverse=True,
         )
-        top_metrics = "、".join(labels.get(metric, metric) for metric, _ in contributions[:3])
+        if network_snapshot.get("objective_hierarchy_version") == "five-groups-v1":
+            group_labels = {
+                "sla_quality": "SLA 与服务质量",
+                "network_coordination": "网络与地域协同",
+                "resource_efficiency": "资源效率",
+                "economic_cost": "经济成本",
+                "green_carbon": "绿色低碳",
+            }
+            group_scores = dict(network_snapshot.get("objective_groups") or {})
+            group_weights = dict(network_snapshot.get("objective_group_weights") or {})
+            ranked_groups = sorted(
+                group_scores,
+                key=lambda key: group_scores[key] * float(group_weights.get(key, 0.0)),
+                reverse=True,
+            )
+            top_metrics = "、".join(group_labels.get(key, key) for key in ranked_groups[:3])
+        else:
+            top_metrics = "、".join(labels.get(metric, metric) for metric, _ in contributions[:3])
         stable_latency = float(network_snapshot.get("stable_latency_ms", 0.0))
         fusion_score = float(network_snapshot.get("feature_fusion_score", 0.0))
         confidence = float(network_snapshot.get("deterministic_confidence", 0.0))

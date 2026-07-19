@@ -15,3 +15,7 @@ tianjun.toml
 
 data/alibaba_microservices_v2022/
 runtime_report.json
+
+# Local experiment outputs and temporary runtime data
+exp_out/
+tmp/

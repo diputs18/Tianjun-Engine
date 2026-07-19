@@ -14,6 +14,12 @@ TOOL_NAMES = [
     "optimize_policy_from_feedback",
     "commit_policy",
     "schedule_pending_task",
+    "import_task_batch",
+    "get_task_batch",
+    "get_batch_actual_metrics",
+    "preview_batch_schedule",
+    "compare_batch_strategies",
+    "commit_batch_schedule",
 ]
 
 CHAT_TOOL_NAMES = [
@@ -35,6 +41,12 @@ MCP_TOOL_NAMES = [
     "optimize_policy_from_feedback",
     "commit_policy",
     "schedule_pending_task",
+    "import_task_batch",
+    "get_task_batch",
+    "get_batch_actual_metrics",
+    "preview_batch_schedule",
+    "compare_batch_strategies",
+    "commit_batch_schedule",
 ]
 
 

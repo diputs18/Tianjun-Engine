@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "node_counts": [20, 50, 100],
+  "batch_task_counts": [20, 100, 500],
+  "load_rates": [0.30, 0.60, 0.85, 0.95],
+  "workloads": ["cpu", "gpu", "memory", "data", "mixed"],
+  "seeds": [20260718, 20260719, 20260720, 20260721, 20260722, 20260723, 20260724, 20260725, 20260726, 20260727],
+  "online_strategies": ["B0-current", "B1-batch-greedy", "B3-batch-local-search", "B4-pareto-tchebycheff", "B6-hierarchical-batch"],
+  "offline_strategies": ["B2-milp-oracle", "B5-nsga2"],
+  "carbon_scope": "operational_only",
+  "normalization_bounds_version": "engineering-v1"
+}

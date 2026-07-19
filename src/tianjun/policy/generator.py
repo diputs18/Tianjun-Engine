@@ -103,6 +103,7 @@ PRIORITY_VECTOR_KEYS = {
     "fragmentation",
     "locality",
     "network",
+    "carbon",
 }
 PRIORITY_TO_METRICS = {
     "latency": {"performance": 0.52, "completion": 0.18, "network": 0.30},
@@ -113,6 +114,7 @@ PRIORITY_TO_METRICS = {
     "fragmentation": {"fragmentation": 1.0},
     "locality": {"locality": 1.0},
     "network": {"network": 0.78, "performance": 0.22},
+    "carbon": {"carbon": 0.82, "cost": 0.08, "fragmentation": 0.10},
 }
 
 
@@ -143,6 +145,12 @@ class ComputeNetworkPolicyGenerator:
             "priority": priority,
             "priority_vector": self._priority_vector(text, priority),
             "deployment": self._deployment_spec(text),
+            "batch_id": self._batch_id(text),
+            "carbon_budget_g": self._carbon_budget_g(text),
+            "carbon_priority": 0.85 if self._mentions_carbon(text) else 0.0,
+            "allow_region_shift": self._allow_region_shift(text),
+            "allow_time_shift": self._allow_time_shift(text),
+            "deferrable_until_tick": self._deferrable_until_tick(text),
         }
         if overrides:
             data.update({key: value for key, value in overrides.items() if value is not None and not str(key).startswith("__")})
@@ -209,6 +217,14 @@ class ComputeNetworkPolicyGenerator:
                 dict(data.get("priority_vector") or {}),
                 parsed.priority_vector,
             )
+        if self._mentions_carbon(text):
+            data["carbon_budget_g"] = parsed.carbon_budget_g
+            data["carbon_priority"] = parsed.carbon_priority
+            data["allow_region_shift"] = parsed.allow_region_shift
+            data["allow_time_shift"] = parsed.allow_time_shift
+            data["deferrable_until_tick"] = parsed.deferrable_until_tick
+        if parsed.batch_id:
+            data["batch_id"] = parsed.batch_id
 
         if overrides:
             data.update({key: value for key, value in overrides.items() if value is not None and not str(key).startswith("__")})
@@ -523,6 +539,7 @@ class ComputeNetworkPolicyGenerator:
             "latency": 9,
             "quality": 8,
             "security": 8,
+            "green": 7,
             "balanced": 6,
             "cost": 4,
         }[requirement.priority]
@@ -552,6 +569,12 @@ class ComputeNetworkPolicyGenerator:
             min_bandwidth_mbps=requirement.bandwidth_mbps,
             network_sensitivity=0.9 if requirement.priority == "latency" else defaults["network_sensitivity"],
             intent_weights=self._metric_intent_weights(requirement),
+            carbon_budget_g=requirement.carbon_budget_g,
+            carbon_priority=requirement.carbon_priority,
+            allow_region_shift=requirement.allow_region_shift,
+            allow_time_shift=requirement.allow_time_shift,
+            deferrable_until_tick=requirement.deferrable_until_tick,
+            batch_id=requirement.batch_id,
             preferred_labels=preferred_labels,
             security_level=requirement.security_level,
             isolation_level=isolation_level,
@@ -609,6 +632,16 @@ class ComputeNetworkPolicyGenerator:
                 dict(data.get("priority_vector") or {}),
                 {"quality": 1.0},
             )
+        if feedback.target == "carbon" or deltas.get("carbon", 0.0) > 0:
+            data["priority"] = "green"
+            data["carbon_priority"] = max(0.8, float(data.get("carbon_priority") or 0.0))
+            data["priority_vector"] = self._merge_priority_vectors(
+                dict(data.get("priority_vector") or {}),
+                {"carbon": 1.0},
+            )
+            budget = self._carbon_budget_g(instruction)
+            if budget is not None:
+                data["carbon_budget_g"] = budget
 
         data["objective"] = f"{requirement.objective} | feedback: {feedback.instruction}"
         data["missing_fields"] = []
@@ -1443,6 +1476,7 @@ class ComputeNetworkPolicyGenerator:
             r"(?:端到端|推理|响应|latency)[^\d]{0,16}(\d+(?:\.\d+)?)\s*ms",
             r"低于\s*(\d+(?:\.\d+)?)\s*ms",
             r"小于\s*(\d+(?:\.\d+)?)\s*ms",
+            r"(?:不违反|不超过|上限)?\s*(\d+(?:\.\d+)?)\s*ms[^，。；;]{0,8}(?:时延|延迟|响应)",
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
@@ -1492,6 +1526,8 @@ class ComputeNetworkPolicyGenerator:
 
     def _priority(self, text: str) -> str:
         lower = text.lower()
+        if self._mentions_carbon(text):
+            return "green"
         if any(word in lower for word in ("latency", "realtime")) or any(word in text for word in ("低延迟", "低时延", "实时")):
             return "latency"
         if any(word in lower for word in ("cheap", "cost")) or any(word in text for word in ("低成本", "成本", "便宜")):
@@ -1538,13 +1574,57 @@ class ComputeNetworkPolicyGenerator:
                 ("network", "网络", "抖动", "丢包", "带宽"),
                 0.58,
             ),
+            "carbon": (
+                ("carbon", "green", "低碳", "绿色", "减排", "碳预算", "碳优先"),
+                0.74,
+            ),
         }
         for key, (keywords, weight) in signals.items():
             if any(keyword in lower if keyword.isascii() else keyword in text for keyword in keywords):
                 vector[key] = weight
         if primary != "balanced":
-            vector[primary] = max(vector.get(primary, 0.0), 0.72)
+            primary_key = "carbon" if primary == "green" else primary
+            vector[primary_key] = max(vector.get(primary_key, 0.0), 0.72)
         return self._normalize_priority_vector(vector)
+
+    @staticmethod
+    def _mentions_carbon(text: str) -> bool:
+        lower = text.lower()
+        return any(word in lower for word in ("carbon", "green")) or any(
+            word in text for word in ("低碳", "绿色", "减排", "碳预算", "碳排放")
+        )
+
+    @staticmethod
+    def _carbon_budget_g(text: str) -> float | None:
+        match = re.search(r"(?:碳预算|碳排放(?:上限)?)[^\d]{0,12}(\d+(?:\.\d+)?)\s*(?:g|克)", text, re.IGNORECASE)
+        return float(match.group(1)) if match else None
+
+    @staticmethod
+    def _batch_id(text: str) -> str | None:
+        match = re.search(r"(?:批次|batch)[\s:#：-]*([A-Za-z0-9_.-]+)", text, re.IGNORECASE)
+        return match.group(1) if match else None
+
+    @staticmethod
+    def _allow_region_shift(text: str) -> bool:
+        if any(word in text for word in ("禁止跨地域", "不允许跨地域", "不可跨地域")):
+            return False
+        return True
+
+    @staticmethod
+    def _allow_time_shift(text: str) -> bool:
+        lower = text.lower()
+        if any(word in lower for word in ("not deferrable", "no time shift")) or any(
+            word in text for word in ("不允许延后", "禁止延后", "不可延后", "不能错峰", "不允许时间平移")
+        ):
+            return False
+        return any(word in lower for word in ("deferrable", "time shift")) or any(
+            word in text for word in ("允许延后", "可以延后", "错峰", "时间平移", "等待低碳")
+        )
+
+    @staticmethod
+    def _deferrable_until_tick(text: str) -> int | None:
+        match = re.search(r"(?:延后|推迟|等待)[^\d]{0,8}(\d+)\s*(?:tick|秒|s)", text, re.IGNORECASE)
+        return int(match.group(1)) if match else None
 
     @staticmethod
     def _normalize_priority_vector(vector: dict[str, float]) -> dict[str, float]:

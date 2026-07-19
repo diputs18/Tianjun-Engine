@@ -497,7 +497,13 @@ class ChatRuntime:
                     "bandwidth_mbps": "number|null",
                     "budget_limit": "number|null",
                     "security_level": "low|medium|high|null",
-                    "priority": "latency|cost|quality|balanced|security|null",
+                    "priority": "latency|cost|quality|balanced|security|green|null",
+                    "batch_id": "string|null",
+                    "carbon_budget_g": "number|null",
+                    "carbon_priority": "0..1|null",
+                    "allow_region_shift": "boolean|null",
+                    "allow_time_shift": "boolean|null",
+                    "deferrable_until_tick": "integer|null",
                     "priority_vector": {
                         "latency": "0..1",
                         "cost": "0..1",
@@ -507,6 +513,7 @@ class ChatRuntime:
                         "fragmentation": "0..1",
                         "locality": "0..1",
                         "network": "0..1",
+                        "carbon": "0..1",
                     },
                 },
                 "confirmed_slots": ["slot names confirmed by the latest user message"],
@@ -571,7 +578,7 @@ class ChatRuntime:
             return None
         allowed_workloads = {"inference", "training", "streaming", "analytics", "batch"}
         allowed_security = {"low", "medium", "high"}
-        allowed_priority = {"latency", "cost", "quality", "balanced", "security"}
+        allowed_priority = {"latency", "cost", "quality", "balanced", "security", "green"}
         safe: dict[str, Any] = {}
         workload = updates.get("workload_type")
         if isinstance(workload, str) and workload in allowed_workloads:
@@ -587,7 +594,7 @@ class ChatRuntime:
             safe_vector = {
                 str(key): value
                 for key, raw in vector.items()
-                if str(key) in {"latency", "cost", "quality", "security", "balance", "fragmentation", "locality", "network"}
+                if str(key) in {"latency", "cost", "quality", "security", "balance", "fragmentation", "locality", "network", "carbon"}
                 and (value := _safe_float(raw)) is not None
                 and 0.0 <= value <= 1.0
             }
@@ -607,13 +614,22 @@ class ChatRuntime:
                     normalized.append(canonical)
             if normalized:
                 safe["region_preference"] = normalized
-        for key in ("cpu_cores", "memory_gb", "latency_target_ms", "bandwidth_mbps", "budget_limit"):
+        for key in ("cpu_cores", "memory_gb", "latency_target_ms", "bandwidth_mbps", "budget_limit", "carbon_budget_g", "carbon_priority"):
             value = _safe_float(updates.get(key))
             if value is not None and value >= 0:
                 safe[key] = value
         gpu = _safe_float(updates.get("gpu_count"))
         if gpu is not None and gpu >= 0:
             safe["gpu_count"] = int(gpu)
+        batch_id = updates.get("batch_id")
+        if isinstance(batch_id, str) and batch_id.strip():
+            safe["batch_id"] = batch_id.strip()
+        for key in ("allow_region_shift", "allow_time_shift"):
+            if isinstance(updates.get(key), bool):
+                safe[key] = updates[key]
+        deferrable = _safe_float(updates.get("deferrable_until_tick"))
+        if deferrable is not None and deferrable >= 0:
+            safe["deferrable_until_tick"] = int(deferrable)
         if bool(payload.get("clear_prior_constraints")):
             safe["__clear_prior_constraints"] = True
         return safe or None

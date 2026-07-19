@@ -90,11 +90,17 @@ function renderMetrics(report) {
   const decision = activeDecision(report, state.intentPayload);
   const snap = decision?.network_snapshot ?? {};
   const gnnValue = metrics.gnn_stability_score ?? snap.fusion_features?.gnn_topology ?? report.model_runtime?.latest_prediction?.gnn_stability_score;
+  const batches = report.batch_scheduling ?? {};
   const cards = [
     ["平均时延", `${fmt(metrics.average_stable_latency_ms ?? snap.deterministic_latency_ms, 1)} ms`, "primary", "LSTM 稳健时延预测"],
     ["GNN 稳定性", gnnValue === undefined ? "--" : pct(gnnValue, 1), "teal", "拓扑稳定性参与调度评分"],
     ["融合评分", fmt(metrics.average_fusion_score ?? snap.feature_fusion_score ?? decisionScore(decision), 3), "dark", decision ? `当前节点 ${decision.node_id}` : "等待调度决策"],
     ["在线节点", `${(report.nodes ?? []).filter((node) => node.online !== false).length}`, "good", "可参与资源分配的节点"],
+    ["批任务接纳率", pct(batches.batch_acceptance_rate ?? 0, 1), "teal", `${fmt(batches.total_batch_tasks ?? 0, 0)} 个批任务已纳管`],
+    ["运行碳", `${fmt(metrics.total_operational_carbon_g, 3)} g`, "good", `${fmt(metrics.total_energy_kwh, 5)} kWh · operational only`],
+    ["实际平均 JCT", `${fmt(metrics.average_actual_jct_seconds, 2)} s`, "primary", `P95 ${fmt(metrics.p95_actual_jct_seconds, 2)} s`],
+    ["实际 Makespan", `${fmt(metrics.actual_makespan_seconds, 2)} s`, "dark", `${fmt(metrics.completed_batch_count, 0)} 个批次已回传`],
+    ["实际资源利用率", pct(metrics.average_cpu_utilization ?? 0, 1), "teal", `内存 ${pct(metrics.average_memory_utilization ?? 0, 1)} · 带宽 ${pct(metrics.average_bandwidth_utilization ?? 0, 1)}`],
   ];
   document.getElementById("overviewMetrics").innerHTML = cards.map(([label, value, tone, delta], index) => `
     <article class="card metric-card kpi-core ${tone === "teal" ? "teal" : tone === "good" ? "success" : tone === "dark" ? "ink" : "primary"}">

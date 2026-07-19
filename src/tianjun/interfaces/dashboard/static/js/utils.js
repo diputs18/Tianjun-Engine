@@ -8,6 +8,7 @@ export const textMap = {
   locality: "地域匹配",
   network: "网络质量",
   security: "安全策略",
+  carbon: "运行碳",
   pending: "待调度",
   running: "运行中",
   succeeded: "已成功",
@@ -62,7 +63,7 @@ export const regionMap = {
   unknown: "未知区域",
 };
 
-export const METRIC_KEYS = ["performance", "completion", "cost", "reliability", "balance", "fragmentation", "locality", "network", "security"];
+export const METRIC_KEYS = ["performance", "completion", "cost", "reliability", "balance", "fragmentation", "locality", "network", "security", "carbon"];
 
 export function escapeHtml(value) {
   return String(value ?? "-")
@@ -281,6 +282,7 @@ export function topWeights(weights = {}, count = 3) {
 
 export function policyBias(weights = {}) {
   const top = topWeights(weights, 2).map(([key]) => key);
+  if (top.includes("carbon")) return "运行碳与绿色算力优先";
   if (top.includes("completion") || top.includes("performance")) return "低时延与完成时效优先";
   if (top.includes("cost")) return "成本控制优先";
   if (top.includes("reliability") || top.includes("network")) return "稳定性与可靠性优先";

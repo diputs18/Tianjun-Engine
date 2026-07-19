@@ -1,4 +1,4 @@
-import { compactText, displayKey, escapeHtml, fmt, statusText } from "../utils.js";
+import { compactText, displayKey, escapeHtml, fmt, pct, statusText } from "../utils.js";
 
 const pipelineSteps = [
   ["接收任务", "请求进入调度队列"],
@@ -99,6 +99,11 @@ function renderSummary(report) {
     ["SLA 达标", stats.slaMet, "完成且满足性能目标", "success"],
     ["SLA 未达标", stats.slaMiss, "完成但未满足目标", stats.slaMiss > 0 ? "danger" : "neutral"],
     ["平均执行耗时", stats.avgDuration ? `${fmt(stats.avgDuration, 1)} ticks` : "--", "最近记录均值", "primary"],
+    ["任务能耗", `${fmt(report.metrics?.total_energy_kwh, 5)} kWh`, "任务增量能耗汇总", "primary"],
+    ["运行碳", `${fmt(report.metrics?.total_operational_carbon_g, 3)} gCO₂e`, "口径：operational only", "success"],
+    ["实际平均 JCT", `${fmt(report.metrics?.average_actual_jct_seconds, 2)} s`, `P95 ${fmt(report.metrics?.p95_actual_jct_seconds, 2)} s`, "primary"],
+    ["实际 Makespan", `${fmt(report.metrics?.actual_makespan_seconds, 2)} s`, "按 Cloudlet 完成时间回传", "neutral"],
+    ["CPU / 内存利用率", `${pct(report.metrics?.average_cpu_utilization ?? 0, 1)} / ${pct(report.metrics?.average_memory_utilization ?? 0, 1)}`, "任务执行期实际利用率", "primary"],
   ];
   document.getElementById("taskSummary").innerHTML = cards.map(([label, value, hint, tone]) => `
     <article class="metric-card task-stat ${tone}">
@@ -156,7 +161,7 @@ function renderRecords(report) {
       <div class="record-main">
         <div>
           <b>${escapeHtml(compactText(record.task_id, 44))}</b>
-          <p class="muted">${escapeHtml(type)} · ${escapeHtml(record.node_id ?? "未分配节点")}</p>
+          <p class="muted">${escapeHtml(type)} · ${escapeHtml(record.node_id ?? "未分配节点")}${record.batch_id ? ` · 批次 ${escapeHtml(record.batch_id)}` : ""}</p>
         </div>
         <div class="record-badges">
           <span class="badge ${exec.cls}">${exec.text}</span>
@@ -170,6 +175,9 @@ function renderRecords(report) {
         <span><label>资源消耗</label><b>${fmt(cpuTicks, 1)} CPU ticks</b></span>
         <span><label>调度方式</label><b>${escapeHtml(statusText(record.execution_mode ?? record.mode ?? "process"))}</b></span>
         <span><label>SLA 原因</label><b>${escapeHtml(slaReason(record))}</b></span>
+        <span><label>能耗 / 运行碳</label><b>${fmt(record.energy_kwh, 5)} kWh / ${fmt(record.operational_carbon_g, 3)} g</b></span>
+        <span><label>排队 / JCT</label><b>${fmt(record.queue_wait_seconds, 2)} s / ${fmt(record.jct_seconds, 2)} s</b></span>
+        <span><label>CPU / 内存利用率</label><b>${pct(record.cpu_utilization ?? 0, 1)} / ${pct(record.memory_utilization ?? 0, 1)}</b></span>
       </div>
       <button class="btn-ghost record-detail" type="button" data-record-detail="${escapeHtml(taskId)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "收起详情" : "查看详情"}</button>
       ${expanded ? renderRecordDetails(record) : ""}
@@ -183,6 +191,7 @@ function renderRecordDetails(record) {
     : "无";
   const rows = [
     ["任务 ID", record.task_id],
+    ["批次 ID", record.batch_id ?? record.metadata?.batch_id ?? "单任务"],
     ["节点", record.node_id],
     ["开始 / 结束 tick", `${record.start_tick ?? "--"} / ${record.end_tick ?? "--"}`],
     ["预测 / 实际耗时", `${fmt(record.predicted_duration, 1)} / ${fmt(record.actual_duration, 1)} ticks`],
@@ -194,6 +203,10 @@ function renderRecordDetails(record) {
     ["网络时延", `${fmt(record.network_delay_ticks, 0)} ticks`],
     ["网络风险", fmt(record.network_risk, 4)],
     ["有效带宽", `${fmt(record.effective_bandwidth_mbps, 1)} Mbps`],
+    ["计算碳 / 网络碳", `${fmt(record.compute_carbon_g, 4)} / ${fmt(record.network_carbon_g, 4)} gCO₂e`],
+    ["碳核算范围", record.carbon_scope ?? "operational_only"],
+    ["排队等待 / JCT", `${fmt(record.queue_wait_seconds, 3)} / ${fmt(record.jct_seconds, 3)} s`],
+    ["CPU / 内存 / 带宽 / 存储利用率", `${pct(record.cpu_utilization ?? 0, 1)} / ${pct(record.memory_utilization ?? 0, 1)} / ${pct(record.bandwidth_utilization ?? 0, 1)} / ${pct(record.storage_utilization ?? 0, 1)}`],
     ["交付概率", record.delivery_probability === undefined ? "--" : `${fmt(Number(record.delivery_probability) * 100, 1)}%`],
   ];
   return `<section class="record-details" aria-label="任务详情">

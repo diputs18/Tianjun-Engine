@@ -10,6 +10,10 @@ export const state = {
   hermesBusy: false,
   abortController: null,
   pollHandle: null,
+  selectedBatch: null,
+  selectedBatchPlan: null,
+  selectedBatchMetrics: null,
+  batchComparison: null,
 };
 
 const listeners = {};

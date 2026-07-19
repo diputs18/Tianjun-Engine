@@ -16,6 +16,7 @@ _TARGET_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("fragmentation", ("碎片", "gpu 等待", "gpu排队", "卡资源", "fragmentation")),
     ("locality", ("本地", "就近", "跨地域", "数据驻留", "locality")),
     ("network", ("网络", "抖动", "丢包", "带宽", "network", "jitter")),
+    ("carbon", ("低碳", "绿色", "减排", "碳预算", "碳排放", "carbon", "green")),
     ("workflow", ("流程", "步骤", "审批", "确认", "自动", "workflow", "process")),
     ("module", ("模块", "组件", "调度器", "模型", "网络", "算力", "component", "module")),
 ]
@@ -59,6 +60,7 @@ _LEGACY_METRIC_ALIASES = {
     "balance_weight": "balance",
     "fragmentation_weight": "fragmentation",
     "locality_weight": "locality",
+    "carbon_weight": "carbon",
 }
 
 
@@ -145,7 +147,7 @@ def _infer_deltas(text: str, target: str, sentiment: str) -> dict[str, float]:
         deltas["completion"] = adjustment * 0.55
         if any(word in text for word in ("网络", "抖动", "丢包")):
             deltas["network"] = max(deltas.get("network", 0.0), adjustment * 0.65)
-    elif target in {"balance", "fragmentation", "locality", "network"}:
+    elif target in {"balance", "fragmentation", "locality", "network", "carbon"}:
         deltas[target] = adjustment
     return deltas
 
@@ -180,6 +182,7 @@ def _valid_target(value: str | None) -> str | None:
         "fragmentation",
         "locality",
         "network",
+        "carbon",
         "module",
         "workflow",
     } else None

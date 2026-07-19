@@ -6,9 +6,10 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from ...application.control_plane import CentralControlPlane
+from ...application.batch_scheduling_service import BatchRequestError, MAX_BATCH_BYTES
 from ...chat import ChatRuntime
 from ...scenarios import node_from_dict, task_from_dict
 from ..dashboard.page import render_dashboard_html
@@ -51,6 +52,19 @@ def build_http_server(
                     return
                 if handle_legacy_get(self, path, control_plane, chat):
                     return
+                if path.startswith("/task-batches/"):
+                    if path.endswith("/metrics"):
+                        batch_id = path.removeprefix("/task-batches/").removesuffix("/metrics").strip("/")
+                        result = control_plane.get_task_batch_actual_metrics(batch_id)
+                        self._record_external_tool("get_batch_actual_metrics", result, batch_id=batch_id)
+                        self._write_json(200, result)
+                        return
+                    batch_id = path.removeprefix("/task-batches/").strip("/")
+                    if batch_id:
+                        result = control_plane.get_task_batch(batch_id)
+                        self._record_external_tool("get_task_batch", result, batch_id=batch_id)
+                        self._write_json(200, result)
+                        return
                 if path.startswith("/policies/"):
                     policy_id = path.removeprefix("/policies/").strip("/")
                     if policy_id:
@@ -67,12 +81,25 @@ def build_http_server(
                         self._write_json(200, chat.get_session(session_id))
                         return
                 self._write_json(404, {"error": "not_found"})
+            except BatchRequestError as exc:
+                self._write_json(exc.status_code, exc.payload)
             except Exception as exc:  # noqa: BLE001
                 self._write_json(400, {"error": str(exc)})
 
         def do_POST(self) -> None:  # noqa: N802
             path = urlparse(self.path).path
             try:
+                if path == "/task-batches/import":
+                    content_type = self.headers.get("Content-Type", "application/json").lower()
+                    raw = self._read_body(MAX_BATCH_BYTES)
+                    if content_type.startswith("text/csv"):
+                        name = parse_qs(urlparse(self.path).query).get("name", ["CSV批次"])[0]
+                        result = control_plane.import_task_batch_csv(raw.decode("utf-8"), batch_name=name)
+                    else:
+                        result = control_plane.import_task_batch(json.loads(raw.decode("utf-8") or "{}"))
+                    self._record_external_tool("import_task_batch", result, batch_id=result.get("batch_id"))
+                    self._write_json(201, result)
+                    return
                 payload = self._read_json()
                 if path == "/topology/register":
                     self._write_json(200, control_plane.register_topology(payload))
@@ -93,9 +120,31 @@ def build_http_server(
                         labels=None if "labels" not in payload else set(payload.get("labels", [])),
                         performance_factors=payload.get("performance_factors"),
                         network_paths=payload.get("network_paths"),
+                        current_power_w=payload.get("power_w", payload.get("current_power_w")),
+                        energy_kwh_delta=payload.get("energy_kwh_delta"),
+                        operational_carbon_g_delta=payload.get("operational_carbon_g_delta"),
+                        carbon_intensity_g_per_kwh=payload.get("carbon_intensity_g_per_kwh"),
+                        carbon_signal_timestamp=payload.get("carbon_signal_timestamp"),
                     )
                     self._write_json(200, result)
                     return
+                if path.startswith("/task-batches/"):
+                    suffixes = ("/preview", "/compare", "/commit")
+                    for suffix in suffixes:
+                        if path.endswith(suffix):
+                            batch_id = path.removeprefix("/task-batches/").removesuffix(suffix).strip("/")
+                            if suffix == "/preview":
+                                result = control_plane.preview_batch_schedule(batch_id, payload)
+                                tool_name = "preview_batch_schedule"
+                            elif suffix == "/compare":
+                                result = control_plane.compare_batch_strategies(batch_id, payload)
+                                tool_name = "compare_batch_strategies"
+                            else:
+                                result = control_plane.commit_batch_schedule(batch_id, payload)
+                                tool_name = "commit_batch_schedule"
+                            self._record_external_tool(tool_name, result, batch_id=batch_id, plan_id=result.get("plan_id"))
+                            self._write_json(200, result)
+                            return
                 if path == "/schedule/preview":
                     self._write_json(200, self._schedule_cloudsim_task(payload, commit=False))
                     return
@@ -222,6 +271,7 @@ def build_http_server(
                         200,
                         control_plane.update_policy_weights(
                             dict(payload.get("weights") or {}),
+                            group_weights=None if payload.get("group_weights") is None else dict(payload.get("group_weights") or {}),
                             reason=str(payload.get("reason") or "用户手动提交多维策略权重。"),
                         ),
                     )
@@ -269,6 +319,10 @@ def build_http_server(
                     )
                     return
                 if path == "/task-runs/result":
+                    result_metadata = dict(payload.get("metadata") or {})
+                    for key in ("energy_kwh", "compute_carbon_g", "network_carbon_g", "operational_carbon_g", "carbon_scope"):
+                        if key in payload:
+                            result_metadata[key] = payload[key]
                     result = control_plane.report_task_result(
                         node_id=payload["node_id"],
                         task_id=payload["task_id"],
@@ -279,11 +333,13 @@ def build_http_server(
                         failure_reason=payload.get("failure_reason"),
                         returncode=payload.get("returncode"),
                         cost=payload.get("cost"),
-                        metadata=payload.get("metadata"),
+                        metadata=result_metadata,
                     )
                     self._write_json(200, result)
                     return
                 self._write_json(404, {"error": "not_found"})
+            except BatchRequestError as exc:
+                self._write_json(exc.status_code, exc.payload)
             except Exception as exc:  # noqa: BLE001
                 self._write_json(400, {"error": str(exc)})
 
@@ -291,9 +347,14 @@ def build_http_server(
             return
 
         def _read_json(self) -> dict[str, Any]:
+            raw = self._read_body(MAX_BATCH_BYTES).decode("utf-8")
+            return json.loads(raw or "{}")
+
+        def _read_body(self, max_bytes: int) -> bytes:
             length = int(self.headers.get("Content-Length", "0"))
-            raw = self.rfile.read(length).decode("utf-8") if length else "{}"
-            return json.loads(raw)
+            if length > max_bytes:
+                raise BatchRequestError(413, {"error": "request body exceeds 5MB"})
+            return self.rfile.read(length) if length else b""
 
         def _write_json(self, status: int, payload: Any) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -365,6 +426,26 @@ def build_http_server(
                 "submitted_task": submitted_task,
                 "policy": policy,
             }
+
+        def _record_external_tool(
+            self,
+            fallback_tool_name: str,
+            result: dict[str, Any],
+            *,
+            batch_id: str | None = None,
+            plan_id: str | None = None,
+        ) -> None:
+            if self.headers.get("X-Tianjun-Caller") != "external_mcp":
+                return
+            control_plane.record_tool_call(
+                tool_name=self.headers.get("X-Tianjun-Tool") or fallback_tool_name,
+                actor="external_mcp",
+                result_status="success",
+                batch_id=batch_id,
+                plan_id=plan_id,
+                session_id=self.headers.get("X-Tianjun-Session"),
+                request_id=self.headers.get("X-Request-ID"),
+            )
 
         def _write_chat_event_stream(self, runner) -> None:
             self.send_response(200)

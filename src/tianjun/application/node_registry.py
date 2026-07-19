@@ -32,6 +32,8 @@ class NodeRegistry:
             node.online = True
             node.telemetry_tick = control.current_tick()
             control.nodes[node.node_id] = node
+            node.resource_version += 1
+            control.resource_snapshot_version += 1
             control.last_heartbeat_at[node.node_id] = time.monotonic()
             control._persist_node(node)
             return node.to_dict()
@@ -50,6 +52,11 @@ class NodeRegistry:
         labels: set[str] | None = None,
         performance_factors: dict[str, float] | None = None,
         network_paths: dict[str, dict[str, float]] | None = None,
+        current_power_w: float | None = None,
+        energy_kwh_delta: float | None = None,
+        operational_carbon_g_delta: float | None = None,
+        carbon_intensity_g_per_kwh: float | None = None,
+        carbon_signal_timestamp: float | None = None,
     ) -> dict[str, Any]:
         control = self.control_plane
         with control.lock:
@@ -82,6 +89,21 @@ class NodeRegistry:
                     for key, value in profile_updates.items():
                         if hasattr(profile, key):
                             setattr(profile, key, float(value))
+            if current_power_w is not None:
+                node.current_power_w = max(0.0, float(current_power_w))
+            if energy_kwh_delta is not None:
+                node.energy_kwh_total += max(0.0, float(energy_kwh_delta))
+            if operational_carbon_g_delta is not None:
+                node.operational_carbon_g_total += max(0.0, float(operational_carbon_g_delta))
+            if carbon_intensity_g_per_kwh is not None:
+                node.carbon_profile.carbon_intensity_g_per_kwh = max(0.0, float(carbon_intensity_g_per_kwh))
+            if operational_carbon_g_delta is None and energy_kwh_delta is not None:
+                intensity = node.carbon_profile.carbon_intensity_g_per_kwh
+                node.operational_carbon_g_total += max(0.0, float(energy_kwh_delta)) * node.carbon_profile.pue * intensity
+            if carbon_signal_timestamp is not None:
+                node.carbon_signal_timestamp = float(carbon_signal_timestamp)
+            node.resource_version += 1
+            control.resource_snapshot_version += 1
             control.last_heartbeat_at[node_id] = time.monotonic()
             heartbeat_payload = {
                 "node_id": node_id,
@@ -89,6 +111,12 @@ class NodeRegistry:
                 "running_tasks": sorted(node.running_tasks.keys()),
                 "pending_tasks": len(control.pending_queue),
                 "online": node.online,
+                "resource_version": node.resource_version,
+                "resource_snapshot_version": control.resource_snapshot_version,
+                "current_power_w": node.current_power_w,
+                "energy_kwh_total": node.energy_kwh_total,
+                "operational_carbon_g_total": node.operational_carbon_g_total,
+                "carbon_signal_timestamp": node.carbon_signal_timestamp,
                 "network_paths": {
                     region: profile.to_dict()
                     for region, profile in sorted(node.network_paths.items(), key=lambda item: item[0])

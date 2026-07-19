@@ -7,7 +7,7 @@ from statistics import mean
 from typing import Any
 
 from ..core import ComputeNetworkPolicy, UserFeedback, UserRequirement
-from ..domain import ExecutionRecord, Node, PhysicalTopology, PolicyAdjustment, PolicyState, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
+from ..domain import BatchStatus, ExecutionRecord, Node, PhysicalTopology, PolicyAdjustment, PolicyState, ResourceVector, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
 from ..policy.optimizer import PolicyOptimizer
 from ..policy.clarifier import RequirementSession
 from ..policy.generator import ComputeNetworkPolicyGenerator
@@ -19,12 +19,27 @@ from .node_registry import NodeRegistry
 from .policy_workflow import PolicyWorkflowService
 from .requirement_dialogue import RequirementDialogueService
 from .task_lease_service import TaskLease, TaskLeaseService
+from .batch_scheduling_service import BatchSchedulingService
 
 
 def _truncate(text: str, limit: int = 400) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 3] + "..."
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    """Return a linearly interpolated percentile without a NumPy dependency."""
+    if not values:
+        return 0.0
+    ordered = sorted(float(value) for value in values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = max(0.0, min(1.0, percentile)) * (len(ordered) - 1)
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] + fraction * (ordered[upper] - ordered[lower])
 
 
 class CentralControlPlane:
@@ -64,14 +79,22 @@ class CentralControlPlane:
         self.user_feedback: list[UserFeedback] = []
         self.requirement_sessions: dict[str, RequirementSession] = {}
         self.physical_topology: PhysicalTopology | None = None
+        self.resource_snapshot_version = 0
+        self.task_batches: dict[str, Any] = {}
+        self.batch_plans: dict[str, Any] = {}
+        self.batch_idempotency: dict[str, str] = {}
+        self.reservation_ledgers: dict[str, Any] = {}
+        self.tool_audit_log: list[dict[str, Any]] = []
         self.node_registry = NodeRegistry(self)
         self.task_lease_service = TaskLeaseService(self)
+        self.batch_scheduling_service = BatchSchedulingService(self)
         self.policy_workflow = PolicyWorkflowService(self)
         self.requirement_dialogue = RequirementDialogueService(self)
 
         if self.state_store is not None:
             self._restore_from_store()
             self.state_store.set_control_value("policy_weights", self.policy_state.current_weights())
+            self.state_store.set_control_value("policy_group_weights", self.policy_state.current_group_weights())
 
     def register_node(self, node: Node) -> dict[str, Any]:
         return self.node_registry.register_node(node)
@@ -93,6 +116,51 @@ class CentralControlPlane:
 
     def schedule_pending_task(self, task_id: str) -> dict[str, Any]:
         return self.task_lease_service.schedule_pending_task(task_id)
+
+    def import_task_batch(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.batch_scheduling_service.import_json(payload)
+
+    def import_task_batch_csv(self, text: str, *, batch_name: str = "CSV批次") -> dict[str, Any]:
+        return self.batch_scheduling_service.import_csv(text, batch_name=batch_name)
+
+    def get_task_batch(self, batch_id: str) -> dict[str, Any]:
+        return self.batch_scheduling_service.get_batch(batch_id)
+
+    def get_task_batch_actual_metrics(self, batch_id: str) -> dict[str, Any]:
+        return self.batch_scheduling_service.actual_metrics(batch_id)
+
+    def preview_batch_schedule(self, batch_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.batch_scheduling_service.preview(batch_id, payload)
+
+    def compare_batch_strategies(self, batch_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.batch_scheduling_service.compare(batch_id, payload)
+
+    def commit_batch_schedule(self, batch_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.batch_scheduling_service.commit(batch_id, payload)
+
+    def record_tool_call(
+        self,
+        *,
+        tool_name: str,
+        actor: str,
+        result_status: str,
+        batch_id: str | None = None,
+        plan_id: str | None = None,
+        session_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        with self.lock:
+            self.tool_audit_log.append({
+                "request_id": request_id or f"req-{int(time.time() * 1000)}",
+                "session_id": session_id,
+                "batch_id": batch_id,
+                "plan_id": plan_id,
+                "actor": actor,
+                "tool_name": tool_name,
+                "timestamp": round(time.time(), 4),
+                "result_status": result_status,
+            })
+            self.tool_audit_log = self.tool_audit_log[-200:]
 
     def parse_requirement(
         self,
@@ -178,11 +246,18 @@ class CentralControlPlane:
     def commit_policy(self, policy_id: str) -> dict[str, Any]:
         return self.policy_workflow.commit_policy(policy_id)
 
-    def update_policy_weights(self, weights: dict[str, Any], *, reason: str = "用户手动提交多维策略权重。") -> dict[str, Any]:
+    def update_policy_weights(
+        self,
+        weights: dict[str, Any],
+        *,
+        group_weights: dict[str, Any] | None = None,
+        reason: str = "用户手动提交多维策略权重。",
+    ) -> dict[str, Any]:
         with self.lock:
-            normalized = normalize_weights({str(key): float(value) for key, value in dict(weights or {}).items()})
-            if not normalized:
-                raise ValueError("weights are required")
+            submitted = {str(key): float(value) for key, value in dict(weights or {}).items()}
+            if not submitted and group_weights is None:
+                raise ValueError("weights or group_weights are required")
+            normalized = normalize_weights(submitted) if submitted else self.policy_state.current_weights()
             self.policy_state.update(
                 tick=self.current_tick(),
                 new_weights=normalized,
@@ -190,13 +265,19 @@ class CentralControlPlane:
                 affected_records=0,
                 metrics={},
             )
+            if group_weights is not None:
+                self.policy_state.update_group_weights({
+                    str(key): float(value) for key, value in dict(group_weights).items()
+                })
             if self.state_store is not None:
                 latest_adjustment = self.policy_state.adjustment_history[-1]
                 self.state_store.append_policy_adjustment(latest_adjustment.to_dict())
                 self.state_store.set_control_value("policy_weights", self.policy_state.current_weights())
+                self.state_store.set_control_value("policy_group_weights", self.policy_state.current_group_weights())
             return {
                 "status": "updated",
                 "policy_weights": {key: round(value, 4) for key, value in self.policy_state.current_weights().items()},
+                "policy_group_weights": {key: round(value, 4) for key, value in self.policy_state.current_group_weights().items()},
                 "adjustment": self.policy_state.adjustment_history[-1].to_dict(),
             }
 
@@ -223,6 +304,11 @@ class CentralControlPlane:
         labels: set[str] | None = None,
         performance_factors: dict[str, float] | None = None,
         network_paths: dict[str, dict[str, float]] | None = None,
+        current_power_w: float | None = None,
+        energy_kwh_delta: float | None = None,
+        operational_carbon_g_delta: float | None = None,
+        carbon_intensity_g_per_kwh: float | None = None,
+        carbon_signal_timestamp: float | None = None,
     ) -> dict[str, Any]:
         return self.node_registry.record_heartbeat(
             node_id,
@@ -236,6 +322,11 @@ class CentralControlPlane:
             labels=labels,
             performance_factors=performance_factors,
             network_paths=network_paths,
+            current_power_w=current_power_w,
+            energy_kwh_delta=energy_kwh_delta,
+            operational_carbon_g_delta=operational_carbon_g_delta,
+            carbon_intensity_g_per_kwh=carbon_intensity_g_per_kwh,
+            carbon_signal_timestamp=carbon_signal_timestamp,
         )
 
     def request_lease(self, node_id: str) -> dict[str, Any] | None:
@@ -318,6 +409,12 @@ class CentralControlPlane:
             within_budget = None if task.budget is None else actual_cost <= task.budget
             deadline_tick = task.effective_deadline_tick()
             sla_met = deadline_tick is None or tick <= deadline_tick
+            result_metadata = dict(metadata or {})
+            predicted_carbon = node.predict_operational_carbon(task, actual_duration, tick)
+            energy_kwh = float(result_metadata.get("energy_kwh", predicted_carbon.get("facility_energy_kwh", 0.0)))
+            compute_carbon_g = float(result_metadata.get("compute_carbon_g", predicted_carbon.get("compute_carbon_g", 0.0)))
+            network_carbon_g = float(result_metadata.get("network_carbon_g", predicted_carbon.get("network_carbon_g", 0.0)))
+            operational_carbon_g = float(result_metadata.get("operational_carbon_g", compute_carbon_g + network_carbon_g))
             record = ExecutionRecord(
                 task_id=task.task_id,
                 task_type=task.task_type,
@@ -347,11 +444,27 @@ class CentralControlPlane:
                     sla_met=sla_met,
                     within_budget=within_budget,
                 ),
-                metadata=dict(metadata or {}),
+                metadata=result_metadata,
+                energy_kwh=energy_kwh,
+                compute_carbon_g=compute_carbon_g,
+                network_carbon_g=network_carbon_g,
+                operational_carbon_g=operational_carbon_g,
+                carbon_scope=str(result_metadata.get("carbon_scope", "operational_only")),
+                batch_id=task.batch_id,
+                queue_wait_seconds=max(0.0, float(result_metadata.get("queue_wait_seconds", 0.0))),
+                jct_seconds=max(0.0, float(result_metadata.get("jct_seconds", duration_seconds))),
+                cpu_utilization=clamp(float(result_metadata.get("cpu_utilization", 0.0))),
+                memory_utilization=clamp(float(result_metadata.get("memory_utilization", 0.0))),
+                bandwidth_utilization=clamp(float(result_metadata.get("bandwidth_utilization", 0.0))),
+                storage_utilization=clamp(float(result_metadata.get("storage_utilization", 0.0))),
             )
             self.execution_history.append(record)
             self.task_progress.pop(task_id, None)
             node.update_after_record(task, record)
+            node.task_energy_kwh_total += energy_kwh
+            node.task_operational_carbon_g_total += operational_carbon_g
+            node.resource_version += 1
+            self.resource_snapshot_version += 1
 
             if success:
                 task.status = TaskStatus.SUCCEEDED
@@ -360,6 +473,14 @@ class CentralControlPlane:
                 self.pending_queue.append(task.task_id)
             else:
                 task.status = TaskStatus.FAILED
+
+            if task.batch_id and task.batch_id in self.task_batches:
+                batch = self.task_batches[task.batch_id]
+                statuses = [self.tasks[item.task_id].status for item in batch.tasks if item.task_id in self.tasks]
+                if statuses and all(status == TaskStatus.SUCCEEDED for status in statuses):
+                    batch.status = BatchStatus.COMPLETED
+                elif statuses and all(status in {TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED} for status in statuses):
+                    batch.status = BatchStatus.PARTIAL_FAILED
 
             if self.state_store is not None:
                 self.state_store.delete_lease(task_id)
@@ -464,6 +585,23 @@ class CentralControlPlane:
                 if self.execution_history
                 else 0.0
             )
+            total_energy_kwh = sum(record.energy_kwh for record in self.execution_history)
+            total_operational_carbon_g = sum(record.operational_carbon_g for record in self.execution_history)
+            actual_jct_seconds = [
+                record.jct_seconds for record in self.execution_history if record.jct_seconds > 0.0
+            ]
+            queue_wait_seconds = [record.queue_wait_seconds for record in self.execution_history]
+            cpu_utilization = [record.cpu_utilization for record in self.execution_history]
+            memory_utilization = [record.memory_utilization for record in self.execution_history]
+            bandwidth_utilization = [record.bandwidth_utilization for record in self.execution_history]
+            storage_utilization = [record.storage_utilization for record in self.execution_history]
+            batch_makespans: dict[str, float] = {}
+            for record in self.execution_history:
+                if record.batch_id and record.jct_seconds > 0.0:
+                    batch_makespans[record.batch_id] = max(
+                        batch_makespans.get(record.batch_id, 0.0),
+                        record.jct_seconds,
+                    )
             stable_latencies = [
                 float(decision.network_snapshot.get("stable_latency_ms", decision.network_snapshot.get("robust_latency_ms", 0.0)))
                 for decision in self.decision_log
@@ -489,6 +627,24 @@ class CentralControlPlane:
                 active_model_features.append("lstm_latency_prediction")
             if "gnn" in loaded_models:
                 active_model_features.append("graphsage_topology_score")
+            reference_weight_sources = self.scheduler.weight_components(
+                Task(
+                    task_id="__weight_reference__",
+                    task_type="batch_cpu",
+                    demand=ResourceVector(cpu=1, memory=1, gpu=0, storage=1),
+                    estimated_duration=10,
+                ),
+                self.current_tick(),
+            )
+            reference_group_weight_sources = self.scheduler.group_weight_components(
+                Task(
+                    task_id="__group_weight_reference__",
+                    task_type="batch_cpu",
+                    demand=ResourceVector(cpu=1, memory=1, gpu=0, storage=1),
+                    estimated_duration=10,
+                ),
+                self.current_tick(),
+            )
             return {
                 "tick": self.current_tick(),
                 "totals": {
@@ -513,6 +669,22 @@ class CentralControlPlane:
                     "average_cost": round(avg_cost, 4),
                     "average_network_delay_ticks": round(avg_network_delay, 4),
                     "average_network_risk": round(avg_network_risk, 4),
+                    "total_energy_kwh": round(total_energy_kwh, 8),
+                    "total_operational_carbon_g": round(total_operational_carbon_g, 6),
+                    "average_operational_carbon_g_per_task": round(total_operational_carbon_g / len(self.execution_history), 6) if self.execution_history else 0.0,
+                    "average_actual_jct_seconds": round(mean(actual_jct_seconds), 6) if actual_jct_seconds else 0.0,
+                    "p95_actual_jct_seconds": round(_percentile(actual_jct_seconds, 0.95), 6),
+                    "average_queue_wait_seconds": round(mean(queue_wait_seconds), 6) if queue_wait_seconds else 0.0,
+                    "p95_queue_wait_seconds": round(_percentile(queue_wait_seconds, 0.95), 6),
+                    "actual_makespan_seconds": round(max(actual_jct_seconds), 6) if actual_jct_seconds else 0.0,
+                    "average_cpu_utilization": round(mean(cpu_utilization), 6) if cpu_utilization else 0.0,
+                    "average_memory_utilization": round(mean(memory_utilization), 6) if memory_utilization else 0.0,
+                    "average_bandwidth_utilization": round(mean(bandwidth_utilization), 6) if bandwidth_utilization else 0.0,
+                    "average_storage_utilization": round(mean(storage_utilization), 6) if storage_utilization else 0.0,
+                    "completed_batch_count": len(batch_makespans),
+                    "batch_makespan_seconds": {
+                        batch_id: round(value, 6) for batch_id, value in sorted(batch_makespans.items())
+                    },
                     "average_stable_latency_ms": round(mean(stable_latencies) if stable_latencies else 0.0, 4),
                     "average_fusion_score": round(mean(fusion_scores) if fusion_scores else 0.0, 4),
                     "average_deterministic_confidence": round(
@@ -527,6 +699,31 @@ class CentralControlPlane:
                     ),
                 },
                 "policy_weights": {key: round(value, 4) for key, value in self.policy_state.current_weights().items()},
+                "policy_group_weights": {key: round(value, 4) for key, value in self.policy_state.current_group_weights().items()},
+                "weight_sources": {
+                    **{
+                        source: {key: round(value, 4) for key, value in weights.items()}
+                        for source, weights in reference_weight_sources.items()
+                    },
+                    "fusion_coefficients": {"intent": 0.4, "sla": 0.4, "data": 0.2},
+                    "data_method": "fixed_critic_reference_profile",
+                    "scope": "reference_batch_cpu_task; actual SLA/final weights are recomputed per task",
+                },
+                "group_weight_sources": {
+                    **{
+                        source: {key: round(value, 4) for key, value in weights.items()}
+                        for source, weights in reference_group_weight_sources.items()
+                    },
+                    "fusion_coefficients": {"intent": 0.4, "sla": 0.4, "data": 0.2},
+                    "hierarchy_version": "five-groups-v1",
+                    "security_policy": "hard constraints plus non-compensable residual risk penalty",
+                },
+                "batch_scheduling": self.batch_scheduling_service.report(),
+                "toolchain_runtime": {
+                    "external_mcp_last_success": next((item for item in reversed(self.tool_audit_log) if item["actor"] == "external_mcp" and item["result_status"] == "success"), None),
+                    "recent_calls": list(self.tool_audit_log[-20:]),
+                },
+                "resource_snapshot_version": self.resource_snapshot_version,
                 "policy_history": [entry.to_dict() for entry in self.policy_state.adjustment_history],
                 "nodes": [
                     self._node_report_payload(node)
@@ -565,6 +762,13 @@ class CentralControlPlane:
                         "node_load",
                         "bandwidth_utilization",
                         "security_policy",
+                        "operational_carbon",
+                        "batch_joint_allocation",
+                        "pareto_tchebycheff",
+                        "future_fit_fragmentation",
+                        "atomic_snapshot_reservation",
+                        "hierarchical_objective_fusion",
+                        "plan_level_delta_search",
                         *active_model_features,
                     ],
                     "model_status": model_runtime["status"],
@@ -821,6 +1025,9 @@ class CentralControlPlane:
         restored_weights = snapshot["control_state"].get("policy_weights")
         if restored_weights:
             self.policy_state.weights = restored_weights
+        restored_group_weights = snapshot["control_state"].get("policy_group_weights")
+        if restored_group_weights:
+            self.policy_state.group_weights = restored_group_weights
 
         restored_topology = snapshot["control_state"].get("physical_topology")
         if restored_topology:
@@ -846,7 +1053,7 @@ class CentralControlPlane:
 
         for payload in snapshot["tasks"]:
             task = task_from_dict(payload)
-            if task.status == TaskStatus.RUNNING:
+            if task.status in {TaskStatus.RUNNING, TaskStatus.RESERVED, TaskStatus.LEASED}:
                 task.status = TaskStatus.PENDING
             self.tasks[task.task_id] = task
             if task.status == TaskStatus.PENDING and task.task_id not in self.pending_queue:

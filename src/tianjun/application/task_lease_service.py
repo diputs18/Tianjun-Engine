@@ -203,6 +203,8 @@ class TaskLeaseService:
         task.status = TaskStatus.RUNNING
         task.last_scheduled_node = node.node_id
         task.attempts += 1
+        node.resource_version += 1
+        control.resource_snapshot_version += 1
         if remove_from_pending and task.task_id in control.pending_queue:
             control.pending_queue.remove(task.task_id)
         control.decision_log.append(decision)

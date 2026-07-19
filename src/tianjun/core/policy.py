@@ -7,7 +7,7 @@ from ..domain import round_payload
 
 WorkloadType = Literal["inference", "training", "streaming", "analytics", "batch"]
 SecurityLevel = Literal["low", "medium", "high"]
-RequirementPriority = Literal["latency", "cost", "quality", "balanced", "security"]
+RequirementPriority = Literal["latency", "cost", "quality", "balanced", "security", "green"]
 PriorityVector = dict[str, float]
 PolicyStatus = Literal["draft", "simulated", "approved", "committed", "failed"]
 FeedbackTarget = Literal[
@@ -20,6 +20,7 @@ FeedbackTarget = Literal[
     "fragmentation",
     "locality",
     "network",
+    "carbon",
     "module",
     "workflow",
 ]
@@ -75,6 +76,12 @@ class UserRequirement:
     confidence: float = 0.0
     slot_confidence: dict[str, float] = field(default_factory=dict)
     deployment: dict[str, Any] = field(default_factory=dict)
+    batch_id: str | None = None
+    carbon_budget_g: float | None = None
+    carbon_priority: float = 0.0
+    allow_region_shift: bool = True
+    allow_time_shift: bool = False
+    deferrable_until_tick: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UserRequirement":
@@ -96,6 +103,12 @@ class UserRequirement:
             confidence=float(data.get("confidence", 0.0)),
             slot_confidence=_float_dict(data.get("slot_confidence")),
             deployment=dict(data.get("deployment", {})),
+            batch_id=None if data.get("batch_id") in {None, ""} else str(data.get("batch_id")),
+            carbon_budget_g=_optional_float(data.get("carbon_budget_g")),
+            carbon_priority=float(data.get("carbon_priority", 0.0)),
+            allow_region_shift=bool(data.get("allow_region_shift", True)),
+            allow_time_shift=bool(data.get("allow_time_shift", False)),
+            deferrable_until_tick=_optional_int(data.get("deferrable_until_tick")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -118,6 +131,12 @@ class UserRequirement:
                 "confidence": self.confidence,
                 "slot_confidence": dict(self.slot_confidence),
                 "deployment": dict(self.deployment),
+                "batch_id": self.batch_id,
+                "carbon_budget_g": self.carbon_budget_g,
+                "carbon_priority": self.carbon_priority,
+                "allow_region_shift": self.allow_region_shift,
+                "allow_time_shift": self.allow_time_shift,
+                "deferrable_until_tick": self.deferrable_until_tick,
             }
         )
 
@@ -484,7 +503,7 @@ def _security_level(value: Any) -> SecurityLevel:
 
 def _priority(value: Any) -> RequirementPriority:
     text = str(value or "balanced")
-    allowed = {"latency", "cost", "quality", "balanced", "security"}
+    allowed = {"latency", "cost", "quality", "balanced", "security", "green"}
     return text if text in allowed else "balanced"  # type: ignore[return-value]
 
 
@@ -500,6 +519,7 @@ def _feedback_target(value: Any) -> FeedbackTarget:
         "fragmentation",
         "locality",
         "network",
+        "carbon",
         "module",
         "workflow",
     }

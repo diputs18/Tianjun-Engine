@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "description": "CloudSim Plus execution-level comparison. Every run starts an isolated Tianjun control plane and writes measured batch metrics under exp_out/cloudsim_core.",
+  "strategies": [
+    "B0-current",
+    "B4-pareto-tchebycheff",
+    "B6-hierarchical-batch",
+    "B6-green-single-v1",
+    "B6-green-sla-85-v1"
+  ],
+  "scenarios": [
+    "normal",
+    "fault-active"
+  ],
+  "seeds": [20260527, 20260528, 20260529, 20260530, 20260531, 20260532, 20260533, 20260534, 20260535, 20260536],
+  "cloudlets": 36,
+  "carbon_scope": "operational_only",
+  "output_directory": "exp_out/cloudsim_core"
+}

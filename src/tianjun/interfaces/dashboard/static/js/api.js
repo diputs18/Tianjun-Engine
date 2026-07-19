@@ -24,10 +24,30 @@ export async function submitFeedback(payload) { return _post("/feedback", payloa
 export async function commitPolicy(payload) { return _post("/policies/commit", payload); }
 export async function updatePolicyWeights(payload) { return _post("/policy-weights", payload); }
 export async function cancelTaskRun(taskId, requeue = false) { return _post("/task-runs/cancel", { task_id: taskId, requeue }); }
+export async function getTaskBatch(batchId) { return _get(`/task-batches/${encodeURIComponent(batchId)}`); }
+export async function getTaskBatchMetrics(batchId) { return _get(`/task-batches/${encodeURIComponent(batchId)}/metrics`); }
+export async function previewTaskBatch(batchId, payload = {}) { return _post(`/task-batches/${encodeURIComponent(batchId)}/preview`, payload); }
+export async function compareTaskBatch(batchId, payload = {}) { return _post(`/task-batches/${encodeURIComponent(batchId)}/compare`, payload); }
+export async function commitTaskBatch(batchId, payload) { return _post(`/task-batches/${encodeURIComponent(batchId)}/commit`, payload); }
+
+export async function importTaskBatch(file) {
+  const isCsv = file.type.includes("csv") || file.name.toLowerCase().endsWith(".csv");
+  const body = await file.text();
+  const path = isCsv
+    ? `/task-batches/import?name=${encodeURIComponent(file.name.replace(/\.csv$/i, ""))}`
+    : "/task-batches/import";
+  const response = await fetch(BASE + path, {
+    method: "POST",
+    headers: { "Content-Type": isCsv ? "text/csv; charset=utf-8" : "application/json" },
+    body,
+  });
+  if (!response.ok) throw await responseError(response, `POST ${path}`);
+  return response.json();
+}
 
 async function _get(path) {
   const r = await fetch(BASE + path);
-  if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
+  if (!r.ok) throw await responseError(r, `GET ${path}`);
   return r.json();
 }
 
@@ -37,6 +57,17 @@ async function _post(path, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`POST ${path} -> ${r.status}`);
+  if (!r.ok) throw await responseError(r, `POST ${path}`);
   return r.json();
+}
+
+async function responseError(response, operation) {
+  let detail = "";
+  try {
+    const payload = await response.json();
+    detail = payload.error || payload.message || payload.validation?.errors?.[0]?.reason || JSON.stringify(payload);
+  } catch (_) {
+    detail = await response.text();
+  }
+  return new Error(`${operation} -> ${response.status}${detail ? `: ${detail}` : ""}`);
 }

@@ -30,3 +30,14 @@ def test_topology_displays_gpu_capacity() -> None:
     assert "node-gpu" not in topology
     assert ".node-gpu" not in styles
     assert topology.index('${detailRow("内存使用率", `${vm.memory}%`)}') < topology.index("${gpuDetail}")
+
+
+def test_dashboard_exposes_hierarchical_batch_strategy_and_group_weights() -> None:
+    scheduling = Path("src/tianjun/interfaces/dashboard/static/js/pages/scheduling.js").read_text(encoding="utf-8")
+    model = Path("src/tianjun/interfaces/dashboard/static/js/pages/model.js").read_text(encoding="utf-8")
+
+    assert "B6-hierarchical-batch" in scheduling
+    assert "group_objective_breakdown" in scheduling
+    assert "group_weights" in model
+    assert "五类业务目标" in model
+    assert "十维原子指标（解释、单目标与双目标消融）" in model

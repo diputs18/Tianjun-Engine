@@ -1,0 +1,13 @@
+site_id,region,tick,carbon_intensity_g_per_kwh,pue,signal_type,timezone,source_version
+site-1,dc1,0,560.0,1.38,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-1,dc1,6,650.0,1.38,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-1,dc1,12,520.0,1.38,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-1,dc1,18,465.0,1.38,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-2,dc2,0,430.0,1.28,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-2,dc2,6,490.0,1.28,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-2,dc2,12,400.0,1.28,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-2,dc2,18,365.0,1.28,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-3,dc3,0,310.0,1.22,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-3,dc3,6,355.0,1.22,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-3,dc3,12,280.0,1.22,synthetic_average,Asia/Shanghai,cloudsim-v1
+site-3,dc3,18,250.0,1.22,synthetic_average,Asia/Shanghai,cloudsim-v1

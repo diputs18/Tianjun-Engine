@@ -77,6 +77,18 @@ class ExecutionRecord:
     delivery_probability: float = 1.0
     sla_reason: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    energy_kwh: float = 0.0
+    compute_carbon_g: float = 0.0
+    network_carbon_g: float = 0.0
+    operational_carbon_g: float = 0.0
+    carbon_scope: str = "operational_only"
+    batch_id: str | None = None
+    queue_wait_seconds: float = 0.0
+    jct_seconds: float = 0.0
+    cpu_utilization: float = 0.0
+    memory_utilization: float = 0.0
+    bandwidth_utilization: float = 0.0
+    storage_utilization: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -101,4 +113,16 @@ class ExecutionRecord:
             "delivery_probability": round(self.delivery_probability, 4),
             "sla_reason": self.sla_reason,
             "metadata": dict(self.metadata),
+            "energy_kwh": round(self.energy_kwh, 8),
+            "compute_carbon_g": round(self.compute_carbon_g, 6),
+            "network_carbon_g": round(self.network_carbon_g, 6),
+            "operational_carbon_g": round(self.operational_carbon_g, 6),
+            "carbon_scope": self.carbon_scope,
+            "batch_id": self.batch_id,
+            "queue_wait_seconds": round(self.queue_wait_seconds, 6),
+            "jct_seconds": round(self.jct_seconds, 6),
+            "cpu_utilization": round(self.cpu_utilization, 6),
+            "memory_utilization": round(self.memory_utilization, 6),
+            "bandwidth_utilization": round(self.bandwidth_utilization, 6),
+            "storage_utilization": round(self.storage_utilization, 6),
         }
