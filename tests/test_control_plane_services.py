@@ -7,6 +7,7 @@ from tianjun.application.requirement_dialogue import RequirementDialogueService
 from tianjun.application.task_lease_service import TaskLeaseService
 from tianjun.core import UserRequirement
 from tianjun.domain import NetworkPathProfile, Node, ResourceVector, Task, TaskStatus
+from tianjun.storage.sqlite_state_store import SQLiteStateStore
 
 
 def test_control_plane_exposes_service_boundaries() -> None:
@@ -18,6 +19,46 @@ def test_control_plane_exposes_service_boundaries() -> None:
     assert isinstance(control_plane.requirement_dialogue, RequirementDialogueService)
     assert control_plane.node_registry.node_count == 0
     assert control_plane.task_lease_service.active_lease_count == 0
+
+
+def test_external_mcp_audit_survives_control_plane_restart(tmp_path) -> None:
+    database_path = tmp_path / "control-plane.db"
+    store = SQLiteStateStore(database_path)
+    control_plane = CentralControlPlane(state_store=store)
+    control_plane.record_tool_call(
+        tool_name="get_cluster_state",
+        actor="external_mcp",
+        result_status="success",
+        request_id="req-persisted",
+    )
+    store.close()
+
+    restored_store = SQLiteStateStore(database_path)
+    try:
+        restored = CentralControlPlane(state_store=restored_store)
+        runtime = restored.build_report()["toolchain_runtime"]
+        assert runtime["external_mcp_call_count"] == 1
+        assert runtime["external_mcp_success_count"] == 1
+        assert runtime["external_mcp_last_success"]["request_id"] == "req-persisted"
+    finally:
+        restored_store.close()
+
+
+def test_sqlite_history_retention_keeps_latest_records(tmp_path) -> None:
+    store = SQLiteStateStore(tmp_path / "retention.db")
+    store.MAX_EXECUTION_RECORDS = 2
+    try:
+        for index in range(3):
+            store.append_execution_record({
+                "task_id": f"task-{index}",
+                "node_id": "node-a",
+                "success": True,
+            })
+
+        records = store.load_state()["execution_records"]
+        assert [record["task_id"] for record in records] == ["task-1", "task-2"]
+    finally:
+        store.close()
 
 
 def test_control_plane_facade_delegates_migrated_service_boundaries(monkeypatch) -> None:
@@ -63,6 +104,71 @@ def test_node_registry_handles_registration_and_heartbeat_through_facade() -> No
     assert control_plane.nodes["node-a"].health_score == 0.5
     assert control_plane.nodes["node-a"].labels == {"edge"}
     assert heartbeat["node_id"] == "node-a"
+
+
+def test_cloudsim_heartbeat_telemetry_survives_into_node_report() -> None:
+    control_plane = CentralControlPlane()
+    control_plane.register_node(Node(node_id="dci-dc1-beijing-vm-0", region="dc1", capacity=ResourceVector(cpu=4, memory=8)))
+
+    control_plane.record_heartbeat(
+        "dci-dc1-beijing-vm-0",
+        runtime_telemetry={
+            "cpu_utilization": 0.42,
+            "ram_utilization": 0.31,
+            "bandwidth_utilization": 0.18,
+        },
+        telemetry_source="cloudsim",
+        simulation_tick=12.5,
+    )
+
+    node = control_plane.build_report()["nodes"][0]
+    assert node["runtime_utilization"] == {
+        "cpu": 0.42,
+        "memory": 0.31,
+        "gpu": None,
+        "storage": None,
+        "bandwidth": 0.18,
+    }
+    assert node["telemetry_source"] == "cloudsim"
+    assert node["simulation_tick"] == 12.5
+    assert node["resource_load_source"] == "simulated_telemetry"
+    assert node["resource_load_source_label"] == "CloudSim Plus 模拟遥测"
+    assert node["telemetry_freshness"] == "current"
+
+
+def test_cloudsim_label_does_not_exempt_node_from_heartbeat_expiry() -> None:
+    control_plane = CentralControlPlane(heartbeat_timeout_seconds=1.0)
+    control_plane.register_node(Node(
+        node_id="cloudsim-node",
+        region="dc1",
+        labels={"cloudsim"},
+        capacity=ResourceVector(cpu=4),
+    ))
+    control_plane.last_heartbeat_at["cloudsim-node"] -= 2.0
+
+    node = control_plane.build_report()["nodes"][0]
+
+    assert node["online"] is False
+    assert node["telemetry_freshness"] == "unavailable"
+
+
+def test_report_distinguishes_configured_carbon_from_live_signal() -> None:
+    control_plane = CentralControlPlane()
+    control_plane.register_node(Node(node_id="node-a", region="dc1", capacity=ResourceVector(cpu=4)))
+
+    configured = control_plane.build_report()["nodes"][0]
+    assert configured["carbon_data_source"] == "simulated_profile"
+    assert configured["carbon_data_freshness"] == "profile"
+
+    control_plane.record_heartbeat(
+        "node-a",
+        carbon_intensity_g_per_kwh=320.0,
+        carbon_signal_timestamp=100.0,
+        telemetry_source="node_agent",
+    )
+    live = control_plane.build_report()["nodes"][0]
+    assert live["carbon_data_source"] == "live_signal"
+    assert live["carbon_data_freshness"] == "current"
 
 
 def test_task_lease_service_handles_task_lifecycle_through_facade() -> None:

@@ -1,5 +1,7 @@
 export const state = {
   report: null,
+  summaryReport: null,
+  pageReports: {},
   health: null,
   activePage: "overview",
   hermesSessionId: null,
@@ -10,6 +12,13 @@ export const state = {
   hermesBusy: false,
   abortController: null,
   pollHandle: null,
+  refreshController: null,
+  refreshPromise: null,
+  refreshSequence: 0,
+  selectedBatch: null,
+  selectedBatchPlan: null,
+  selectedBatchMetrics: null,
+  batchComparison: null,
 };
 
 const listeners = {};

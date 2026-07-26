@@ -6,8 +6,10 @@ from typing import Any
 
 from ..domain import (
     ExecutionMode,
+    CarbonSiteProfile,
     NetworkPathProfile,
     Node,
+    PowerProfile,
     ResourceVector,
     Task,
     TaskExecutionSpec,
@@ -37,6 +39,25 @@ def node_from_dict(data: dict[str, Any]) -> Node:
             str(region): NetworkPathProfile(**profile)
             for region, profile in data.get("network_paths", {}).items()
         },
+        site_id=data.get("site_id"),
+        power_profile=PowerProfile.from_dict(data.get("power_profile")),
+        carbon_profile=CarbonSiteProfile.from_dict(data.get("carbon_profile"), region=data.get("region", "default")),
+        trust_level=str(data.get("trust_level", "high")),
+        isolation_levels=set(data.get("isolation_levels", ["none", "process", "container", "namespace"])),
+        encrypted_transport=bool(data.get("encrypted_transport", True)),
+        resource_version=int(data.get("resource_version", 0)),
+        current_power_w=float(data.get("current_power_w", 0.0)),
+        energy_kwh_total=float(data.get("energy_kwh_total", 0.0)),
+        operational_carbon_g_total=float(data.get("operational_carbon_g_total", 0.0)),
+        task_energy_kwh_total=float(data.get("task_energy_kwh_total", 0.0)),
+        task_operational_carbon_g_total=float(data.get("task_operational_carbon_g_total", 0.0)),
+        carbon_signal_timestamp=data.get("carbon_signal_timestamp"),
+        runtime_telemetry={
+            str(key): float(value)
+            for key, value in dict(data.get("runtime_telemetry", {})).items()
+        },
+        telemetry_source=data.get("telemetry_source"),
+        simulation_tick=data.get("simulation_tick"),
     )
 
 
@@ -60,6 +81,17 @@ def task_from_dict(data: dict[str, Any]) -> Task:
             str(key): float(value)
             for key, value in dict(data.get("intent_weights", {})).items()
         },
+        carbon_budget_g=data.get("carbon_budget_g"),
+        carbon_priority=float(data.get("carbon_priority", 0.0)),
+        expected_cpu_utilization=(
+            None
+            if data.get("expected_cpu_utilization") is None
+            else max(0.0, min(1.0, float(data["expected_cpu_utilization"])))
+        ),
+        allow_region_shift=bool(data.get("allow_region_shift", True)),
+        allow_time_shift=bool(data.get("allow_time_shift", False)),
+        deferrable_until_tick=data.get("deferrable_until_tick"),
+        batch_id=data.get("batch_id"),
         preferred_labels=set(data.get("preferred_labels", [])),
         security_level=str(data.get("security_level", "medium")),
         isolation_level=str(data.get("isolation_level", "process")),

@@ -11,9 +11,12 @@ from .resource import ResourceVector
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
+    RESERVED = "reserved"
+    LEASED = "leased"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 @dataclass(slots=True)
@@ -32,6 +35,13 @@ class Task:
     min_bandwidth_mbps: float | None = None
     network_sensitivity: float = 0.5
     intent_weights: dict[str, float] = field(default_factory=dict)
+    carbon_budget_g: float | None = None
+    carbon_priority: float = 0.0
+    expected_cpu_utilization: float | None = None
+    allow_region_shift: bool = True
+    allow_time_shift: bool = False
+    deferrable_until_tick: int | None = None
+    batch_id: str | None = None
     preferred_labels: set[str] = field(default_factory=set)
     security_level: str = "medium"
     isolation_level: str = "process"
@@ -88,6 +98,13 @@ class Task:
             "min_bandwidth_mbps": self.min_bandwidth_mbps,
             "network_sensitivity": self.network_sensitivity,
             "intent_weights": dict(self.intent_weights),
+            "carbon_budget_g": self.carbon_budget_g,
+            "carbon_priority": self.carbon_priority,
+            "expected_cpu_utilization": self.expected_cpu_utilization,
+            "allow_region_shift": self.allow_region_shift,
+            "allow_time_shift": self.allow_time_shift,
+            "deferrable_until_tick": self.deferrable_until_tick,
+            "batch_id": self.batch_id,
             "preferred_labels": sorted(self.preferred_labels),
             "security_level": self.security_level,
             "isolation_level": self.isolation_level,

@@ -9,8 +9,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "server": {
         "host": "127.0.0.1",
         "port": 8024,
-        "state_db": None,
+        "state_db": "${TIANJUN_STATE_DIR}/tianjun-state.sqlite",
         "heartbeat_timeout_seconds": 15.0,
+        "lease_timeout_seconds": 60.0,
+        "lifecycle_sweep_interval_seconds": 1.0,
         "policy_update_interval": 2,
     },
     "scenario": {

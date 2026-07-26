@@ -70,6 +70,23 @@ class TianjunToolService:
                 str(args["task_id"]),
                 confirmed_by_user_button=bool(args.get("confirmed_by_user_button") or args.get("confirmed")),
             )
+        if tool_name == "import_task_batch":
+            return self.import_task_batch(args)
+        if tool_name == "get_task_batch":
+            return self.get_task_batch(str(args["batch_id"]))
+        if tool_name == "get_batch_actual_metrics":
+            return self.get_batch_actual_metrics(str(args["batch_id"]))
+        if tool_name == "preview_batch_schedule":
+            return self.preview_batch_schedule(str(args["batch_id"]), args)
+        if tool_name == "compare_batch_strategies":
+            return self.compare_batch_strategies(str(args["batch_id"]), args)
+        if tool_name == "commit_batch_schedule":
+            return self.commit_batch_schedule(
+                str(args["batch_id"]),
+                str(args["plan_id"]),
+                int(args["resource_snapshot_version"]),
+                confirmed_by_user_button=bool(args.get("confirmed_by_user_button") or args.get("confirmed")),
+            )
         raise ValueError(f"Unsupported Tianjun tool: {tool_name}")
 
     def get_cluster_state(self) -> dict[str, Any]:
@@ -157,6 +174,40 @@ class TianjunToolService:
         if not confirmed_by_user_button:
             raise PermissionError("schedule_pending_task requires explicit user confirmation")
         return self.control_plane.schedule_pending_task(task_id)
+
+    def import_task_batch(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.control_plane.import_task_batch(payload)
+
+    def get_task_batch(self, batch_id: str) -> dict[str, Any]:
+        return self.control_plane.get_task_batch(batch_id)
+
+    def get_batch_actual_metrics(self, batch_id: str) -> dict[str, Any]:
+        return self.control_plane.get_task_batch_actual_metrics(batch_id)
+
+    def preview_batch_schedule(self, batch_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.control_plane.preview_batch_schedule(batch_id, payload)
+
+    def compare_batch_strategies(self, batch_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.control_plane.compare_batch_strategies(batch_id, payload)
+
+    def commit_batch_schedule(
+        self,
+        batch_id: str,
+        plan_id: str,
+        resource_snapshot_version: int,
+        *,
+        confirmed_by_user_button: bool = False,
+    ) -> dict[str, Any]:
+        if not confirmed_by_user_button:
+            raise PermissionError("commit_batch_schedule requires explicit user confirmation")
+        return self.control_plane.commit_batch_schedule(
+            batch_id,
+            {
+                "plan_id": plan_id,
+                "resource_snapshot_version": resource_snapshot_version,
+                "confirmed_by_user_button": True,
+            },
+        )
 
     @staticmethod
     def _policy_summary(policy: dict[str, Any]) -> dict[str, Any]:

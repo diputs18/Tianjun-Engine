@@ -8,8 +8,10 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,14 +21,20 @@ import java.util.regex.Pattern;
 public class TianjunHttpBridge {
     private static final Pattern NODE_ID_PATTERN = Pattern.compile("\"node_id\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern TASK_ID_PATTERN = Pattern.compile("\"task_id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern LEASE_ID_PATTERN = Pattern.compile("\"lease_id\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern STATUS_PATTERN = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern SCORE_PATTERN = Pattern.compile("\"total_score\"\\s*:\\s*([0-9.]+)");
     private static final Pattern LEASE_TASK_PATTERN = Pattern.compile("\"lease\"\\s*:\\s*\\{\\s*\"task_id\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern ESTIMATED_DURATION_PATTERN = Pattern.compile("\"estimated_duration\"\\s*:\\s*([0-9]+)");
     private static final Pattern PREDICTED_COST_PATTERN = Pattern.compile("\"predicted_cost\"\\s*:\\s*([0-9.]+)");
+    private static final Pattern BATCH_ID_PATTERN = Pattern.compile("\"batch_id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern PLAN_ID_PATTERN = Pattern.compile("\"plan_id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern SNAPSHOT_VERSION_PATTERN = Pattern.compile("\"resource_snapshot_version\"\\s*:\\s*([0-9]+)");
 
     private final HttpClient client;
     private final String server;
+    private final Map<String, Double> lastHeartbeatTickByNode = new ConcurrentHashMap<>();
+    private final Map<String, String> leaseIdByTask = new ConcurrentHashMap<>();
 
     public TianjunHttpBridge(final String server) {
         this.server = stripTrailingSlash(server);
@@ -137,8 +145,66 @@ public class TianjunHttpBridge {
         return new SchedulingResult(status, nodeId, leaseTaskId, score, response);
     }
 
+    public String getBatchActualMetrics(final String batchId) {
+        try {
+            return get("/task-batches/" + batchId + "/metrics");
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Unable to read Tianjun batch metrics", e);
+        }
+    }
+
     public void submitTask(final SimTask task) {
         post("/tasks", taskJson(task));
+    }
+
+    /** Imports, jointly previews and atomically commits one CloudSim batch. */
+    public BatchPlanResult commitTaskBatch(
+        final String clientBatchId,
+        final String batchName,
+        final List<SimTask> tasks,
+        final String strategy
+    ) {
+        final String imported = post("/task-batches/import", batchJson(clientBatchId, batchName, tasks));
+        final String batchId = matchString(BATCH_ID_PATTERN, imported, "");
+        if (batchId.isBlank()) {
+            throw new IllegalStateException("Batch import did not return batch_id: " + imported);
+        }
+        final boolean calibratedGreen = "B6-green-calibrated-v1".equalsIgnoreCase(strategy);
+        final boolean greenSingleObjective = "B6-green-single-v1".equalsIgnoreCase(strategy);
+        final boolean greenSlaDualObjective = "B6-green-sla-dual-v1".equalsIgnoreCase(strategy);
+        final boolean greenSla85DualObjective = "B6-green-sla-85-v1".equalsIgnoreCase(strategy);
+        final boolean greenSla90DualObjective = "B6-green-sla-90-v1".equalsIgnoreCase(strategy);
+        final String schedulerStrategy = calibratedGreen || greenSingleObjective || greenSlaDualObjective || greenSla85DualObjective || greenSla90DualObjective
+            ? "B6-hierarchical-batch"
+            : strategy;
+        final String groupWeights = calibratedGreen
+            ? ", \"group_weights\": {\"sla_quality\": 0.18, \"network_coordination\": 0.05, "
+                + "\"resource_efficiency\": 0.15, \"economic_cost\": 0.02, \"green_carbon\": 0.60}"
+            : greenSingleObjective
+                ? ", \"active_groups\": [\"green_carbon\"], \"group_weights\": {\"green_carbon\": 1.0}"
+                : greenSlaDualObjective
+                    ? ", \"active_groups\": [\"green_carbon\", \"sla_quality\"], "
+                        + "\"group_weights\": {\"green_carbon\": 0.70, \"sla_quality\": 0.30}"
+                    : greenSla85DualObjective
+                        ? ", \"active_groups\": [\"green_carbon\", \"sla_quality\"], "
+                            + "\"group_weights\": {\"green_carbon\": 0.85, \"sla_quality\": 0.15}"
+                        : greenSla90DualObjective
+                            ? ", \"active_groups\": [\"green_carbon\", \"sla_quality\"], "
+                                + "\"group_weights\": {\"green_carbon\": 0.90, \"sla_quality\": 0.10}"
+                            : "";
+        final String preview = post("/task-batches/" + batchId + "/preview", """
+            {"strategy": "%s", "simulation_tick": 0%s}
+            """.formatted(escapeJson(schedulerStrategy), groupWeights));
+        final String planId = matchString(PLAN_ID_PATTERN, preview, "");
+        final int snapshotVersion = matchInt(SNAPSHOT_VERSION_PATTERN, preview, -1);
+        if (planId.isBlank() || snapshotVersion < 0) {
+            throw new IllegalStateException("Batch preview did not return a committable plan: " + preview);
+        }
+        final String committed = post("/task-batches/" + batchId + "/commit", """
+            {"plan_id": "%s", "resource_snapshot_version": %d, "confirmed_by_user_button": true}
+            """.formatted(escapeJson(planId), snapshotVersion));
+        return new BatchPlanResult(batchId, planId, snapshotVersion, strategy, committed);
     }
 
     public LeaseResult requestLease(final String nodeId) {
@@ -151,6 +217,13 @@ public class TianjunHttpBridge {
         final String taskId = matchString(TASK_ID_PATTERN, response, "");
         if (taskId.isBlank()) {
             return null;
+        }
+        final String leaseId = matchString(LEASE_ID_PATTERN, response, "");
+        if (!leaseId.isBlank()) {
+            post("/leases/ack", """
+                {"node_id": "%s", "task_id": "%s", "lease_id": "%s"}
+                """.formatted(escapeJson(nodeId), escapeJson(taskId), escapeJson(leaseId)));
+            leaseIdByTask.put(taskId, leaseId);
         }
         return new LeaseResult(
             taskId,
@@ -167,6 +240,7 @@ public class TianjunHttpBridge {
 
     public void reportResult(final SimTaskResult result) {
         post("/task-runs/result", resultJson(result));
+        leaseIdByTask.remove(result.taskId());
     }
 
     private String get(final String path) throws IOException, InterruptedException {
@@ -210,10 +284,13 @@ public class TianjunHttpBridge {
               "region": "%s",
               "location": "%s",
               "service_region": "%s",
+              "site_id": "%s",
               "labels": ["cloudsim", "cpu", "gpu", "%s", "latency-sensitive"],
-              "capacity": {"cpu": %.4f, "memory": %.4f, "gpu": %.4f, "storage": %.4f},
+              "capacity": {"cpu": %.4f, "memory": %.4f, "gpu": %.4f, "storage": %.4f, "mips": %.4f, "gpu_memory": %.4f, "storage_iops": %.4f, "bandwidth": %.4f},
               "cost_per_tick": %.4f,
               "base_reliability": %.4f,
+              "power_profile": {"profile_id": "%s", "idle_power_w": %.4f, "max_power_w": %.4f, "gpu_idle_power_w": %.4f, "gpu_max_power_w": %.4f},
+              "carbon_profile": {"site_id": "%s", "region": "%s", "pue": %.4f, "carbon_intensity_g_per_kwh": %.4f, "carbon_intensity_trace": %s, "carbon_signal_type": "synthetic_average", "timezone": "Asia/Shanghai", "source_version": "cloudsim-v1"},
               "performance_factors": {"inference": %.4f, "batch_cpu": %.4f, "analytics": %.4f, "streaming": %.4f},
               "network_paths": %s
             }
@@ -222,13 +299,28 @@ public class TianjunHttpBridge {
             node.region(),
             node.location(),
             node.serviceRegion(),
+            node.siteId(),
             node.region(),
             node.cpu(),
             node.memoryGb(),
             node.gpu(),
             node.storageGb(),
+            node.totalMips(),
+            node.gpuMemoryGb(),
+            node.storageIops(),
+            node.bandwidthMbps(),
             node.costPerTick(),
             node.reliability(),
+            node.powerProfileId(),
+            node.idlePowerW(),
+            node.maxPowerW(),
+            node.gpuIdlePowerW(),
+            node.gpuMaxPowerW(),
+            node.siteId(),
+            node.region(),
+            node.pue(),
+            node.carbonIntensityAt(0.0),
+            carbonIntensityTraceJson(node),
             node.performanceFactor(),
             node.performanceFactor(),
             node.performanceFactor(),
@@ -266,6 +358,11 @@ public class TianjunHttpBridge {
         final double loadPressure = clamp(cpuUtilization * 0.55 + ramUtilization * 0.25 + bandwidthUtilization * 0.20, 0.0, 1.0);
         final double health = clamp(0.96 - loadWave * 0.08 - loadPressure * 0.22 - node.risk() * 0.08, 0.45, 0.99);
         final double reliability = clamp(node.reliability() - node.risk() * 0.035 - loadPressure * 0.025, 0.45, 0.999);
+        final double powerW = node.idlePowerW() + (node.maxPowerW() - node.idlePowerW()) * loadPressure;
+        final double carbonIntensity = node.carbonIntensityAt(tick);
+        final Double previousTick = lastHeartbeatTickByNode.put(node.nodeId(), tick);
+        final double intervalSeconds = previousTick == null ? 0.0 : Math.max(0.0, tick - previousTick);
+        final double energyKwhDelta = powerW * intervalSeconds / 3_600_000.0;
         return """
             {
               "node_id": "%s",
@@ -280,8 +377,12 @@ public class TianjunHttpBridge {
               "network_paths": %s,
               "sim_tick": %.4f,
               "simulated": true,
-              "telemetry": {"cpu_utilization": %.6f, "ram_utilization": %.6f, "bandwidth_utilization": %.6f},
-              "reliability_score": %.4f
+              "telemetry": {"cpu_utilization": %.6f, "ram_utilization": %.6f, "bandwidth_utilization": %.6f, "heartbeat_interval_seconds": %.6f},
+              "reliability_score": %.4f,
+              "power_w": %.4f,
+              "energy_kwh_delta": %.8f,
+              "carbon_intensity_g_per_kwh": %.4f,
+              "carbon_signal_timestamp": %.4f
             }
             """.formatted(
             node.nodeId(),
@@ -300,7 +401,12 @@ public class TianjunHttpBridge {
             clamp(cpuUtilization, 0.0, 1.0),
             clamp(ramUtilization, 0.0, 1.0),
             clamp(bandwidthUtilization, 0.0, 1.0),
-            reliability
+            intervalSeconds,
+            reliability,
+            powerW,
+            energyKwhDelta,
+            carbonIntensity,
+            tick
         );
     }
 
@@ -309,7 +415,7 @@ public class TianjunHttpBridge {
             {
               "task_id": "%s",
               "task_type": "%s",
-              "demand": {"cpu": %.4f, "memory": %.4f, "gpu": %.4f, "storage": %.4f},
+              "demand": {"cpu": %.4f, "memory": %.4f, "gpu": %.4f, "storage": %.4f, "mips": %.4f, "gpu_memory": %.4f, "storage_iops": %.4f, "bandwidth": %.4f},
               "estimated_duration": %d,
               "priority": %d,
               "budget": %.4f,
@@ -320,6 +426,13 @@ public class TianjunHttpBridge {
               "max_latency_ms": %.4f,
               "min_bandwidth_mbps": %.4f,
               "network_sensitivity": %.4f,
+              "carbon_budget_g": %.6f,
+              "carbon_priority": %.4f,
+              "expected_cpu_utilization": %.6f,
+              "allow_region_shift": %s,
+              "allow_time_shift": %s,
+              "deferrable_until_tick": %d,
+              "batch_id": "%s",
               "preferred_labels": ["cloudsim"]
             }
             """.formatted(
@@ -329,6 +442,10 @@ public class TianjunHttpBridge {
             task.memoryGb(),
             task.gpu(),
             task.storageGb(),
+            task.requiredMips(),
+            task.gpuMemoryGb(),
+            task.storageIops(),
+            task.minBandwidthMbps(),
             task.estimatedDuration(),
             task.priority(),
             task.budget(),
@@ -338,39 +455,110 @@ public class TianjunHttpBridge {
             task.inputSizeGb(),
             task.maxLatencyMs(),
             task.minBandwidthMbps(),
-            task.networkSensitivity()
+            task.networkSensitivity(),
+            task.carbonBudgetG(),
+            task.carbonPriority(),
+            task.expectedCpuUtilization(),
+            task.allowRegionShift() ? "true" : "false",
+            task.allowTimeShift() ? "true" : "false",
+            task.deferrableUntilTick(),
+            escapeJson(task.batchId())
         );
     }
 
     private String resultJson(final SimTaskResult result) {
+        final String leaseId = leaseIdByTask.getOrDefault(result.taskId(), "");
+        final String leaseFields = leaseId.isBlank()
+            ? ""
+            : "\"lease_id\": \"%s\",\n  \"result_id\": \"cloudsim-%s-%s\",".formatted(
+                escapeJson(leaseId), escapeJson(result.taskId()), escapeJson(leaseId)
+            );
         return """
             {
               "node_id": "%s",
               "task_id": "%s",
+              %s
               "success": %s,
               "duration_seconds": %.4f,
               "stdout": "%s",
               "stderr": "%s",
               "returncode": %d,
-              "cost": %.4f
+              "cost": %.4f,
+              "energy_kwh": %.8f,
+              "compute_carbon_g": %.6f,
+              "network_carbon_g": %.6f,
+              "operational_carbon_g": %.6f,
+              "carbon_scope": "operational_only",
+              "metadata": {
+                "queue_wait_seconds": %.6f,
+                "jct_seconds": %.6f,
+                "cpu_utilization": %.6f,
+                "memory_utilization": %.6f,
+                "bandwidth_utilization": %.6f,
+                "storage_utilization": %.6f
+              }
             }
             """.formatted(
             result.nodeId(),
             result.taskId(),
+            leaseFields,
             result.success() ? "true" : "false",
             result.durationSeconds(),
             escapeJson(result.stdout()),
             escapeJson(result.stderr()),
             result.returnCode(),
-            result.cost()
+            result.cost(),
+            result.energyKwh(),
+            result.computeCarbonG(),
+            result.networkCarbonG(),
+            result.computeCarbonG() + result.networkCarbonG(),
+            result.queueWaitSeconds(),
+            result.jctSeconds(),
+            result.cpuUtilization(),
+            result.memoryUtilization(),
+            result.bandwidthUtilization(),
+            result.storageUtilization()
         );
     }
 
+    private String carbonIntensityTraceJson(final SimNode node) {
+        final StringBuilder builder = new StringBuilder("{");
+        node.carbonIntensityTrace().entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> {
+                if (builder.length() > 1) {
+                    builder.append(',');
+                }
+                builder.append('\"')
+                    .append((int) Math.round(entry.getKey()))
+                    .append("\":")
+                    .append(String.format(Locale.ROOT, "%.4f", entry.getValue()));
+            });
+        return builder.append('}').toString();
+    }
+
+    private String batchJson(final String clientBatchId, final String batchName, final List<SimTask> tasks) {
+        final String taskPayloads = tasks.stream().map(this::taskJson).collect(java.util.stream.Collectors.joining(","));
+        return """
+            {
+              "client_batch_id": "%s",
+              "batch_name": "%s",
+              "batch_preferences": {"optimization_profile": "cloudsim_validation"},
+              "tasks": [%s]
+            }
+            """.formatted(escapeJson(clientBatchId), escapeJson(batchName), taskPayloads);
+    }
+
     private String progressJson(final SimTaskProgress progress) {
+        final String leaseId = leaseIdByTask.getOrDefault(progress.taskId(), "");
+        final String leaseField = leaseId.isBlank()
+            ? ""
+            : "\"lease_id\": \"%s\",".formatted(escapeJson(leaseId));
         return """
             {
               "node_id": "%s",
               "task_id": "%s",
+              %s
               "stage": "%s",
               "status": "%s",
               "progress": %.4f,
@@ -388,6 +576,7 @@ public class TianjunHttpBridge {
             """.formatted(
             progress.nodeId(),
             progress.taskId(),
+            leaseField,
             escapeJson(progress.stage()),
             escapeJson(progress.status()),
             clamp(progress.progress(), 0.0, 1.0),
@@ -501,24 +690,90 @@ public class TianjunHttpBridge {
         String serviceRegion,
         int index,
         double cpu,
+        double mipsPerPe,
+        double totalMips,
         double memoryGb,
         double gpu,
+        double gpuMemoryGb,
         double storageGb,
+        double storageIops,
         double bandwidthMbps,
         double costPerTick,
         double reliability,
         double performanceFactor,
-        double risk
+        double risk,
+        String siteId,
+        String powerProfileId,
+        double idlePowerW,
+        double maxPowerW,
+        double gpuIdlePowerW,
+        double gpuMaxPowerW,
+        double pue,
+        Map<Double, Double> carbonIntensityTrace,
+        double baseCarbonIntensityGPerKwh
     ) {
+        /** Backward-compatible constructor for the original four-resource example. */
+        public SimNode(
+            final String nodeId,
+            final String region,
+            final String location,
+            final String serviceRegion,
+            final int index,
+            final double cpu,
+            final double memoryGb,
+            final double gpu,
+            final double storageGb,
+            final double bandwidthMbps,
+            final double costPerTick,
+            final double reliability,
+            final double performanceFactor,
+            final double risk
+        ) {
+            this(
+                nodeId, region, location, serviceRegion, index, cpu, 0.0, 0.0,
+                memoryGb, gpu, gpu * 16.0, storageGb, 0.0, bandwidthMbps,
+                costPerTick, reliability, performanceFactor, risk,
+                region + "-site", "legacy-power-profile", 0.0, 0.0, 0.0, 0.0,
+                1.0, Map.of(), 0.0
+            );
+        }
+
+        public double carbonIntensityAt(final double tick) {
+            if (carbonIntensityTrace != null && !carbonIntensityTrace.isEmpty()) {
+                final double dailyTick = Math.max(0.0, tick) % 24.0;
+                double selectedTick = -1.0;
+                double selectedValue = baseCarbonIntensityGPerKwh;
+                for (final var entry : carbonIntensityTrace.entrySet()) {
+                    if (entry.getKey() <= dailyTick && entry.getKey() >= selectedTick) {
+                        selectedTick = entry.getKey();
+                        selectedValue = entry.getValue();
+                    }
+                }
+                if (selectedTick < 0.0) {
+                    for (final var entry : carbonIntensityTrace.entrySet()) {
+                        if (entry.getKey() > selectedTick) {
+                            selectedTick = entry.getKey();
+                            selectedValue = entry.getValue();
+                        }
+                    }
+                }
+                return Math.max(0.0, selectedValue);
+            }
+            final double diurnal = 1.0 + 0.18 * Math.sin((tick + index * 3.0) * Math.PI / 12.0);
+            return Math.max(40.0, baseCarbonIntensityGPerKwh * diurnal);
+        }
     }
 
     public record SimTask(
         String taskId,
         String taskType,
         double cpu,
+        double requiredMips,
         double memoryGb,
         double gpu,
+        double gpuMemoryGb,
         double storageGb,
+        double storageIops,
         int estimatedDuration,
         int priority,
         double budget,
@@ -527,8 +782,40 @@ public class TianjunHttpBridge {
         double inputSizeGb,
         double maxLatencyMs,
         double minBandwidthMbps,
-        double networkSensitivity
+        double networkSensitivity,
+        double carbonBudgetG,
+        double carbonPriority,
+        double expectedCpuUtilization,
+        boolean allowRegionShift,
+        boolean allowTimeShift,
+        int deferrableUntilTick,
+        String batchId
     ) {
+        /** Backward-compatible constructor for pre-batch CloudSim tasks. */
+        public SimTask(
+            final String taskId,
+            final String taskType,
+            final double cpu,
+            final double memoryGb,
+            final double gpu,
+            final double storageGb,
+            final int estimatedDuration,
+            final int priority,
+            final double budget,
+            final int deadline,
+            final String sourceRegion,
+            final double inputSizeGb,
+            final double maxLatencyMs,
+            final double minBandwidthMbps,
+            final double networkSensitivity
+        ) {
+            this(
+                taskId, taskType, cpu, 0.0, memoryGb, gpu, gpu * 16.0,
+                storageGb, 0.0, estimatedDuration, priority, budget, deadline,
+                sourceRegion, inputSizeGb, maxLatencyMs, minBandwidthMbps,
+                networkSensitivity, 1_000_000.0, 0.5, 0.5, true, false, 0, ""
+            );
+        }
     }
 
     public record NetworkPath(
@@ -554,6 +841,15 @@ public class TianjunHttpBridge {
     public record LeaseResult(String taskId, String nodeId, String rawJson, int estimatedDuration, double predictedCost) {
     }
 
+    public record BatchPlanResult(
+        String batchId,
+        String planId,
+        int resourceSnapshotVersion,
+        String strategy,
+        String rawJson
+    ) {
+    }
+
     public record SimTaskProgress(
         String nodeId,
         String taskId,
@@ -577,7 +873,32 @@ public class TianjunHttpBridge {
         String stdout,
         String stderr,
         int returnCode,
-        double cost
+        double cost,
+        double energyKwh,
+        double computeCarbonG,
+        double networkCarbonG,
+        double queueWaitSeconds,
+        double jctSeconds,
+        double cpuUtilization,
+        double memoryUtilization,
+        double bandwidthUtilization,
+        double storageUtilization
     ) {
+        /** Backward-compatible constructor when execution telemetry is unavailable. */
+        public SimTaskResult(
+            final String nodeId,
+            final String taskId,
+            final boolean success,
+            final double durationSeconds,
+            final String stdout,
+            final String stderr,
+            final int returnCode,
+            final double cost
+        ) {
+            this(
+                nodeId, taskId, success, durationSeconds, stdout, stderr, returnCode, cost,
+                0.0, 0.0, 0.0, 0.0, durationSeconds, 0.0, 0.0, 0.0, 0.0
+            );
+        }
     }
 }

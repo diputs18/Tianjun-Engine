@@ -1,4 +1,19 @@
 import { escapeHtml } from "./utils.js";
+import { measuredPath } from "./topology-geometry.js";
+import {
+  aggregateResources,
+  firstNumber,
+  firstOnlineNodeId,
+  gpuSummary,
+  latestBy,
+  nodeName,
+  normalizeGpu,
+  parseDciNode,
+  percentFrom,
+  ratioPercent,
+  resourceUsed,
+  zoneAggregate,
+} from "./topology-resource.js";
 
 let activeTopologyKey = "global";
 let selectedDetail = null;
@@ -7,12 +22,13 @@ let latestTopologyReport = null;
 let livePathContext = null;
 
 const schedulerStatus = {
-  task: "inference-task-027",
+  task: "暂无活动任务",
   source: "User-Access",
-  target: "DC2 / 成都资源区",
-  strategy: "延迟优先 + 负载均衡",
-  link: "正常",
-  gnn: "0.91",
+  target: "--",
+  strategy: "--",
+  link: "空闲",
+  gnn: "--",
+  activityState: "idle",
 };
 
 const dcZoneModel = {
@@ -307,12 +323,30 @@ function updateLiveTopology(report) {
   schedulerStatus.strategy = livePathContext.strategy;
   schedulerStatus.link = livePathContext.linkStatus;
   schedulerStatus.gnn = livePathContext.gnn;
+  schedulerStatus.activityState = livePathContext.activityState;
+
+  if (livePathContext.activityState === "idle") {
+    globalTopology.currentRoute = [];
+    globalTopology.currentPathText = "当前无活动调度路径";
+    globalTopology.footer = [
+      "数据来源：节点 inventory（当前与最近状态）",
+      `在线节点：${(report?.nodes ?? []).filter((node) => node.online !== false).length} 个`,
+      "调度状态：当前无活动任务",
+    ];
+    for (const topology of Object.values(dcTopologies)) {
+      topology.currentRoute = [];
+      topology.currentPath = "当前无活动调度路径";
+      topology.internalPath = "当前无活动调度路径";
+      topology.footer = ["当前无活动调度路径", `${topology.dcName} 资源视图保留最近数据`, "路径高亮将在任务调度后恢复"];
+    }
+    return;
+  }
 
   const targetRoute = globalRouteForTargetDc(livePathContext.dcKey);
-  globalTopology.currentRoute = targetRoute.nodes;
+  globalTopology.currentRoute = livePathContext.activityState === "idle" ? [] : targetRoute.nodes;
   globalTopology.currentPathText = livePathContext.globalPathText;
   globalTopology.footer = [
-    `实时来源：${livePathContext.sourceKind} / tick ${livePathContext.tick ?? "--"}`,
+    `数据来源：${livePathContext.sourceKind} / tick ${livePathContext.tick ?? "--"}`,
     `目标节点：${livePathContext.nodeId}`,
     `链路画像：${livePathContext.latencyText} / 风险 ${livePathContext.riskText}`,
   ];
@@ -323,9 +357,11 @@ function updateLiveTopology(report) {
   dcTopology.routeCluster = livePathContext.clusterId;
   dcTopology.routeVm = livePathContext.vmName;
   dcTopology.vmId = livePathContext.vmId;
-  dcTopology.currentPath = livePathContext.globalPathText.replace("实时调度路径：", "");
+  dcTopology.currentPath = livePathContext.globalPathText.replace(/^(当前|最近)调度路径：/, "");
   dcTopology.internalPath = `${dcTopology.nodes.find((item) => item.id === "gw")?.name ?? dcTopology.dcName} → Spine-A → Fabric Bus → ${livePathContext.leafLabel} → ${livePathContext.clusterName} → ${livePathContext.vmName}`;
-  dcTopology.currentRoute = ["gw", "spine-a", "fabric-bus", livePathContext.leafId, livePathContext.clusterId, livePathContext.vmId];
+  dcTopology.currentRoute = livePathContext.activityState === "idle"
+    ? []
+    : ["gw", "spine-a", "fabric-bus", livePathContext.leafId, livePathContext.clusterId, livePathContext.vmId];
   dcTopology.footer = [
     `当前路径：${dcTopology.internalPath}`,
     `实时任务：${livePathContext.taskId} / 阶段 ${livePathContext.stage}`,
@@ -350,7 +386,7 @@ function updateLiveTopology(report) {
       item.health = livePathContext.zoneStatus;
     }
     if (item.id === "scheduler" && item.scheduler) {
-      item.scheduler.latestPath = livePathContext.globalPathText.replace("实时调度路径：", "");
+      item.scheduler.latestPath = livePathContext.globalPathText.replace(/^(当前|最近)调度路径：/, "");
       item.scheduler.gnnScore = livePathContext.gnn;
       item.scheduler.assignedTasks = Number(report?.totals?.running ?? 0) + Number(report?.totals?.pending ?? 0);
       item.scheduler.avoidance = livePathContext.linkStatus === "拥塞" ? "正在规避高风险链路" : "当前路径风险可控";
@@ -395,10 +431,20 @@ function updateResourceTopology(report) {
           total: stats.gpuTotal,
           percent: stats.gpuPercent,
         },
+        nodes: nodes
+          .filter((nodeItem) => {
+            const parsed = parseDciNode(nodeItem.node_id, nodeItem);
+            return parsed.dcKey === dcKey && parsed.location === zoneInfo.id;
+          })
+          .sort((left, right) => (parseDciNode(left.node_id, left).vmIndex ?? 0) - (parseDciNode(right.node_id, right).vmIndex ?? 0)),
         scheduleState: stats.cpuPercent >= 75 || stats.gpuPercent >= 80 ? "高负载" : "可调度",
         status: stats.cpuPercent >= 75 || stats.gpuPercent >= 80 ? "congested" : "ok",
       };
     });
+    for (const item of topology.nodes) {
+      if (item.id === "cluster-a") item.metrics = topology.zones[0] ?? item.metrics;
+      if (item.id === "cluster-b") item.metrics = topology.zones[1] ?? item.metrics;
+    }
   }
 }
 
@@ -417,8 +463,9 @@ function buildLivePathContext(report) {
   const decision = latestBy([...(report.recent_decisions ?? [])], "tick");
   const record = [...(report.execution_records ?? report.recent_records ?? [])].at(-1);
   const pending = [...(report.pending_task_queue ?? [])].at(-1);
-  const source = active ? "active_run" : progress ? "progress" : decision ? "decision" : record ? "record" : pending ? "pending" : "inventory";
-  const payload = active ?? progress ?? decision ?? record ?? pending ?? {};
+  const latestHistorical = Number(record?.tick ?? -1) >= Number(decision?.tick ?? -1) ? record : decision;
+  const source = active ? "active_run" : progress ? "progress" : latestHistorical === record && record ? "record" : decision ? "decision" : pending ? "pending" : "inventory";
+  const payload = active ?? progress ?? latestHistorical ?? pending ?? {};
   const task = payload.task ?? pending ?? {};
   const nodeId = payload.node_id ?? payload.target_node_id ?? task.target_node_id ?? task.last_scheduled_node ?? firstOnlineNodeId(nodes);
   const node = nodeByNodeId.get(nodeId) ?? {};
@@ -447,8 +494,10 @@ function buildLivePathContext(report) {
   if (runningTaskIds.has(payload.task_id)) {
     zoneTaskCounts.set(parsed.location, Math.max(1, zoneTaskCounts.get(parsed.location) ?? 0));
   }
-  const running = source === "active_run" || source === "progress";
-  const linkStatus = risk != null && risk > 0.28 ? "拥塞" : running ? "调度中" : "正常";
+  const taskStatus = report.task_statuses?.[payload.task_id ?? task.task_id];
+  const running = source === "active_run" || source === "progress" || ["assigned", "running", "scheduling"].includes(taskStatus);
+  const activityState = running ? "current" : source === "decision" || source === "record" ? "recent" : "idle";
+  const linkStatus = activityState === "idle" ? "空闲" : risk != null && risk > 0.28 ? "拥塞" : running ? "调度中" : "正常";
   const sourceKind = {
     active_run: "正在执行",
     progress: "最新进度",
@@ -457,11 +506,12 @@ function buildLivePathContext(report) {
     pending: "待调度任务",
     inventory: "在线拓扑",
   }[source];
-  const taskId = payload.task_id ?? task.task_id ?? "等待任务";
+  const taskId = activityState === "idle" ? "暂无活动任务" : payload.task_id ?? task.task_id ?? "等待任务";
   const dcName = dcZoneModel[parsed.dcKey]?.dcName ?? parsed.dcKey.toUpperCase();
   const targetLabel = `${dcName} / ${zoneModel.label} / ${vmName}`;
   return {
     sourceKind,
+    activityState,
     taskId,
     nodeId,
     dcKey: parsed.dcKey,
@@ -474,15 +524,19 @@ function buildLivePathContext(report) {
     vmId,
     tick: payload.tick ?? report.tick,
     stage,
-    source: task.source_region ?? task.data_region ?? "User-Access",
-    targetLabel,
-    strategy: decision?.policy_name ?? task.task_type ?? payload.task_type ?? "实时租约调度",
+    source: activityState === "idle" ? "--" : task.source_region ?? task.data_region ?? "User-Access",
+    targetLabel: activityState === "idle" ? "--" : targetLabel,
+    strategy: activityState === "idle" ? "--" : decision?.policy_name ?? task.task_type ?? payload.task_type ?? "实时租约调度",
     linkStatus,
     gnn: gnn == null ? "--" : `${Math.round(gnn * 100)}%`,
     riskText: risk == null ? "--" : `${Math.round(risk * 100)}%`,
     latencyText: latency == null ? "--" : `${Number(latency).toFixed(1)}ms`,
     bandwidthText: bandwidth == null ? "--" : `${Math.round(Number(bandwidth))}Mbps`,
-    globalPathText: `实时调度路径：User-Access → ${dcName} → ${zoneModel.clusterName} / ${vmName}`,
+    globalPathText: activityState === "current"
+      ? `当前调度路径：User-Access → ${dcName} → ${zoneModel.clusterName} / ${vmName}`
+      : activityState === "recent"
+        ? `最近调度路径：User-Access → ${dcName} → ${zoneModel.clusterName} / ${vmName}`
+        : "当前无活动调度路径",
     zoneState: running ? "正在调度" : "可调度",
     zoneStatus: running ? "scheduling" : "ok",
     zoneTaskCounts,
@@ -492,155 +546,9 @@ function buildLivePathContext(report) {
   };
 }
 
-function latestBy(items, key) {
-  return items.filter(Boolean).sort((a, b) => Number(a?.[key] ?? 0) - Number(b?.[key] ?? 0)).at(-1);
-}
-
-function firstNumber(...values) {
-  for (const value of values) {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) return numeric;
-  }
-  return null;
-}
-
-function percentFrom(...values) {
-  const value = firstNumber(...values);
-  if (value == null) return null;
-  return Math.round(value <= 1 ? value * 100 : value);
-}
-
-function ratioPercent(used, total) {
-  const safeTotal = Number(total);
-  if (!Number.isFinite(safeTotal) || safeTotal <= 0) return 0;
-  return Math.round(Math.max(0, Number(used) || 0) / safeTotal * 100);
-}
-
-function resourceUsed(node, key) {
-  const capacity = Number(node?.capacity?.[key] ?? 0);
-  const available = Number(node?.available?.[key] ?? capacity);
-  return Math.max(0, capacity - available);
-}
-
-function aggregateResources(nodes, scope) {
-  const result = new Map();
-  for (const node of nodes) {
-    const parsed = parseDciNode(node.node_id, node);
-    if (!parsed.dcKey || (scope === "zone" && !parsed.location)) continue;
-    const key = scope === "zone" ? `${parsed.dcKey}:${parsed.location}` : parsed.dcKey;
-    const bucket = result.get(key) ?? {
-      nodes: 0,
-      cpuUsed: 0,
-      cpuTotal: 0,
-      memoryUsed: 0,
-      memoryTotal: 0,
-      gpuUsed: 0,
-      gpuTotal: 0,
-      tasks: 0,
-    };
-    bucket.nodes += 1;
-    bucket.cpuTotal += Number(node?.capacity?.cpu ?? 0);
-    bucket.cpuUsed += resourceUsed(node, "cpu");
-    bucket.memoryTotal += Number(node?.capacity?.memory ?? 0);
-    bucket.memoryUsed += resourceUsed(node, "memory");
-    bucket.gpuTotal += Number(node?.capacity?.gpu ?? 0);
-    bucket.gpuUsed += resourceUsed(node, "gpu");
-    bucket.tasks += Array.isArray(node.running_tasks) ? node.running_tasks.length : 0;
-    result.set(key, bucket);
-  }
-  for (const bucket of result.values()) {
-    bucket.cpuPercent = ratioPercent(bucket.cpuUsed, bucket.cpuTotal);
-    bucket.memoryPercent = ratioPercent(bucket.memoryUsed, bucket.memoryTotal);
-    bucket.gpuUsed = Math.round(bucket.gpuUsed);
-    bucket.gpuTotal = Math.round(bucket.gpuTotal);
-    bucket.gpuPercent = ratioPercent(bucket.gpuUsed, bucket.gpuTotal);
-  }
-  return result;
-}
-
-function parseDciNode(nodeId = "", node = {}) {
-  const match = String(nodeId).match(/^dci-dc(\d+)-([a-z]+)-vm-(\d+)$/i);
-  const dcKey = match ? `dc${match[1]}` : String(node.region ?? "").match(/^dc\d+$/i)?.[0]?.toLowerCase();
-  return {
-    dcKey,
-    location: String(match?.[2] ?? node.location ?? "").toLowerCase(),
-    vmIndex: match ? Number(match[3]) : null,
-  };
-}
-
 function firstZoneModel(dcKey) {
   const zones = Object.values(dcZoneModel[dcKey]?.zones ?? {});
   return zones[0] ?? { leaf: "leaf-a", cluster: "cluster-a", label: "资源区", clusterName: "计算集群" };
-}
-
-function firstOnlineNodeId(nodes) {
-  return nodes.find((node) => node.online !== false)?.node_id ?? "";
-}
-
-function zoneAggregate(nodes, report, metric) {
-  const result = new Map();
-  for (const node of nodes) {
-    const parsed = parseDciNode(node.node_id, node);
-    if (!parsed.location) continue;
-    if (metric === "tasks") {
-      const count = Array.isArray(node.running_tasks) ? node.running_tasks.length : 0;
-      result.set(parsed.location, (result.get(parsed.location) ?? 0) + count);
-    } else if (metric === "cpu") {
-      const value = percentFrom(node.cpu_utilization, node.used_cpu_ratio);
-      if (value != null) result.set(parsed.location, Math.max(result.get(parsed.location) ?? 0, value));
-    } else if (metric === "memory") {
-      const value = percentFrom(node.memory_utilization, node.used_memory_ratio);
-      if (value != null) result.set(parsed.location, Math.max(result.get(parsed.location) ?? 0, value));
-    } else if (metric === "gpu") {
-      const current = result.get(parsed.location) ?? { used: 0, total: 0, percent: 0 };
-      current.used += resourceUsed(node, "gpu");
-      current.total += Number(node?.capacity?.gpu ?? 0);
-      current.used = Math.round(current.used);
-      current.total = Math.round(current.total);
-      current.percent = ratioPercent(current.used, current.total);
-      result.set(parsed.location, current);
-    }
-  }
-  for (const run of report?.active_runs ?? []) {
-    const parsed = parseDciNode(run.node_id, {});
-    if (parsed.location) result.set(parsed.location, Math.max(1, result.get(parsed.location) ?? 0));
-  }
-  return result;
-}
-
-function normalizeGpu(value) {
-  if (!value || typeof value !== "object") return { used: 0, total: 0, percent: 0 };
-  const used = Math.round(Number(value.used ?? 0));
-  const total = Math.round(Number(value.total ?? 0));
-  return { used, total, percent: ratioPercent(used, total) };
-}
-
-function gpuSummary(value) {
-  if (value && typeof value === "object" && ("gpuUsed" in value || "gpuTotal" in value)) {
-    const used = Math.round(Number(value.gpuUsed ?? 0));
-    const total = Math.round(Number(value.gpuTotal ?? 0));
-    return total > 0 ? `${used}/${total} (${ratioPercent(used, total)}%)` : "0/0";
-  }
-  const gpu = normalizeGpu(value?.gpu ?? value);
-  return gpu.total > 0 ? `${gpu.used}/${gpu.total} (${gpu.percent}%)` : "0/0";
-}
-
-function vmGpuFor(zoneInfo, index) {
-  const gpu = normalizeGpu(zoneInfo.gpu);
-  const vmCount = Math.max(1, Number(zoneInfo.vmCount ?? 1));
-  if (gpu.total <= 0) return { used: 0, total: 0, percent: 0 };
-  const baseTotal = Math.max(1, Math.floor(gpu.total / vmCount));
-  const remainder = gpu.total % vmCount;
-  const total = baseTotal + (index < remainder ? 1 : 0);
-  const baseUsed = Math.floor(gpu.used / vmCount);
-  const usedRemainder = gpu.used % vmCount;
-  const used = Math.min(total, baseUsed + (index < usedRemainder ? 1 : 0));
-  return { used, total, percent: ratioPercent(used, total) };
-}
-
-function nodeName(leafId, location) {
-  const suffix = leafId.endsWith("a") || leafId.endsWith("b") ? "1" : "2";
-  return `Leaf-${String(location || "zone").toUpperCase()}-${suffix}`;
 }
 
 function currentTopology() {
@@ -697,10 +605,12 @@ function iconFor(type) {
 }
 
 function renderStatusBar() {
-  return `<div class="topology-statusbar" aria-label="当前调度状态">
-    ${statusBadge("当前任务", schedulerStatus.task, "scheduling")}
+  const taskLabel = schedulerStatus.activityState === "current" ? "当前任务" : schedulerStatus.activityState === "recent" ? "最近任务" : "调度状态";
+  const tone = schedulerStatus.activityState === "current" ? "scheduling" : "neutral";
+  return `<div class="topology-statusbar" aria-label="调度状态">
+    ${statusBadge(taskLabel, schedulerStatus.task, tone)}
     ${statusBadge("源区域", schedulerStatus.source, "neutral")}
-    ${statusBadge("目标区域", schedulerStatus.target, "scheduling")}
+    ${statusBadge("目标区域", schedulerStatus.target, tone)}
     ${statusBadge("调度策略", schedulerStatus.strategy, "neutral")}
     ${statusBadge("链路状态", schedulerStatus.link, "ok")}
     ${statusBadge("GNN 稳定性评分", schedulerStatus.gnn, "ok")}
@@ -800,82 +710,6 @@ function drawMeasuredGlobalLinks(container, topology) {
       labelEl.style.top = `${d.label.y}px`;
     }
   });
-}
-
-function measuredPath(item, sourceEl, targetEl, stageRect) {
-  const s = box(sourceEl, stageRect);
-  const t = box(targetEl, stageRect);
-  const pair = `${item.source}-${item.target}`;
-  const reversePair = `${item.target}-${item.source}`;
-  const verticalPairs = new Set(["border1-pe1", "pe1-dc1", "border2-pe2", "pe2-dc2", "border3-pe3", "pe3-dc3"]);
-  const horizontalPairs = new Set(["pe1-pe2", "pe2-pe3"]);
-  const accessPairs = new Set(["user-access-border1", "user-access-border2", "user-access-border3"]);
-
-  if (accessPairs.has(pair) || accessPairs.has(reversePair)) {
-    const sourceIsAccess = item.source === "user-access";
-    const accessBox = sourceIsAccess ? s : t;
-    const borderBox = sourceIsAccess ? t : s;
-    const start = bottom(accessBox);
-    const end = top(borderBox);
-    const midY = start.y + Math.max(20, (end.y - start.y) * 0.48);
-    const path = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${end.x} ${midY}, ${end.x} ${end.y}`;
-    return { path, label: { x: (start.x + end.x) / 2, y: midY - 10 } };
-  }
-
-  if (verticalPairs.has(pair) || verticalPairs.has(reversePair)) {
-    const sourceAboveTarget = s.y <= t.y;
-    const start = sourceAboveTarget ? bottom(s) : top(s);
-    const end = sourceAboveTarget ? top(t) : bottom(t);
-    const path = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
-    return { path, label: labelPoint(item, start, end, start.x) };
-  }
-
-  if (horizontalPairs.has(pair) || horizontalPairs.has(reversePair)) {
-    const sourceLeftOfTarget = s.x < t.x;
-    const start = sourceLeftOfTarget ? right(s) : left(s);
-    const end = sourceLeftOfTarget ? left(t) : right(t);
-    return { path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`, label: { x: (start.x + end.x) / 2, y: start.y + 42 } };
-  }
-
-  const start = smartAnchor(s, t);
-  const end = smartAnchor(t, s);
-  const midX = (start.x + end.x) / 2;
-  const bendY = item.type.includes("access") ? Math.min(start.y, end.y) + 70 : (start.y + end.y) / 2;
-  const path = item.type.includes("branch")
-    ? `M ${start.x} ${start.y} C ${midX + 40} ${start.y}, ${midX + 40} ${end.y}, ${end.x} ${end.y}`
-    : `M ${start.x} ${start.y} C ${midX} ${bendY}, ${midX} ${bendY}, ${end.x} ${end.y}`;
-  return { path, label: { x: (start.x + end.x) / 2 + (item.labelAnchor === "right" ? 48 : 0), y: (start.y + end.y) / 2 - 16 } };
-}
-
-function box(element, stageRect) {
-  const rect = element.getBoundingClientRect();
-  return {
-    left: rect.left - stageRect.left,
-    right: rect.right - stageRect.left,
-    top: rect.top - stageRect.top,
-    bottom: rect.bottom - stageRect.top,
-    x: rect.left - stageRect.left + rect.width / 2,
-    y: rect.top - stageRect.top + rect.height / 2,
-  };
-}
-
-function top(b) { return { x: b.x, y: b.top }; }
-function bottom(b) { return { x: b.x, y: b.bottom }; }
-function left(b) { return { x: b.left, y: b.y }; }
-function right(b) { return { x: b.right, y: b.y }; }
-
-function smartAnchor(from, to) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? right(from) : left(from);
-  return dy > 0 ? bottom(from) : top(from);
-}
-
-function labelPoint(item, start, end, lane) {
-  if (item.labelAnchor === "left") return { x: start.x - 62, y: (start.y + end.y) / 2 };
-  if (item.labelAnchor === "right") return { x: lane + 28, y: (start.y + end.y) / 2 };
-  if (item.labelAnchor === "below") return { x: (start.x + end.x) / 2, y: start.y + 42 };
-  return { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
 }
 
 function renderInternalScene(topology) {
@@ -978,29 +812,54 @@ function renderClusterCard(topology, id, zoneInfo) {
 }
 
 function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
-  const vmName = `VM-${String(index + 1).padStart(2, "0")}`;
+  const actualNode = zoneInfo.nodes?.[index] ?? null;
+  const parsedNode = actualNode ? parseDciNode(actualNode.node_id, actualNode) : null;
+  const vmNumber = parsedNode?.vmIndex == null ? index + 1 : parsedNode.vmIndex + 1;
+  const vmName = `VM-${String(vmNumber).padStart(2, "0")}`;
   const vmId = `${clusterId}-vm-${String(index + 1).padStart(2, "0")}`;
   const active = topology.key === currentTargetDcKey() && routeCluster && vmId === topology.vmId;
   const selected = selectedDetail?.kind === "vm" && selectedDetail.id === vmId;
-  const cpu = Math.min(92, Math.max(12, zoneInfo.cpu + (index - 1) * 6));
-  const memory = Math.min(90, Math.max(18, zoneInfo.memory + (index % 2 === 0 ? -4 : 5)));
-  const gpu = vmGpuFor(zoneInfo, index);
-  const state = active ? "正在调度" : cpu > 78 ? "高负载" : "可调度";
+  const cpu = utilizationOf(actualNode, "cpu");
+  const memory = utilizationOf(actualNode, "memory");
+  const gpuUtilization = utilizationOf(actualNode, "gpu");
+  const gpuTotal = Number(actualNode?.capacity?.gpu ?? 0);
+  const gpuUsed = Math.max(0, gpuTotal - Number(actualNode?.available?.gpu ?? gpuTotal));
+  const gpu = { used: gpuUsed, total: gpuTotal, percent: gpuUtilization };
+  const taskCount = actualNode?.active_task_ids?.length ?? actualNode?.running_tasks?.length ?? 0;
+  const peak = Math.max(cpu ?? 0, memory ?? 0, gpuUtilization ?? 0);
+  const hasTelemetry = cpu != null || memory != null || gpuUtilization != null;
+  const state = active ? "正在调度" : !hasTelemetry ? "遥测待上报" : peak > 78 ? "高负载" : "可调度";
+  const cpuText = formatUtilization(cpu);
+  const memoryText = formatUtilization(memory);
+  const gpuPercentText = formatUtilization(gpuUtilization);
   return `<button class="vm-node ${active ? "route-vm" : ""} ${selected ? "selected" : ""}" type="button"
       data-vm="${escapeHtml(vmId)}"
       data-cluster="${escapeHtml(clusterId)}"
       data-zone="${escapeHtml(zoneInfo.name)}"
       data-name="${escapeHtml(vmName)}"
-      data-cpu="${cpu}"
-      data-memory="${memory}"
+      data-node-id="${escapeHtml(actualNode?.node_id ?? "")}"
+      data-cpu="${escapeHtml(cpuText)}"
+      data-memory="${escapeHtml(memoryText)}"
       data-gpu-used="${gpu.used}"
       data-gpu-total="${gpu.total}"
-      data-gpu-percent="${gpu.percent}"
+      data-gpu-percent="${escapeHtml(gpuPercentText)}"
       data-state="${escapeHtml(state)}"
-      data-task-count="${active ? 1 : Math.max(0, Math.floor(zoneInfo.tasks / zoneInfo.vmCount) - (index % 2))}"
-      title="${escapeHtml(`${vmName} / ${zoneInfo.name} / CPU ${cpu}% / 内存 ${memory}% / ${state}`)}">
+      data-task-count="${taskCount}"
+      data-telemetry-source="${escapeHtml(actualNode?.telemetry_source ?? "--")}"
+      title="${escapeHtml(`${vmName} / ${zoneInfo.name} / CPU ${cpuText} / 内存 ${memoryText} / ${state}`)}">
       ${escapeHtml(vmName)}
     </button>`;
+}
+
+function utilizationOf(node, key) {
+  if (!node) return null;
+  const value = firstNumber(node.runtime_utilization?.[key], node.runtime_telemetry?.[key]);
+  if (value == null) return null;
+  return Math.round(Math.max(0, Math.min(100, value <= 1 ? value * 100 : value)));
+}
+
+function formatUtilization(value) {
+  return value == null ? "--" : `${value}%`;
 }
 
 function renderSupportBus(topology) {
@@ -1112,29 +971,34 @@ function renderDetails(topology) {
 
 function renderVmDetails(vm) {
   const cluster = nodeById(currentTopology(), vm.clusterId);
-  const gpuDetail = detailRow("GPU", `${vm.gpuUsed ?? 0}/${vm.gpuTotal ?? 0} (${vm.gpuPercent ?? 0}%)`);
+  const gpuPercent = vm.gpuPercent === "--" ? "利用率 --" : `利用率 ${vm.gpuPercent}`;
+  const gpuDetail = detailRow("GPU", `${vm.gpuUsed ?? 0}/${vm.gpuTotal ?? 0}（${gpuPercent}）`);
   return `<div class="topology-detail-card">
     <h3>VM 节点详情</h3>
     ${detailRow("节点名称", vm.name)}
     ${detailRow("所属集群", cluster?.name ?? vm.clusterId)}
     ${detailRow("所属资源区", vm.zone)}
     ${detailRow("节点职责", "任务执行 / 算力资源实例")}
-    ${detailRow("CPU 使用率", `${vm.cpu}%`)}
-    ${detailRow("内存使用率", `${vm.memory}%`)}
+    ${detailRow("节点 ID", vm.nodeId || "--")}
+    ${detailRow("CPU 使用率", vm.cpu)}
+    ${detailRow("内存使用率", vm.memory)}
     ${gpuDetail}
     ${detailRow("当前任务数", `${vm.taskCount} 个`)}
+    ${detailRow("遥测来源", vm.telemetrySource)}
     ${detailRow("调度状态", vm.state)}
     ${detailRow("推荐状态", vm.state === "高负载" ? "暂不推荐" : "可作为候选执行节点")}
   </div>`;
 }
 
 function renderOverviewDetails(topology) {
+  const taskLabel = schedulerStatus.activityState === "current" ? "当前任务" : schedulerStatus.activityState === "recent" ? "最近任务" : "调度状态";
+  const pathLabel = schedulerStatus.activityState === "recent" ? "最近路径" : "当前路径";
   return `<div class="topology-detail-card">
     <h3>当前拓扑概览</h3>
     ${detailRow("拓扑视图", topology.title)}
-    ${detailRow("当前任务", schedulerStatus.task)}
+    ${detailRow(taskLabel, schedulerStatus.task)}
     ${detailRow("调度策略", schedulerStatus.strategy)}
-    ${detailRow("当前路径", topology.kind === "global" ? globalTopology.currentPathText.replace("当前任务调度路径：", "") : topology.currentPath)}
+    ${detailRow(pathLabel, topology.kind === "global" ? globalTopology.currentPathText.replace(/^(当前|最近)调度路径：/, "") : topology.currentPath)}
     ${detailRow("链路状态", schedulerStatus.link)}
     ${detailRow("GNN 稳定性评分", schedulerStatus.gnn)}
     <p>点击 DC1 / DC2 / DC3 可进入内部拓扑；点击节点或链路查看更细指标。</p>
@@ -1143,6 +1007,10 @@ function renderOverviewDetails(topology) {
 
 function renderPathMetrics() {
   if (!livePathContext) return "";
+  if (livePathContext.activityState === "idle") {
+    return `<article class="path-metric-card"><span>数据来源</span><b>${escapeHtml(livePathContext.sourceKind)}</b></article>
+      <article class="path-metric-card"><span>调度状态</span><b>当前无活动任务</b></article>`;
+  }
   const items = [
     ["数据来源", livePathContext.sourceKind],
     ["目标节点", livePathContext.nodeId],
@@ -1176,8 +1044,20 @@ function renderMetricRows(item) {
   if (!item?.metrics) return "";
   const metrics = item.metrics;
   const gpuDetail = detailRow("GPU", gpuSummary(metrics.gpu));
-  const available = Math.max(0, metrics.vmCount - Math.ceil(metrics.tasks / 5));
-  const highLoad = metrics.cpu > 70 ? 2 : metrics.cpu > 55 ? 1 : 0;
+  const observedNodes = (metrics.nodes ?? []).map((node) => ({
+    node,
+    peak: Math.max(utilizationOf(node, "cpu") ?? 0, utilizationOf(node, "memory") ?? 0, utilizationOf(node, "gpu") ?? 0),
+    observed: [utilizationOf(node, "cpu"), utilizationOf(node, "memory"), utilizationOf(node, "gpu")].some((value) => value != null),
+  }));
+  const available = observedNodes.filter((item) => item.node.online !== false && item.observed && item.peak < 80).length;
+  const highLoad = observedNodes.filter((item) => item.observed && item.peak >= 80).length;
+  const recommended = observedNodes
+    .filter((item) => item.node.online !== false && item.observed && item.peak < 80)
+    .sort((left, right) => left.peak - right.peak)[0]?.node;
+  const parsedRecommended = recommended ? parseDciNode(recommended.node_id, recommended) : null;
+  const recommendedLabel = parsedRecommended?.vmIndex == null
+    ? "遥测不足"
+    : `VM-${String(parsedRecommended.vmIndex + 1).padStart(2, "0")}`;
   return `${gpuDetail}
     ${detailRow("VM 数量", `${metrics.vmCount} 个`)}
     ${detailRow("CPU 使用率", `${metrics.cpu}%`)}
@@ -1185,7 +1065,7 @@ function renderMetricRows(item) {
     ${detailRow("当前任务数", `${metrics.tasks} 个`)}
     ${detailRow("可调度 VM", `${available} 个`)}
     ${detailRow("高负载 VM", `${highLoad} 个`)}
-    ${detailRow("推荐调度目标", metrics.status === "congested" ? "暂不推荐" : "VM-02")}`;
+    ${detailRow("推荐调度目标", metrics.status === "congested" ? "暂不推荐" : recommendedLabel)}`;
 }
 
 function renderSchedulerRows(item) {
@@ -1275,6 +1155,7 @@ function bindInteractions(topology, container, detailPanel) {
         clusterId: element.dataset.cluster,
         zone: element.dataset.zone,
         name: element.dataset.name,
+        nodeId: element.dataset.nodeId,
         cpu: element.dataset.cpu,
         memory: element.dataset.memory,
         gpuUsed: element.dataset.gpuUsed,
@@ -1282,6 +1163,7 @@ function bindInteractions(topology, container, detailPanel) {
         gpuPercent: element.dataset.gpuPercent,
         state: element.dataset.state,
         taskCount: element.dataset.taskCount,
+        telemetrySource: element.dataset.telemetrySource,
       };
       renderTopology(null, container);
     }, { capture: true });
@@ -1308,6 +1190,13 @@ function bindInteractions(topology, container, detailPanel) {
       selectedDetail = { kind: "link", id: element.dataset.link };
       renderTopology(null, container);
     });
+    if (element.getAttribute("role") === "button") {
+      element.addEventListener("keydown", (event) => {
+        if (!['Enter', ' '].includes(event.key)) return;
+        event.preventDefault();
+        element.click();
+      });
+    }
   });
 
   container.querySelector("[data-back-global]")?.addEventListener("click", (event) => {

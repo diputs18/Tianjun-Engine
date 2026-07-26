@@ -14,6 +14,7 @@ def build_control_plane(
     policy_state: PolicyState | None = None,
     policy_update_interval: int = 2,
     heartbeat_timeout_seconds: float = 15.0,
+    lease_timeout_seconds: float = 60.0,
     state_store: SQLiteStateStore | None = None,
     model_dir: str | Path | None = None,
     require_model: bool = False,
@@ -31,6 +32,7 @@ def build_control_plane(
         policy_state=policy,
         policy_update_interval=policy_update_interval,
         heartbeat_timeout_seconds=heartbeat_timeout_seconds,
+        lease_timeout_seconds=lease_timeout_seconds,
         state_store=state_store,
         scheduler=scheduler,
     )

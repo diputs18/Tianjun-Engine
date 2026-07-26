@@ -1,4 +1,4 @@
-import { compactText, displayKey, escapeHtml, fmt, statusText } from "../utils.js";
+import { compactText, displayKey, escapeHtml, fmt, pct, statusText } from "../utils.js";
 
 const pipelineSteps = [
   ["接收任务", "请求进入调度队列"],
@@ -64,6 +64,14 @@ export function initTasks() {
     }
     renderRecords(lastReport);
   });
+  document.getElementById("taskSummary").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-summary-filter]");
+    if (!button) return;
+    activeFilter = button.dataset.summaryFilter;
+    filterEl.querySelectorAll(".filter-btn").forEach((item) => item.classList.toggle("active", item.dataset.filter === activeFilter));
+    renderRecords(lastReport);
+    document.querySelector(".records-card-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 export function renderTasks(report) {
@@ -78,34 +86,99 @@ export function renderTasks(report) {
 }
 
 function renderTasksLoading() {
-  document.getElementById("taskSummary").innerHTML = Array.from({ length: 4 }, () => `
-    <article class="metric-card task-stat neutral">
-      <div class="metric-label">加载中</div>
-      <div class="metric-value">--</div>
-      <div class="metric-hint">正在获取任务执行记录</div>
-    </article>`).join("");
+  document.getElementById("taskSummary").innerHTML = `
+    <article class="card metric-summary-panel loading-card">
+      <div class="metric-summary-grid">
+        ${Array.from({ length: 4 }, () => `
+          <section class="metric-summary-group">
+            <span class="summary-eyebrow">加载中</span>
+            <strong class="summary-value">--</strong>
+            <span class="summary-caption">正在获取执行数据</span>
+          </section>`).join("")}
+      </div>
+    </article>`;
   document.getElementById("taskPipeline").innerHTML = `<div class="empty">执行阶段加载中...</div>`;
   document.getElementById("taskRecords").innerHTML = `<div class="empty">任务执行记录加载中...</div>`;
 }
 
 function renderSummary(report) {
   const stats = taskStats(report);
-  const cards = [
-    ["总任务数", stats.total, "当前调度批次任务量", "neutral"],
-    ["待调度", stats.pending, "等待进入策略决策", "warning"],
-    ["运行中", stats.running, "正在执行或等待回调", "primary"],
-    ["成功", stats.succeeded, "任务进程已完成", "success"],
-    ["失败", stats.failed, "执行链路出现异常", stats.failed > 0 ? "danger" : "neutral"],
-    ["SLA 达标", stats.slaMet, "完成且满足性能目标", "success"],
-    ["SLA 未达标", stats.slaMiss, "完成但未满足目标", stats.slaMiss > 0 ? "danger" : "neutral"],
-    ["平均执行耗时", stats.avgDuration ? `${fmt(stats.avgDuration, 1)} ticks` : "--", "最近记录均值", "primary"],
+  const metrics = report.metrics ?? {};
+  const completed = stats.succeeded + stats.failed;
+  const slaChecked = stats.slaMet + stats.slaMiss;
+  const hasMeasuredRun = Number(metrics.completed_batch_count ?? 0) > 0 || Number(metrics.average_actual_jct_seconds ?? 0) > 0;
+  const slaRate = slaChecked > 0 ? pct(stats.slaMet / slaChecked, 1) : "--";
+  const backlogThreshold = Math.max(5, Math.ceil(stats.total * 0.1));
+  const groups = [
+    {
+      tone: stats.failed > 0 ? "danger" : "primary",
+      eyebrow: "执行状态",
+      label: "已完成 / 总任务",
+      value: `${completed} / ${stats.total}`,
+      unit: "",
+      caption: stats.failed > 0 ? `${stats.failed} 个任务执行异常` : "当前执行链路正常",
+      facts: [["待调度", stats.pending], ["运行中", stats.running], ["失败", stats.failed]],
+    },
+    {
+      tone: stats.slaMiss > 0 ? "danger" : "success",
+      eyebrow: "服务目标",
+      label: "SLA 达标率",
+      value: slaRate,
+      unit: "",
+      caption: slaChecked > 0 ? `${slaChecked} 个已完成任务完成校验` : "等待任务完成后校验",
+      facts: [["达标", stats.slaMet], ["未达标", stats.slaMiss]],
+    },
+    {
+      tone: "ink",
+      eyebrow: "执行性能",
+      label: "实际平均 JCT",
+      value: hasMeasuredRun ? fmt(metrics.average_actual_jct_seconds, 2) : "--",
+      unit: hasMeasuredRun ? "s" : "",
+      caption: hasMeasuredRun ? `P95 ${fmt(metrics.p95_actual_jct_seconds, 2)} s` : "等待 Cloudlet 指标回传",
+      facts: [
+        ["Makespan", hasMeasuredRun ? `${fmt(metrics.actual_makespan_seconds, 2)} s` : "--"],
+        ["平均耗时", stats.avgDuration ? `${fmt(stats.avgDuration, 1)} ticks` : "--"],
+      ],
+    },
+    {
+      tone: "teal",
+      eyebrow: "资源成本",
+      label: "CPU 利用率",
+      value: pct(metrics.average_cpu_utilization ?? 0, 1),
+      unit: "",
+      caption: `内存利用率 ${pct(metrics.average_memory_utilization ?? 0, 1)}`,
+      facts: [
+        ["能耗", `${fmt(metrics.total_energy_kwh, 5)} kWh`],
+        ["运行碳", `${fmt(metrics.total_operational_carbon_g, 3)} gCO₂e`],
+      ],
+    },
   ];
-  document.getElementById("taskSummary").innerHTML = cards.map(([label, value, hint, tone]) => `
-    <article class="metric-card task-stat ${tone}">
-      <div class="metric-label">${escapeHtml(label)}</div>
-      <div class="metric-value">${escapeHtml(String(value))}</div>
-      <div class="metric-hint">${escapeHtml(hint)}</div>
-    </article>`).join("");
+  const alerts = [];
+  if (stats.failed > 0) alerts.push(`<button type="button" data-summary-filter="failed"><b>${stats.failed} 个任务执行失败</b><span>查看失败记录 →</span></button>`);
+  if (stats.slaMiss > 0) alerts.push(`<button type="button" data-summary-filter="sla_miss"><b>${stats.slaMiss} 个任务 SLA 未达标</b><span>定位异常任务 →</span></button>`);
+  if (stats.pending > backlogThreshold) alerts.push(`<span><b>${stats.pending} 个任务积压</b><small>已超过提示阈值 ${backlogThreshold}</small></span>`);
+  document.getElementById("taskSummary").innerHTML = `
+    <article class="card metric-summary-panel">
+      <div class="metric-summary-grid">
+        ${groups.map(renderTaskSummaryGroup).join("")}
+      </div>
+      ${alerts.length ? `<div class="summary-alerts" role="alert">${alerts.join("")}</div>` : ""}
+    </article>`;
+}
+
+function renderTaskSummaryGroup(group) {
+  return `<section class="metric-summary-group tone-${escapeHtml(group.tone)}">
+    <span class="summary-eyebrow">${escapeHtml(group.eyebrow)}</span>
+    <div class="summary-primary-line">
+      <strong class="summary-value">${escapeHtml(group.value)}</strong>
+      ${group.unit ? `<span class="summary-unit">${escapeHtml(group.unit)}</span>` : ""}
+    </div>
+    <span class="summary-label">${escapeHtml(group.label)}</span>
+    <span class="summary-caption">${escapeHtml(group.caption)}</span>
+    <div class="summary-facts">
+      ${group.facts.map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`).join("")}
+    </div>
+  </section>`;
 }
 
 function renderPipeline(report) {
@@ -156,7 +229,7 @@ function renderRecords(report) {
       <div class="record-main">
         <div>
           <b>${escapeHtml(compactText(record.task_id, 44))}</b>
-          <p class="muted">${escapeHtml(type)} · ${escapeHtml(record.node_id ?? "未分配节点")}</p>
+          <p class="muted">${escapeHtml(type)} · ${escapeHtml(record.node_id ?? "未分配节点")}${record.batch_id ? ` · 批次 ${escapeHtml(record.batch_id)}` : ""}</p>
         </div>
         <div class="record-badges">
           <span class="badge ${exec.cls}">${exec.text}</span>
@@ -170,6 +243,9 @@ function renderRecords(report) {
         <span><label>资源消耗</label><b>${fmt(cpuTicks, 1)} CPU ticks</b></span>
         <span><label>调度方式</label><b>${escapeHtml(statusText(record.execution_mode ?? record.mode ?? "process"))}</b></span>
         <span><label>SLA 原因</label><b>${escapeHtml(slaReason(record))}</b></span>
+        <span><label>能耗 / 运行碳</label><b>${fmt(record.energy_kwh, 5)} kWh / ${fmt(record.operational_carbon_g, 3)} g</b></span>
+        <span><label>排队 / JCT</label><b>${fmt(record.queue_wait_seconds, 2)} s / ${fmt(record.jct_seconds, 2)} s</b></span>
+        <span><label>CPU / 内存利用率</label><b>${pct(record.cpu_utilization ?? 0, 1)} / ${pct(record.memory_utilization ?? 0, 1)}</b></span>
       </div>
       <button class="btn-ghost record-detail" type="button" data-record-detail="${escapeHtml(taskId)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "收起详情" : "查看详情"}</button>
       ${expanded ? renderRecordDetails(record) : ""}
@@ -183,6 +259,7 @@ function renderRecordDetails(record) {
     : "无";
   const rows = [
     ["任务 ID", record.task_id],
+    ["批次 ID", record.batch_id ?? record.metadata?.batch_id ?? "单任务"],
     ["节点", record.node_id],
     ["开始 / 结束 tick", `${record.start_tick ?? "--"} / ${record.end_tick ?? "--"}`],
     ["预测 / 实际耗时", `${fmt(record.predicted_duration, 1)} / ${fmt(record.actual_duration, 1)} ticks`],
@@ -194,6 +271,10 @@ function renderRecordDetails(record) {
     ["网络时延", `${fmt(record.network_delay_ticks, 0)} ticks`],
     ["网络风险", fmt(record.network_risk, 4)],
     ["有效带宽", `${fmt(record.effective_bandwidth_mbps, 1)} Mbps`],
+    ["计算碳 / 网络碳", `${fmt(record.compute_carbon_g, 4)} / ${fmt(record.network_carbon_g, 4)} gCO₂e`],
+    ["碳核算范围", record.carbon_scope ?? "operational_only"],
+    ["排队等待 / JCT", `${fmt(record.queue_wait_seconds, 3)} / ${fmt(record.jct_seconds, 3)} s`],
+    ["CPU / 内存 / 带宽 / 存储利用率", `${pct(record.cpu_utilization ?? 0, 1)} / ${pct(record.memory_utilization ?? 0, 1)} / ${pct(record.bandwidth_utilization ?? 0, 1)} / ${pct(record.storage_utilization ?? 0, 1)}`],
     ["交付概率", record.delivery_probability === undefined ? "--" : `${fmt(Number(record.delivery_probability) * 100, 1)}%`],
   ];
   return `<section class="record-details" aria-label="任务详情">

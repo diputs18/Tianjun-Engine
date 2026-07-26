@@ -5,6 +5,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+build/
+wheelhouse/
+node_modules/
+playwright-report/
+test-results/
 
 .env
 configs/secrets.toml
@@ -15,3 +20,7 @@ tianjun.toml
 
 data/alibaba_microservices_v2022/
 runtime_report.json
+
+# Local experiment outputs and temporary runtime data
+exp_out/
+tmp/

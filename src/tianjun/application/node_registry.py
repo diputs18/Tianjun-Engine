@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .control_plane import CentralControlPlane
     from ..domain import Node
 
-from ..domain import NetworkPathProfile
+from ..domain import NetworkPathProfile, clamp
 
 
 @dataclass(slots=True)
@@ -32,8 +32,13 @@ class NodeRegistry:
             node.online = True
             node.telemetry_tick = control.current_tick()
             control.nodes[node.node_id] = node
+            node.resource_version += 1
+            control.resource_snapshot_version += 1
             control.last_heartbeat_at[node.node_id] = time.monotonic()
+            control.last_heartbeat_epoch[node.node_id] = time.time()
             control._persist_node(node)
+            if control.state_store is not None:
+                control.state_store.set_control_value("resource_snapshot_version", control.resource_snapshot_version)
             return node.to_dict()
 
     def record_heartbeat(
@@ -50,6 +55,14 @@ class NodeRegistry:
         labels: set[str] | None = None,
         performance_factors: dict[str, float] | None = None,
         network_paths: dict[str, dict[str, float]] | None = None,
+        current_power_w: float | None = None,
+        energy_kwh_delta: float | None = None,
+        operational_carbon_g_delta: float | None = None,
+        carbon_intensity_g_per_kwh: float | None = None,
+        carbon_signal_timestamp: float | None = None,
+        runtime_telemetry: dict[str, float] | None = None,
+        telemetry_source: str | None = None,
+        simulation_tick: float | None = None,
     ) -> dict[str, Any]:
         control = self.control_plane
         with control.lock:
@@ -82,13 +95,56 @@ class NodeRegistry:
                     for key, value in profile_updates.items():
                         if hasattr(profile, key):
                             setattr(profile, key, float(value))
+            if current_power_w is not None:
+                node.current_power_w = max(0.0, float(current_power_w))
+            if energy_kwh_delta is not None:
+                node.energy_kwh_total += max(0.0, float(energy_kwh_delta))
+            if operational_carbon_g_delta is not None:
+                node.operational_carbon_g_total += max(0.0, float(operational_carbon_g_delta))
+            if carbon_intensity_g_per_kwh is not None:
+                node.carbon_profile.carbon_intensity_g_per_kwh = max(0.0, float(carbon_intensity_g_per_kwh))
+            if operational_carbon_g_delta is None and energy_kwh_delta is not None:
+                intensity = node.carbon_profile.carbon_intensity_g_per_kwh
+                node.operational_carbon_g_total += max(0.0, float(energy_kwh_delta)) * node.carbon_profile.pue * intensity
+            if carbon_signal_timestamp is not None:
+                node.carbon_signal_timestamp = float(carbon_signal_timestamp)
+            if runtime_telemetry is not None:
+                aliases = {
+                    "ram_utilization": "memory",
+                    "memory_utilization": "memory",
+                    "cpu_utilization": "cpu",
+                    "gpu_utilization": "gpu",
+                    "storage_utilization": "storage",
+                    "bandwidth_utilization": "bandwidth",
+                }
+                node.runtime_telemetry = {
+                    aliases.get(str(key), str(key)): clamp(float(value))
+                    for key, value in runtime_telemetry.items()
+                    if value is not None
+                }
+            if telemetry_source is not None:
+                node.telemetry_source = str(telemetry_source)
+            if simulation_tick is not None:
+                node.simulation_tick = float(simulation_tick)
+            node.resource_version += 1
+            control.resource_snapshot_version += 1
             control.last_heartbeat_at[node_id] = time.monotonic()
+            control.last_heartbeat_epoch[node_id] = time.time()
             heartbeat_payload = {
                 "node_id": node_id,
                 "tick": node.telemetry_tick,
                 "running_tasks": sorted(node.running_tasks.keys()),
                 "pending_tasks": len(control.pending_queue),
                 "online": node.online,
+                "resource_version": node.resource_version,
+                "resource_snapshot_version": control.resource_snapshot_version,
+                "current_power_w": node.current_power_w,
+                "energy_kwh_total": node.energy_kwh_total,
+                "operational_carbon_g_total": node.operational_carbon_g_total,
+                "carbon_signal_timestamp": node.carbon_signal_timestamp,
+                "runtime_telemetry": dict(node.runtime_telemetry),
+                "telemetry_source": node.telemetry_source,
+                "simulation_tick": node.simulation_tick,
                 "network_paths": {
                     region: profile.to_dict()
                     for region, profile in sorted(node.network_paths.items(), key=lambda item: item[0])
@@ -98,5 +154,6 @@ class NodeRegistry:
             if node.online is False:
                 control._recover_leases_for_stale_nodes({node_id})
             if control.state_store is not None:
+                control.state_store.set_control_value("resource_snapshot_version", control.resource_snapshot_version)
                 control.state_store.record_heartbeat(node_id, heartbeat_payload)
             return heartbeat_payload

@@ -1,6 +1,6 @@
 # Dashboard 测试清单
 
-Dashboard 是静态 HTML/CSS/JS，没有构建步骤。在演示前，运行冒烟测试，然后手动验证以下内容：
+Dashboard 是静态 HTML/CSS/JS，没有生产构建步骤。`npm run test:frontend` 执行纯逻辑测试，`npm run test:browser` 启动真实 Python 控制面和 Chromium，覆盖 1366 与 1920 两档 PC 视口。以下项目均应由自动化覆盖，并可在演示前抽查：
 
 - `/dashboard` 加载时浏览器控制台没有错误。
 - 顶部导航显示来自 `/health` 的系统状态。
@@ -13,3 +13,11 @@ Dashboard 是静态 HTML/CSS/JS，没有构建步骤。在演示前，运行冒�
 - 模型页面权重更新需要明确确认并调用 `/policy-weights`。
 - 任务取消调用 `/task-runs/cancel`。
 - Dashboard 代码中没有调用 `/intent`、`/chat` 或 `/hermes/*`。
+- 顶部标签页同步 `aria-selected`，并支持左右方向键、Home 和 End。
+- 页面隐藏时自动刷新暂停，返回前台后恢复且不会出现重叠请求。
+- CloudSimPlus VM 心跳遥测在拓扑节点详情中显示；未上报指标显示 `--`。
+- 总览、调度、拓扑、任务和模型页面分别读取对应的精简报告视图。
+- 网络、资源负载、碳强度按钮同步 `aria-pressed`，并切换对应语义摘要。
+- 空拓扑、健康检查失败和请求超时均呈现明确状态。
+- 页面主体和拓扑画布在支持的 PC 视口内没有横向溢出。
+- 拓扑 SVG、节点和链路标签保持在拓扑内容边界内。

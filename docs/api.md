@@ -6,8 +6,14 @@
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| GET | `/health` | 运行时健康、模型状态、聊天运行时状态 |
-| GET | `/report` | Dashboard 和工具用的控制平面状态 |
+| GET | `/health` | 进程健康和去敏后的依赖状态；始终返回可解析状态 |
+| GET | `/ready` | 就绪检查；依赖未就绪时返回 503 |
+| GET | `/report` | 完整控制平面状态，保留给 MCP 和兼容客户端 |
+| GET | `/report/summary` | Dashboard 总览和顶部状态的精简报告 |
+| GET | `/report/scheduling` | 调度决策页所需节点与决策报告 |
+| GET | `/report/topology` | 拓扑、VM 遥测和路径报告 |
+| GET | `/report/tasks?limit=50&cursor=0` | 分页任务执行报告 |
+| GET | `/report/model` | 模型、权重与策略历史报告 |
 | GET | `/dashboard` | 静态 Dashboard 壳页面 |
 | GET | `/chat/sessions/{session_id}` | 读取聊天会话状态 |
 | POST | `/chat/sessions` | 开始聊天会话 |
@@ -35,9 +41,10 @@
 | POST | `/nodes/heartbeat` | 更新节点心跳和遥测数据 |
 | POST | `/tasks` | 提交任务 |
 | POST | `/tasks/{task_id}/schedule` | 调度待处理任务；需要明确确认 |
-| POST | `/leases/next` | 节点代理租约轮询 |
-| POST | `/task-runs/progress` | 报告任务进度 |
-| POST | `/task-runs/result` | 报告最终任务结果 |
+| POST | `/leases/next` | 节点代理租约轮询；返回 `lease_id`、签发时间与到期时间 |
+| POST | `/leases/ack` | 使用 `node_id`、`task_id`、`lease_id` 确认领取并续期 |
+| POST | `/task-runs/progress` | 报告任务进度并续期租约；新客户端应携带 `lease_id` |
+| POST | `/task-runs/result` | 幂等报告最终结果；新客户端应携带 `lease_id` 和稳定 `result_id` |
 | POST | `/task-runs/cancel` | 取消活动任务运行 |
 | POST | `/schedule/preview` | CloudSimPlus 兼容的调度预览 |
 | POST | `/schedule/commit` | CloudSimPlus 兼容的直接提交 |
@@ -68,3 +75,9 @@ HTTP 路由调用 `CentralControlPlane` facade。facade 将已迁移的行为转
 - `PolicyWorkflowService` 处理策略起草、比较、模拟、提交和反馈路由。
 
 本文只描述公开 API 行为；服务拆分不改变路由语义。
+
+Dashboard 只轮询按页面拆分的报告。所有报告视图都带有 `report_version`、`resource_snapshot_version` 和 `generated_at`，客户端可据此识别跨请求快照差异。完整 `/report` 不再用于浏览器高频轮询。
+
+CloudSimPlus 心跳中的 `telemetry.cpu_utilization`、`ram_utilization` 和 `bandwidth_utilization` 会规范化为节点的 `runtime_utilization`。未上报的指标保持 `null`，Dashboard 显示为 `--`，不会生成伪实时值。
+
+租约默认 TTL 为 60 秒，可通过 `server.lease_timeout_seconds` 配置。相同 `result_id` 的重试返回已保存的结果收据并标记 `idempotent_replay=true`，不会重复累计执行、能耗或碳数据。

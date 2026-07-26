@@ -229,6 +229,7 @@ class PolicyWorkflowService:
                 "fragmentation",
                 "locality",
                 "network",
+                "carbon",
             } and len(feedback.instruction) < 80:
                 requirement = control.policy_generator.apply_feedback(requirement, feedback)
             base_task = control.policy_tasks.get(feedback.policy_id)

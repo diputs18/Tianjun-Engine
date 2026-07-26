@@ -1,33 +1,5 @@
 .task-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-md);
   margin-bottom: var(--space-md);
-}
-
-.task-stat {
-  min-height: 120px;
-  padding: var(--space-md);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 5px;
-}
-
-.task-stat.warning {
-  border-color: rgba(245, 158, 11, 0.22);
-}
-
-.task-stat.primary {
-  border-color: rgba(79, 70, 229, 0.18);
-}
-
-.task-stat.success {
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.task-stat.danger {
-  border-color: rgba(239, 68, 68, 0.22);
 }
 
 .task-pipeline-card {
@@ -303,10 +275,6 @@
 }
 
 @media (max-width: 1200px) {
-  .task-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .pipeline {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -333,7 +301,6 @@
 }
 
 @media (max-width: 680px) {
-  .task-summary,
   .pipeline,
   .record-grid,
   .record-detail-grid,

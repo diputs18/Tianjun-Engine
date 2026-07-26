@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
-RESOURCE_FIELDS = ("cpu", "memory", "gpu", "storage")
+RESOURCE_FIELDS = (
+    "cpu",
+    "memory",
+    "gpu",
+    "storage",
+    "mips",
+    "gpu_memory",
+    "storage_iops",
+    "bandwidth",
+)
 METRIC_KEYS = (
     "performance",
     "completion",
@@ -13,7 +22,33 @@ METRIC_KEYS = (
     "locality",
     "network",
     "security",
+    "carbon",
 )
+
+# The ten atomic metrics remain available for explanation and ablation.  Only
+# the five semantic groups participate in the hierarchical preference layer.
+# Security is intentionally excluded: mandatory security requirements are hard
+# constraints and the remaining risk is applied as a non-compensable penalty.
+OBJECTIVE_GROUPS: dict[str, tuple[str, ...]] = {
+    "sla_quality": ("performance", "completion", "reliability"),
+    "network_coordination": ("network", "locality"),
+    "resource_efficiency": ("balance", "fragmentation"),
+    "economic_cost": ("cost",),
+    "green_carbon": ("carbon",),
+}
+GROUP_KEYS = tuple(OBJECTIVE_GROUPS)
+GROUP_INNER_WEIGHTS: dict[str, dict[str, float]] = {
+    "sla_quality": {"performance": 0.20, "completion": 0.50, "reliability": 0.30},
+    "network_coordination": {"network": 0.65, "locality": 0.35},
+    "resource_efficiency": {"balance": 0.40, "fragmentation": 0.60},
+    "economic_cost": {"cost": 1.0},
+    "green_carbon": {"carbon": 1.0},
+}
+METRIC_TO_GROUP = {
+    metric: group
+    for group, metrics in OBJECTIVE_GROUPS.items()
+    for metric in metrics
+}
 
 
 def clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:

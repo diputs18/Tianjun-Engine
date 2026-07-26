@@ -12,7 +12,7 @@ export function initOverview() {
         <p class="page-subtitle">资源容量、实时队列、SLA 风险与最近调度决策。</p>
       </div>
     </header>
-    <section id="overviewMetrics" class="grid overview-metrics" aria-label="核心调度指标"></section>
+    <section id="overviewMetrics" class="overview-metrics" aria-label="核心调度指标"></section>
     <section class="grid overview-engine">
       <article class="card capacity-card">
         <h2 class="card-title title-primary">资源池</h2>
@@ -70,12 +70,17 @@ export function renderOverview(report, health) {
 }
 
 function renderOverviewLoading() {
-  document.getElementById("overviewMetrics").innerHTML = Array.from({ length: 4 }, () => `
-    <article class="card metric-card kpi-core loading-card">
-      <span class="metric-label">加载中</span>
-      <strong class="metric-value">--</strong>
-      <span class="metric-delta">正在获取调度数据</span>
-    </article>`).join("");
+  document.getElementById("overviewMetrics").innerHTML = `
+    <article class="card metric-summary-panel loading-card">
+      <div class="metric-summary-grid">
+        ${Array.from({ length: 4 }, () => `
+          <section class="metric-summary-group">
+            <span class="summary-eyebrow">加载中</span>
+            <strong class="summary-value">--</strong>
+            <span class="summary-caption">正在获取调度数据</span>
+          </section>`).join("")}
+      </div>
+    </article>`;
   document.getElementById("capacityMatrix").innerHTML = `<div class="empty">资源池数据加载中...</div>`;
   document.getElementById("realtimeQueue").innerHTML = `<div class="empty">实时调度队列加载中...</div>`;
   document.getElementById("overviewDecision").innerHTML = `<div class="empty">最近决策加载中...</div>`;
@@ -87,21 +92,95 @@ function renderOverviewLoading() {
 
 function renderMetrics(report) {
   const metrics = report.metrics ?? {};
+  const totals = report.totals ?? {};
   const decision = activeDecision(report, state.intentPayload);
   const snap = decision?.network_snapshot ?? {};
   const gnnValue = metrics.gnn_stability_score ?? snap.fusion_features?.gnn_topology ?? report.model_runtime?.latest_prediction?.gnn_stability_score;
-  const cards = [
-    ["平均时延", `${fmt(metrics.average_stable_latency_ms ?? snap.deterministic_latency_ms, 1)} ms`, "primary", "LSTM 稳健时延预测"],
-    ["GNN 稳定性", gnnValue === undefined ? "--" : pct(gnnValue, 1), "teal", "拓扑稳定性参与调度评分"],
-    ["融合评分", fmt(metrics.average_fusion_score ?? snap.feature_fusion_score ?? decisionScore(decision), 3), "dark", decision ? `当前节点 ${decision.node_id}` : "等待调度决策"],
-    ["在线节点", `${(report.nodes ?? []).filter((node) => node.online !== false).length}`, "good", "可参与资源分配的节点"],
+  const batches = report.batch_scheduling ?? {};
+  const nodes = report.nodes ?? [];
+  const onlineNodes = nodes.filter((node) => node.online !== false).length;
+  const averageResource = (key) => nodes.length
+    ? nodes.reduce((sum, node) => sum + resourceValue(node, key), 0) / nodes.length
+    : 0;
+  const gpuSummary = gpuCapacitySummary(nodes);
+  const gpuUtilization = typeof gpuSummary === "number" ? gpuSummary : Number(gpuSummary.value ?? 0);
+  const managedTasks = Number(totals.tasks ?? batches.total_batch_tasks ?? 0);
+  const latencyValue = metrics.average_stable_latency_ms ?? snap.deterministic_latency_ms;
+  const fusionValue = metrics.average_fusion_score ?? snap.feature_fusion_score ?? (decision ? decisionScore(decision) : undefined);
+  const acceptanceValue = batches.batch_acceptance_rate;
+  const groups = [
+    {
+      tone: "primary",
+      eyebrow: "资源状态",
+      label: "在线节点",
+      value: String(onlineNodes),
+      unit: nodes.length ? `/ ${nodes.length}` : "",
+      caption: "可参与当前资源分配",
+      facts: [
+        ["CPU", pct(averageResource("cpu"), 1)],
+        ["内存", pct(averageResource("memory"), 1)],
+        ["GPU", pct(gpuUtilization, 1)],
+      ],
+    },
+    {
+      tone: "teal",
+      eyebrow: "工作负载",
+      label: "纳管任务",
+      value: String(managedTasks),
+      unit: "",
+      caption: acceptanceValue === undefined ? "接纳率等待批次数据" : `批任务接纳率 ${pct(acceptanceValue, 1)}`,
+      facts: [
+        ["待调度", fmt(totals.pending ?? totals.pending_tasks ?? 0, 0)],
+        ["运行中", fmt(totals.running ?? totals.running_tasks ?? 0, 0)],
+        ["已完成", fmt(totals.completed ?? totals.completed_attempts ?? 0, 0)],
+      ],
+    },
+    {
+      tone: "ink",
+      eyebrow: "调度质量",
+      label: "平均时延",
+      value: latencyValue === undefined ? "--" : fmt(latencyValue, 1),
+      unit: latencyValue === undefined ? "" : "ms",
+      caption: decision ? `最近目标节点 ${decision.node_id}` : "等待首次调度决策",
+      facts: [
+        ["GNN 稳定性", gnnValue === undefined ? "--" : pct(gnnValue, 1)],
+        ["融合评分", fusionValue === undefined ? "--" : fmt(fusionValue, 3)],
+      ],
+    },
+    {
+      tone: "success",
+      eyebrow: "绿色运行",
+      label: "运行碳",
+      value: fmt(metrics.total_operational_carbon_g, 3),
+      unit: "gCO₂e",
+      caption: "仅统计运行阶段排放",
+      facts: [
+        ["能耗", `${fmt(metrics.total_energy_kwh, 5)} kWh`],
+        ["口径", "Operational"],
+      ],
+    },
   ];
-  document.getElementById("overviewMetrics").innerHTML = cards.map(([label, value, tone, delta], index) => `
-    <article class="card metric-card kpi-core ${tone === "teal" ? "teal" : tone === "good" ? "success" : tone === "dark" ? "ink" : "primary"}">
-      <span class="metric-label">${escapeHtml(label)}</span>
-      <strong class="metric-value ${escapeHtml(tone)}">${escapeHtml(String(value))}</strong>
-      <span class="metric-delta">${escapeHtml(delta)}</span>
-    </article>`).join("");
+  document.getElementById("overviewMetrics").innerHTML = `
+    <article class="card metric-summary-panel">
+      <div class="metric-summary-grid">
+        ${groups.map(renderSummaryGroup).join("")}
+      </div>
+    </article>`;
+}
+
+function renderSummaryGroup(group) {
+  return `<section class="metric-summary-group tone-${escapeHtml(group.tone)}">
+    <span class="summary-eyebrow">${escapeHtml(group.eyebrow)}</span>
+    <div class="summary-primary-line">
+      <strong class="summary-value">${escapeHtml(group.value)}</strong>
+      ${group.unit ? `<span class="summary-unit">${escapeHtml(group.unit)}</span>` : ""}
+    </div>
+    <span class="summary-label">${escapeHtml(group.label)}</span>
+    <span class="summary-caption">${escapeHtml(group.caption)}</span>
+    <div class="summary-facts">
+      ${group.facts.map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`).join("")}
+    </div>
+  </section>`;
 }
 
 function renderCapacity(report) {
@@ -164,7 +243,7 @@ function dcKey(node) {
 }
 
 function resourceValue(node, key) {
-  const direct = node[`${key}_utilization`] ?? node[`${key}_used_ratio`] ?? node[`${key}_usage`];
+  const direct = node.runtime_utilization?.[key] ?? node.runtime_telemetry?.[key] ?? node[`${key}_utilization`] ?? node[`${key}_used_ratio`] ?? node[`${key}_usage`];
   if (direct !== undefined && Number.isFinite(Number(direct))) return clamp01(Number(direct));
   const cap = resourceCapacity(node, key);
   const used = resourceUsed(node, key, cap);
@@ -290,10 +369,17 @@ function renderSlaAlert(report) {
   const completed = Number(totals.completed ?? totals.completed_attempts ?? records.length);
   const slaMet = Number(totals.sla_met ?? records.filter((record) => record.sla_met === true).length);
   const slaMiss = Number(totals.sla_missed ?? totals.sla_unmet ?? Math.max(0, completed - slaMet));
-  document.getElementById("slaAlertCard").innerHTML = `
+  const card = document.getElementById("slaAlertCard");
+  card.classList.toggle("has-alert", slaMiss > 0);
+  card.classList.toggle("is-clear", slaMiss === 0);
+  card.innerHTML = slaMiss > 0 ? `
     <span class="metric-label">SLA 未达标任务</span>
     <strong class="sla-alert-number">${fmt(slaMiss, 0)}</strong>
     <p>执行完成但未满足时延、成本或稳定性目标。点击进入任务执行页定位异常记录。</p>
+    <b>查看任务执行 →</b>` : `
+    <span class="metric-label">SLA 运行状态</span>
+    <strong class="sla-alert-number">正常</strong>
+    <p>${completed > 0 ? `${fmt(completed, 0)} 个已完成任务中暂无 SLA 异常。` : "等待任务完成后进行 SLA 校验。"}</p>
     <b>查看任务执行 →</b>`;
 }
 

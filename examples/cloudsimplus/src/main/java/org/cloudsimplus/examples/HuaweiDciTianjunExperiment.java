@@ -13,6 +13,7 @@ package org.cloudsimplus.examples;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.brokers.DatacenterBrokerSimple;
 import org.cloudsimplus.builders.tables.CloudletsTableBuilder;
@@ -23,6 +24,7 @@ import org.cloudsimplus.datacenters.Datacenter;
 import org.cloudsimplus.datacenters.DatacenterSimple;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.LeaseResult;
+import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.BatchPlanResult;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.NetworkPath;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.SimNode;
 import org.cloudsimplus.examples.tianjun.TianjunHttpBridge.SimTask;
@@ -32,6 +34,7 @@ import org.cloudsimplus.hosts.Host;
 import org.cloudsimplus.hosts.HostSimple;
 import org.cloudsimplus.listeners.EventInfo;
 import org.cloudsimplus.network.topologies.BriteNetworkTopology;
+import org.cloudsimplus.power.models.PowerModelHostSimple;
 import org.cloudsimplus.resources.Pe;
 import org.cloudsimplus.resources.PeSimple;
 import org.cloudsimplus.utilizationmodels.UtilizationModelDynamic;
@@ -39,7 +42,10 @@ import org.cloudsimplus.vms.Vm;
 import org.cloudsimplus.vms.VmSimple;
 
 import java.io.BufferedWriter;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -61,6 +67,8 @@ import java.util.Set;
  */
 public final class HuaweiDciTianjunExperiment {
     private static final String TOPOLOGY_FILE = "huawei-dci-reference.brite";
+    private static final String POWER_PROFILE_FILE = "tianjun-power-profiles.json";
+    private static final String CARBON_TRACE_FILE = "tianjun-carbon-intensity-trace.csv";
     private static final String DEFAULT_SERVER = "http://127.0.0.1:8024";
     private static final String[] REGIONS = {"dc1", "dc2", "dc3"};
     private static final String[] LOCATIONS = {"beijing", "hangzhou", "chengdu", "chongqing", "guangzhou", "shenzhen"};
@@ -74,6 +82,14 @@ public final class HuaweiDciTianjunExperiment {
     private static final double LOCAL_FABRIC_LATENCY_MS = 0.8;
     private static final double LOCAL_FABRIC_BANDWIDTH_MBPS = 25_000.0;
     private static final double DCI_BOTTLENECK_BANDWIDTH_MBPS = 10_000.0;
+    // Effective throughput used only by the control-plane preview contract.
+    // It is calibrated against the fixed CloudSim workload below; actual JCT
+    // and Makespan are always measured from completed Cloudlets.
+    private static final double PREDICTION_EFFECTIVE_MIPS = 4_000.0;
+    private static final double[] SITE_IDLE_POWER_W = {155.0, 148.0, 142.0};
+    private static final double[] SITE_MAX_POWER_W = {430.0, 405.0, 390.0};
+    private static final double[] SITE_PUE = {1.38, 1.28, 1.22};
+    private static final double[] SITE_CARBON_G_PER_KWH = {560.0, 430.0, 310.0};
 
     private final CloudSimPlus simulation;
     private final DatacenterBroker broker;
@@ -94,8 +110,13 @@ public final class HuaweiDciTianjunExperiment {
     private final Gson gson;
     private final String disturbanceScenario;
     private final String experimentRunId;
+    private final String batchStrategy;
+    private final Map<Integer, PowerProfileConfig> powerProfilesBySite;
+    private final Map<Integer, CarbonSiteConfig> carbonProfilesBySite;
     private final BufferedWriter snapshotWriter;
+    private final Path metricsOutputPath;
     private final boolean listenAfterBatch;
+    private String committedBatchId;
     private double lastHeartbeatTick = -1.0;
 
     public static void main(final String[] args) throws IOException {
@@ -105,7 +126,8 @@ public final class HuaweiDciTianjunExperiment {
         final long seed = args.length > 3 ? Long.parseLong(args[3]) : DEFAULT_SEED;
         final Path output = Path.of(args.length > 4 ? args[4] : "output/huawei-dci-topology-snapshots.jsonl");
         final boolean listenAfterBatch = args.length <= 5 || !"once".equalsIgnoreCase(args[5]);
-        new HuaweiDciTianjunExperiment(server, scenario, cloudlets, seed, output, listenAfterBatch).run();
+        final String strategy = args.length > 6 ? args[6] : "B6-hierarchical-batch";
+        new HuaweiDciTianjunExperiment(server, scenario, cloudlets, seed, output, listenAfterBatch, strategy).run();
     }
 
     private HuaweiDciTianjunExperiment(
@@ -114,15 +136,19 @@ public final class HuaweiDciTianjunExperiment {
         final int cloudletCount,
         final long seed,
         final Path outputPath,
-        final boolean listenAfterBatch
+        final boolean listenAfterBatch,
+        final String batchStrategy
     ) throws IOException {
         this.simulation = new CloudSimPlus();
         this.bridge = new TianjunHttpBridge(server);
         this.listenAfterBatch = listenAfterBatch;
         this.disturbanceScenario = disturbanceScenario.toLowerCase(Locale.ROOT);
         this.experimentRunId = "dci-" + this.disturbanceScenario + "-" + seed;
+        this.batchStrategy = batchStrategy;
         this.random = new Random(seed);
         this.gson = new GsonBuilder().disableHtmlEscaping().create();
+        this.powerProfilesBySite = loadPowerProfiles();
+        this.carbonProfilesBySite = loadCarbonProfiles();
         this.vmByNodeId = new LinkedHashMap<>();
         this.nodeById = new LinkedHashMap<>();
         this.taskByCloudletId = new LinkedHashMap<>();
@@ -141,6 +167,9 @@ public final class HuaweiDciTianjunExperiment {
             Files.createDirectories(parent);
         }
         this.snapshotWriter = Files.newBufferedWriter(outputPath.toAbsolutePath());
+        this.metricsOutputPath = outputPath.toAbsolutePath().resolveSibling(
+            outputPath.getFileName().toString().replaceFirst("\\.[^.]+$", "") + ".metrics.json"
+        );
     }
 
     private void run() throws IOException {
@@ -152,7 +181,7 @@ public final class HuaweiDciTianjunExperiment {
         broker.setDatacenterMapper((lastDatacenter, vm) -> datacenters.get(siteIndexForVm(vm)));
         broker.submitVmList(vmList);
         registerTianjunNodes();
-        submitTasksToTianjun();
+        submitBatchToTianjun();
         pollLeasesAndSubmitCloudlets(0.0);
         simulation.addOnClockTickListener(this::onClockTick);
 
@@ -163,6 +192,7 @@ public final class HuaweiDciTianjunExperiment {
             sendHeartbeats(simulation.clock());
             reportResults();
             writeSnapshot(simulation.clock(), "finished");
+            writeBatchMetrics();
             snapshotWriter.close();
         }
 
@@ -190,6 +220,7 @@ public final class HuaweiDciTianjunExperiment {
 
     private List<Host> createHosts(final int site) {
         final var hosts = new ArrayList<Host>();
+        final PowerProfileConfig powerProfile = powerProfileForSite(site);
         for (int index = 0; index < 3; index++) {
             final int pes = 32;
             final long mips = site == 0 ? 2400L : site == 1 ? 2250L : 2200L;
@@ -200,7 +231,12 @@ public final class HuaweiDciTianjunExperiment {
             for (int pe = 0; pe < pes; pe++) {
                 peList.add(new PeSimple(mips));
             }
-            hosts.add(new HostSimple(ramMb, bandwidthMbps, storageMb, peList));
+            final var host = new HostSimple(ramMb, bandwidthMbps, storageMb, peList);
+            host.setPowerModel(new PowerModelHostSimple(
+                powerProfile.maxPowerW,
+                powerProfile.idlePowerW
+            ));
+            hosts.add(host);
         }
         return hosts;
     }
@@ -263,15 +299,37 @@ public final class HuaweiDciTianjunExperiment {
         System.out.printf("Registered physical DCI topology and %d attached compute nodes with topology-derived paths.%n", nodeById.size());
     }
 
-    private void submitTasksToTianjun() {
+    private void submitBatchToTianjun() {
         for (int index = 0; index < cloudletList.size(); index++) {
             final Cloudlet cloudlet = cloudletList.get(index);
             final SimTask task = taskForCloudlet(cloudlet, index);
             taskByCloudletId.put(cloudlet.getId(), task);
             cloudletIdByTaskId.put(task.taskId(), cloudlet.getId());
-            bridge.submitTask(task);
         }
-        System.out.printf("Submitted %d DCI tasks to Tianjun pending queue.%n", taskByCloudletId.size());
+        final BatchPlanResult batchPlan = bridge.commitTaskBatch(
+            experimentRunId + "-batch",
+            "CloudSim DCI " + disturbanceScenario + " " + batchStrategy,
+            new ArrayList<>(taskByCloudletId.values()),
+            batchStrategy
+        );
+        committedBatchId = batchPlan.batchId();
+        System.out.printf(
+            "Imported and committed CloudSim batch %s using %s (plan %s, snapshot %d), tasks: %d.%n",
+            batchPlan.batchId(),
+            batchPlan.strategy(),
+            batchPlan.planId(),
+            batchPlan.resourceSnapshotVersion(),
+            taskByCloudletId.size()
+        );
+    }
+
+    private void writeBatchMetrics() throws IOException {
+        if (committedBatchId == null || committedBatchId.isBlank()) {
+            return;
+        }
+        final String metrics = bridge.getBatchActualMetrics(committedBatchId);
+        Files.writeString(metricsOutputPath, metrics, StandardCharsets.UTF_8);
+        System.out.printf("Wrote actual CloudSim batch metrics to %s.%n", metricsOutputPath);
     }
 
     private int pollLeasesAndSubmitCloudlets(final double tick) {
@@ -362,6 +420,8 @@ public final class HuaweiDciTianjunExperiment {
         reportExternalProgress(node.nodeId(), lease.taskId(), tick, "leased", 0.05, "Lease acquired by CloudSim listener.");
         reportExternalProgress(node.nodeId(), lease.taskId(), tick + duration * 0.45, "executing", 0.65, "CloudSim listener executing external task.");
         sleepQuietly(Math.min(450L, Math.max(120L, Math.round(duration * 120.0))));
+        final double energyKwh = incrementalEnergyKwh(node, duration, 0.55);
+        final double computeCarbonG = energyKwh * node.pue() * node.carbonIntensityAt(tick);
         reportResultWithRetry(new SimTaskResult(
             node.nodeId(),
             lease.taskId(),
@@ -370,7 +430,16 @@ public final class HuaweiDciTianjunExperiment {
             "CloudSim listener completed externally submitted Tianjun task.",
             "",
             0,
-            Math.min(lease.predictedCost(), duration * node.costPerTick())
+            Math.min(lease.predictedCost(), duration * node.costPerTick()),
+            energyKwh,
+            computeCarbonG,
+            0.0,
+            0.0,
+            duration,
+            0.55,
+            0.30,
+            0.20,
+            0.0
         ));
     }
 
@@ -466,6 +535,26 @@ public final class HuaweiDciTianjunExperiment {
             }
             reportProgress(cloudlet, simulation.clock(), "finished", 1.0, "CloudSim cloudlet finished; reporting final result.");
             final double duration = Math.max(1.0, cloudlet.getFinishTime() - cloudlet.getStartTime());
+            final SimNode node = nodeById.get(nodeId);
+            final double sampleTime = Math.max(0.0, cloudlet.getStartTime() + duration / 2.0);
+            final double cpuUtilization = clamp(
+                cloudlet.getUtilizationModelCpu().getUtilization(sampleTime),
+                0.0,
+                1.0
+            );
+            final double memoryUtilization = clamp(
+                cloudlet.getUtilizationModelRam().getUtilization(sampleTime),
+                0.0,
+                1.0
+            );
+            final double bandwidthUtilization = clamp(
+                cloudlet.getUtilizationModelBw().getUtilization(sampleTime),
+                0.0,
+                1.0
+            );
+            final double energyKwh = incrementalEnergyKwh(node, duration, cpuUtilization);
+            final double computeCarbonG = energyKwh * node.pue() * node.carbonIntensityAt(cloudlet.getStartTime());
+            final double networkCarbonG = networkCarbonG(task, node);
             final var result = new SimTaskResult(
                 nodeId,
                 task.taskId(),
@@ -474,7 +563,16 @@ public final class HuaweiDciTianjunExperiment {
                 "Huawei-reference DCI CloudSim cloudlet completed.",
                 "",
                 cloudlet.isFinished() ? 0 : 1,
-                duration * nodeById.get(nodeId).costPerTick()
+                duration * node.costPerTick(),
+                energyKwh,
+                computeCarbonG,
+                networkCarbonG,
+                Math.max(0.0, cloudlet.getStartTime()),
+                Math.max(duration, cloudlet.getFinishTime()),
+                cpuUtilization,
+                memoryUtilization,
+                bandwidthUtilization,
+                task.storageGb() / Math.max(1.0, node.storageGb())
             );
             if (reportResultWithRetry(result)) {
                 reportedResultCloudletIds.add(cloudlet.getId());
@@ -578,6 +676,8 @@ public final class HuaweiDciTianjunExperiment {
         final int locationIndex = index / VMS_PER_LOCATION;
         final int site = LOCATION_SITES[locationIndex];
         final double gpuCount = gpuCapacityForNode(site, index);
+        final PowerProfileConfig powerProfile = powerProfileForSite(site);
+        final CarbonSiteConfig carbonProfile = carbonProfileForSite(site);
         return new SimNode(
             vm.getDescription(),
             REGIONS[site],
@@ -585,15 +685,139 @@ public final class HuaweiDciTianjunExperiment {
             SERVICE_REGIONS[locationIndex],
             index,
             vm.getPesNumber(),
+            vm.getMips(),
+            vm.getPesNumber() * vm.getMips(),
             vm.getRam().getCapacity() / 1024.0,
             gpuCount,
+            gpuCount * 16.0,
             vm.getStorage().getCapacity() / 1024.0,
+            18_000.0 + site * 2_000.0,
             vm.getBw().getCapacity(),
             1.10 + site * 0.08 + (index % VMS_PER_LOCATION) * 0.04,
             0.993 - site * 0.002,
             site == 0 ? 1.10 : 1.04,
-            site == 0 ? 0.06 : 0.09
+            site == 0 ? 0.06 : 0.09,
+            "site-" + (site + 1),
+            powerProfile.profileId,
+            powerProfile.idlePowerW,
+            powerProfile.maxPowerW,
+            powerProfile.gpuIdlePowerW,
+            powerProfile.gpuMaxPowerW,
+            carbonProfile.pue,
+            carbonProfile.trace,
+            carbonProfile.trace.getOrDefault(0.0, SITE_CARBON_G_PER_KWH[site])
         );
+    }
+
+    private Map<Integer, PowerProfileConfig> loadPowerProfiles() throws IOException {
+        final Map<Integer, PowerProfileConfig> result = new LinkedHashMap<>();
+        try (final var stream = HuaweiDciTianjunExperiment.class.getClassLoader().getResourceAsStream(POWER_PROFILE_FILE)) {
+            if (stream == null) {
+                return result;
+            }
+            final var document = gson.fromJson(
+                new InputStreamReader(stream, StandardCharsets.UTF_8),
+                PowerProfileDocument.class
+            );
+            if (document != null && document.profiles != null) {
+                for (int index = 0; index < document.profiles.size(); index++) {
+                    result.put(index, document.profiles.get(index));
+                }
+            }
+        }
+        return result;
+    }
+
+    private Map<Integer, CarbonSiteConfig> loadCarbonProfiles() throws IOException {
+        final Map<Integer, CarbonSiteConfig> result = new LinkedHashMap<>();
+        try (final var stream = HuaweiDciTianjunExperiment.class.getClassLoader().getResourceAsStream(CARBON_TRACE_FILE)) {
+            if (stream == null) {
+                return result;
+            }
+            try (final var reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                String line;
+                boolean header = true;
+                while ((line = reader.readLine()) != null) {
+                    if (header) {
+                        header = false;
+                        continue;
+                    }
+                    final String[] fields = line.trim().split(",");
+                    if (fields.length < 5 || !fields[0].startsWith("site-")) {
+                        continue;
+                    }
+                    final int site = Integer.parseInt(fields[0].substring("site-".length())) - 1;
+                    final double tick = Double.parseDouble(fields[2]);
+                    final double intensity = Double.parseDouble(fields[3]);
+                    final double pue = Double.parseDouble(fields[4]);
+                    result.computeIfAbsent(site, ignored -> new CarbonSiteConfig(pue)).trace.put(tick, intensity);
+                }
+            }
+        }
+        return result;
+    }
+
+    private PowerProfileConfig powerProfileForSite(final int site) {
+        return powerProfilesBySite.getOrDefault(
+            site,
+            new PowerProfileConfig(
+                "host-profile-" + (site + 1),
+                SITE_IDLE_POWER_W[site],
+                SITE_MAX_POWER_W[site],
+                35.0,
+                300.0
+            )
+        );
+    }
+
+    private CarbonSiteConfig carbonProfileForSite(final int site) {
+        final CarbonSiteConfig configured = carbonProfilesBySite.get(site);
+        if (configured != null) {
+            return configured;
+        }
+        final CarbonSiteConfig fallback = new CarbonSiteConfig(SITE_PUE[site]);
+        fallback.trace.put(0.0, SITE_CARBON_G_PER_KWH[site]);
+        return fallback;
+    }
+
+    private static final class PowerProfileDocument {
+        private List<PowerProfileConfig> profiles;
+    }
+
+    private static final class PowerProfileConfig {
+        @SerializedName("profile_id")
+        private String profileId;
+        @SerializedName("idle_power_w")
+        private double idlePowerW;
+        @SerializedName("max_power_w")
+        private double maxPowerW;
+        @SerializedName("gpu_idle_power_w")
+        private double gpuIdlePowerW;
+        @SerializedName("gpu_max_power_w")
+        private double gpuMaxPowerW;
+
+        private PowerProfileConfig(
+            final String profileId,
+            final double idlePowerW,
+            final double maxPowerW,
+            final double gpuIdlePowerW,
+            final double gpuMaxPowerW
+        ) {
+            this.profileId = profileId;
+            this.idlePowerW = idlePowerW;
+            this.maxPowerW = maxPowerW;
+            this.gpuIdlePowerW = gpuIdlePowerW;
+            this.gpuMaxPowerW = gpuMaxPowerW;
+        }
+    }
+
+    private static final class CarbonSiteConfig {
+        private final double pue;
+        private final Map<Double, Double> trace = new LinkedHashMap<>();
+
+        private CarbonSiteConfig(final double pue) {
+            this.pue = pue;
+        }
     }
 
     private double gpuCapacityForNode(final int site, final int index) {
@@ -609,10 +833,20 @@ public final class HuaweiDciTianjunExperiment {
             experimentRunId + "-task-" + cloudlet.getId(),
             gpuAccelerated ? "inference" : index % 3 == 1 ? "analytics" : "batch_cpu",
             Math.max(1.0, cloudlet.getPesNumber()),
+            Math.max(1.0, cloudlet.getPesNumber()) * 2_000.0,
             2.0 + index % 4 * 2.0,
             gpuAccelerated ? 1.0 : 0.0,
+            gpuAccelerated ? 8.0 : 0.0,
             Math.max(1.0, cloudlet.getFileSize() / 1024.0),
-            Math.max(1, (int) Math.ceil(cloudlet.getLength() / 8_000.0)),
+            1_500.0 + index % 4 * 500.0,
+            Math.max(
+                1,
+                (int) Math.ceil(
+                    cloudlet.getLength()
+                        / (PREDICTION_EFFECTIVE_MIPS
+                        * Math.max(0.05, cloudlet.getUtilizationModelCpu().getUtilization(0.0)))
+                )
+            ),
             5 + index % 5,
             220.0,
             180,
@@ -620,8 +854,28 @@ public final class HuaweiDciTianjunExperiment {
             0.5 + index % 4 * 0.4,
             sourceRegion.equals("dc1") ? 25.0 : sourceRegion.equals("dc2") ? 28.0 : 30.0,
             500.0,
-            0.55 + index % 4 * 0.10
+            0.55 + index % 4 * 0.10,
+            12.0,
+            0.65,
+            cloudlet.getUtilizationModelCpu().getUtilization(0.0),
+            true,
+            false,
+            0,
+            experimentRunId + "-batch"
         );
+    }
+
+    private double incrementalEnergyKwh(final SimNode node, final double durationSeconds, final double utilization) {
+        final double incrementalPowerW = Math.max(0.0, node.maxPowerW() - node.idlePowerW()) * clamp(utilization, 0.0, 1.0);
+        return incrementalPowerW * durationSeconds / 3_600_000.0;
+    }
+
+    private double networkCarbonG(final SimTask task, final SimNode node) {
+        if (task.sourceRegion().equals(node.region())) {
+            return 0.0;
+        }
+        final double networkEnergyKwh = task.inputSizeGb() * 0.00008;
+        return networkEnergyKwh * node.carbonIntensityAt(simulation.clock());
     }
 
     private Map<String, NetworkPath> observedPaths(final SimNode node, final double tick, final double bandwidthUtilization) {

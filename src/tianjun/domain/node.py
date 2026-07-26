@@ -5,6 +5,7 @@ from math import ceil
 from typing import Any
 
 from .common import clamp
+from .carbon import CarbonSiteProfile, PowerProfile, operational_carbon
 from .execution import ExecutionRecord
 from .network import NetworkPathProfile
 from .resource import ResourceVector
@@ -62,6 +63,24 @@ class Node:
     running_tasks: dict[str, RunningTask] = field(default_factory=dict)
     telemetry_tick: int = 0
     network_paths: dict[str, NetworkPathProfile] = field(default_factory=dict)
+    site_id: str | None = None
+    power_profile: PowerProfile = field(default_factory=PowerProfile)
+    carbon_profile: CarbonSiteProfile = field(default_factory=CarbonSiteProfile)
+    trust_level: str = "high"
+    isolation_levels: set[str] = field(default_factory=lambda: {"none", "process", "container", "namespace"})
+    encrypted_transport: bool = True
+    resource_version: int = 0
+    current_power_w: float = 0.0
+    # Host-level totals come only from heartbeat telemetry. Task-attributed totals
+    # are kept separately to avoid charging the same energy twice.
+    energy_kwh_total: float = 0.0
+    operational_carbon_g_total: float = 0.0
+    task_energy_kwh_total: float = 0.0
+    task_operational_carbon_g_total: float = 0.0
+    carbon_signal_timestamp: float | None = None
+    runtime_telemetry: dict[str, float] = field(default_factory=dict)
+    telemetry_source: str | None = None
+    simulation_tick: float | None = None
 
     def __post_init__(self) -> None:
         self.location = self.location or self.region
@@ -70,6 +89,10 @@ class Node:
             or SERVICE_REGION_BY_LOCATION.get(str(self.location).lower())
             or self.location
         )
+        self.site_id = self.site_id or self.carbon_profile.site_id or f"{self.region}-site"
+        self.carbon_profile.site_id = self.site_id
+        if self.carbon_profile.region == "default":
+            self.carbon_profile.region = self.region
         self.reliability_score = clamp(
             self.base_reliability if self.reliability_score is None else self.reliability_score,
             0.35,
@@ -84,6 +107,11 @@ class Node:
                 profile if isinstance(profile, NetworkPathProfile) else NetworkPathProfile(**profile)
             )
             for region, profile in self.network_paths.items()
+        }
+        self.runtime_telemetry = {
+            str(key): clamp(float(value))
+            for key, value in self.runtime_telemetry.items()
+            if value is not None
         }
 
     def used(self) -> ResourceVector:
@@ -102,9 +130,39 @@ class Node:
             return False
         if task.allowed_regions and not any(self.matches_deployment_region(region) for region in task.allowed_regions):
             return False
+        if not task.allow_region_shift and task.network_source() and not self.matches_deployment_region(task.network_source() or ""):
+            return False
         if task.preferred_labels and not task.preferred_labels.issubset(self.labels):
             return False
+        trust_rank = {"low": 0, "medium": 1, "high": 2}
+        if trust_rank.get(self.trust_level, 0) < trust_rank.get(task.security_level, 1):
+            return False
+        if task.isolation_level not in self.isolation_levels:
+            return False
+        if task.require_encrypted_transport and not self.encrypted_transport:
+            return False
         return task.demand.fits_in(self.available())
+
+    def predict_operational_carbon(self, task: Task, duration_seconds: float, tick: int) -> dict[str, float | str]:
+        cpu_share = (
+            clamp(float(task.expected_cpu_utilization))
+            if task.expected_cpu_utilization is not None
+            else task.demand.cpu / max(1.0, self.capacity.cpu)
+        )
+        gpu_share = task.demand.gpu / max(1.0, self.capacity.gpu) if self.capacity.gpu > 0 else 0.0
+        power_w = self.power_profile.incremental_power_w(cpu_share, gpu_share)
+        network_energy = task.estimated_input_size_gb() * self.power_profile.network_kwh_per_gb
+        result = operational_carbon(
+            power_w=power_w,
+            duration_seconds=duration_seconds,
+            pue=self.carbon_profile.pue,
+            carbon_intensity_g_per_kwh=self.carbon_profile.intensity_at(tick),
+            network_energy_kwh=network_energy,
+        )
+        result["power_w"] = power_w
+        result["carbon_intensity_g_per_kwh"] = self.carbon_profile.intensity_at(tick)
+        result["pue"] = self.carbon_profile.pue
+        return result
 
     def performance_for(self, task_type: str) -> float:
         return clamp(self.performance_factors.get(task_type, 1.0), 0.35, 3.5)
@@ -195,4 +253,23 @@ class Node:
                 region: profile.to_dict()
                 for region, profile in sorted(self.network_paths.items(), key=lambda item: item[0])
             },
+            "site_id": self.site_id,
+            "power_profile": self.power_profile.to_dict(),
+            "carbon_profile": self.carbon_profile.to_dict(tick=self.telemetry_tick),
+            "trust_level": self.trust_level,
+            "isolation_levels": sorted(self.isolation_levels),
+            "encrypted_transport": self.encrypted_transport,
+            "resource_version": self.resource_version,
+            "current_power_w": round(self.current_power_w, 6),
+            "energy_kwh_total": round(self.energy_kwh_total, 8),
+            "operational_carbon_g_total": round(self.operational_carbon_g_total, 6),
+            "task_energy_kwh_total": round(self.task_energy_kwh_total, 8),
+            "task_operational_carbon_g_total": round(self.task_operational_carbon_g_total, 6),
+            "carbon_signal_timestamp": self.carbon_signal_timestamp,
+            "runtime_telemetry": {
+                key: round(value, 6)
+                for key, value in sorted(self.runtime_telemetry.items())
+            },
+            "telemetry_source": self.telemetry_source,
+            "simulation_tick": self.simulation_tick,
         }

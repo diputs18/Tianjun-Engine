@@ -4,6 +4,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -46,6 +47,7 @@ def main() -> int:
     args = parser.parse_args()
 
     base_url = f"http://{args.host}:{args.port}"
+    state_directory = tempfile.TemporaryDirectory(prefix="tianjun-smoke-state-")
     command = [
         sys.executable,
         "-B",
@@ -54,6 +56,8 @@ def main() -> int:
         "--config",
         "configs/tianjun.example.toml",
         "--offline",
+        "--state-db",
+        str(Path(state_directory.name) / "smoke.sqlite"),
         "--host",
         args.host,
         "--port",
@@ -88,6 +92,7 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        state_directory.cleanup()
 
 
 if __name__ == "__main__":

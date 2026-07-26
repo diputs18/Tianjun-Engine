@@ -1,0 +1,59 @@
+{
+  "schema_version": "3.0",
+  "description": "High-load heterogeneous-fragmentation and green objective ablation with held-out calibration seeds.",
+  "node_counts": [20],
+  "batch_task_counts": [60],
+  "load_rates": [0.85, 0.95],
+  "workloads": ["mixed"],
+  "fragmentation_modes": ["heterogeneous"],
+  "seeds": [20260718, 20260719, 20260720, 20260721, 20260722],
+  "training_seeds": [20260718, 20260719, 20260720],
+  "validation_seeds": [20260721, 20260722],
+  "online_strategies": [
+    "B0-current",
+    "B4-pareto-tchebycheff",
+    "B6-hierarchical-batch"
+  ],
+  "offline_strategies": [],
+  "objective_experiments": {
+    "single_atomic": ["carbon", "fragmentation"],
+    "dual_atomic": [
+      ["carbon", "completion"],
+      ["carbon", "fragmentation"]
+    ],
+    "single_groups": ["green_carbon", "resource_efficiency"],
+    "dual_groups": [
+      ["green_carbon", "sla_quality"],
+      ["green_carbon", "resource_efficiency"]
+    ]
+  },
+  "weight_profiles": [
+    {
+      "label": "W0-current-green",
+      "strategy": "B6-hierarchical-batch",
+      "group_weights": {"sla_quality": 0.26, "network_coordination": 0.20, "resource_efficiency": 0.22, "economic_cost": 0.12, "green_carbon": 0.20}
+    },
+    {
+      "label": "W1-carbon-080",
+      "strategy": "B6-hierarchical-batch",
+      "group_weights": {"sla_quality": 0.25, "network_coordination": 0.10, "resource_efficiency": 0.20, "economic_cost": 0.05, "green_carbon": 0.40}
+    },
+    {
+      "label": "W2-carbon-120",
+      "strategy": "B6-hierarchical-batch",
+      "group_weights": {"sla_quality": 0.20, "network_coordination": 0.07, "resource_efficiency": 0.20, "economic_cost": 0.03, "green_carbon": 0.50}
+    },
+    {
+      "label": "W3-carbon-160",
+      "strategy": "B6-hierarchical-batch",
+      "group_weights": {"sla_quality": 0.18, "network_coordination": 0.05, "resource_efficiency": 0.15, "economic_cost": 0.02, "green_carbon": 0.60}
+    },
+    {
+      "label": "W4-carbon-200",
+      "strategy": "B6-hierarchical-batch",
+      "group_weights": {"sla_quality": 0.20, "network_coordination": 0.04, "resource_efficiency": 0.25, "economic_cost": 0.01, "green_carbon": 0.50}
+    }
+  ],
+  "carbon_scope": "operational_only",
+  "normalization_bounds_version": "engineering-v1"
+}

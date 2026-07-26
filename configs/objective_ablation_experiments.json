@@ -1,0 +1,38 @@
+{
+  "schema_version": "2.0",
+  "node_counts": [20, 50],
+  "batch_task_counts": [20, 100],
+  "load_rates": [0.60, 0.85],
+  "workloads": ["mixed"],
+  "seeds": [20260718, 20260719, 20260720, 20260721, 20260722],
+  "online_strategies": [
+    "B0-current",
+    "B4-pareto-tchebycheff",
+    "B6-hierarchical-batch"
+  ],
+  "offline_strategies": [],
+  "objective_experiments": {
+    "single_atomic": [
+      "performance",
+      "completion",
+      "cost",
+      "reliability",
+      "balance",
+      "fragmentation",
+      "locality",
+      "network",
+      "carbon"
+    ],
+    "dual_atomic": "all",
+    "single_groups": [
+      "sla_quality",
+      "network_coordination",
+      "resource_efficiency",
+      "economic_cost",
+      "green_carbon"
+    ],
+    "dual_groups": "all"
+  },
+  "carbon_scope": "operational_only",
+  "normalization_bounds_version": "engineering-v1"
+}
