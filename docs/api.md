@@ -6,8 +6,14 @@
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| GET | `/health` | 运行时健康、模型状态、聊天运行时状态 |
-| GET | `/report` | Dashboard 和工具用的控制平面状态 |
+| GET | `/health` | 进程健康和去敏后的依赖状态；始终返回可解析状态 |
+| GET | `/ready` | 就绪检查；依赖未就绪时返回 503 |
+| GET | `/report` | 完整控制平面状态，保留给 MCP 和兼容客户端 |
+| GET | `/report/summary` | Dashboard 总览和顶部状态的精简报告 |
+| GET | `/report/scheduling` | 调度决策页所需节点与决策报告 |
+| GET | `/report/topology` | 拓扑、VM 遥测和路径报告 |
+| GET | `/report/tasks?limit=50&cursor=0` | 分页任务执行报告 |
+| GET | `/report/model` | 模型、权重与策略历史报告 |
 | GET | `/dashboard` | 静态 Dashboard 壳页面 |
 | GET | `/chat/sessions/{session_id}` | 读取聊天会话状态 |
 | POST | `/chat/sessions` | 开始聊天会话 |
@@ -68,3 +74,7 @@ HTTP 路由调用 `CentralControlPlane` facade。facade 将已迁移的行为转
 - `PolicyWorkflowService` 处理策略起草、比较、模拟、提交和反馈路由。
 
 本文只描述公开 API 行为；服务拆分不改变路由语义。
+
+Dashboard 只轮询按页面拆分的报告。所有报告视图都带有 `report_version`、`resource_snapshot_version` 和 `generated_at`，客户端可据此识别跨请求快照差异。完整 `/report` 不再用于浏览器高频轮询。
+
+CloudSimPlus 心跳中的 `telemetry.cpu_utilization`、`ram_utilization` 和 `bandwidth_utilization` 会规范化为节点的 `runtime_utilization`。未上报的指标保持 `null`，Dashboard 显示为 `--`，不会生成伪实时值。

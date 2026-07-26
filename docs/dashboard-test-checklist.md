@@ -13,3 +13,7 @@ Dashboard 是静态 HTML/CSS/JS，没有构建步骤。在演示前，运行冒�
 - 模型页面权重更新需要明确确认并调用 `/policy-weights`。
 - 任务取消调用 `/task-runs/cancel`。
 - Dashboard 代码中没有调用 `/intent`、`/chat` 或 `/hermes/*`。
+- 顶部标签页同步 `aria-selected`，并支持左右方向键、Home 和 End。
+- 页面隐藏时自动刷新暂停，返回前台后恢复且不会出现重叠请求。
+- CloudSimPlus VM 心跳遥测在拓扑节点详情中显示；未上报指标显示 `--`。
+- 总览、调度、拓扑、任务和模型页面分别读取对应的精简报告视图。

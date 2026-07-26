@@ -9,12 +9,18 @@ from typing import Any
 
 
 class SQLiteStateStore:
+    MAX_HEARTBEATS = 10_000
+    MAX_EXECUTION_RECORDS = 2_000
+    MAX_DECISIONS = 2_000
+    MAX_POLICY_ADJUSTMENTS = 1_000
+
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        self._heartbeat_writes = 0
         self._initialize_schema()
 
     def close(self) -> None:
@@ -47,19 +53,22 @@ class SQLiteStateStore:
             execution_records = [
                 json.loads(row["payload_json"])
                 for row in self.conn.execute(
-                    "SELECT payload_json FROM execution_records ORDER BY id"
+                    "SELECT payload_json FROM (SELECT id, payload_json FROM execution_records ORDER BY id DESC LIMIT ?) ORDER BY id",
+                    (self.MAX_EXECUTION_RECORDS,),
                 ).fetchall()
             ]
             decisions = [
                 json.loads(row["payload_json"])
                 for row in self.conn.execute(
-                    "SELECT payload_json FROM decisions ORDER BY id"
+                    "SELECT payload_json FROM (SELECT id, payload_json FROM decisions ORDER BY id DESC LIMIT ?) ORDER BY id",
+                    (self.MAX_DECISIONS,),
                 ).fetchall()
             ]
             policy_adjustments = [
                 json.loads(row["payload_json"])
                 for row in self.conn.execute(
-                    "SELECT payload_json FROM policy_adjustments ORDER BY id"
+                    "SELECT payload_json FROM (SELECT id, payload_json FROM policy_adjustments ORDER BY id DESC LIMIT ?) ORDER BY id",
+                    (self.MAX_POLICY_ADJUSTMENTS,),
                 ).fetchall()
             ]
             control_state = {
@@ -128,6 +137,9 @@ class SQLiteStateStore:
                 """,
                 (node_id, payload_json, now),
             )
+            self._heartbeat_writes += 1
+            if self._heartbeat_writes % 256 == 0:
+                self._prune_table_locked("heartbeats", self.MAX_HEARTBEATS)
             self.conn.commit()
 
     def save_lease(self, lease_payload: dict[str, Any]) -> None:
@@ -169,6 +181,7 @@ class SQLiteStateStore:
                     now,
                 ),
             )
+            self._prune_table_locked("execution_records", self.MAX_EXECUTION_RECORDS)
             self.conn.commit()
 
     def append_decision(self, decision_payload: dict[str, Any]) -> None:
@@ -182,6 +195,7 @@ class SQLiteStateStore:
                 """,
                 (decision_payload["task_id"], decision_payload["node_id"], payload_json, now),
             )
+            self._prune_table_locked("decisions", self.MAX_DECISIONS)
             self.conn.commit()
 
     def append_policy_adjustment(self, adjustment_payload: dict[str, Any]) -> None:
@@ -195,6 +209,7 @@ class SQLiteStateStore:
                 """,
                 (adjustment_payload["tick"], payload_json, now),
             )
+            self._prune_table_locked("policy_adjustments", self.MAX_POLICY_ADJUSTMENTS)
             self.conn.commit()
 
     def set_control_value(self, key: str, value: Any) -> None:
@@ -279,4 +294,18 @@ class SQLiteStateStore:
                 );
                 """
             )
+            self.conn.execute("PRAGMA user_version = 1")
+            self._prune_table_locked("heartbeats", self.MAX_HEARTBEATS)
+            self._prune_table_locked("execution_records", self.MAX_EXECUTION_RECORDS)
+            self._prune_table_locked("decisions", self.MAX_DECISIONS)
+            self._prune_table_locked("policy_adjustments", self.MAX_POLICY_ADJUSTMENTS)
             self.conn.commit()
+
+    def _prune_table_locked(self, table: str, keep: int) -> None:
+        allowed = {"heartbeats", "execution_records", "decisions", "policy_adjustments"}
+        if table not in allowed:
+            raise ValueError(f"unsupported retention table: {table}")
+        self.conn.execute(
+            f"DELETE FROM {table} WHERE id NOT IN (SELECT id FROM {table} ORDER BY id DESC LIMIT ?)",
+            (max(1, int(keep)),),
+        )

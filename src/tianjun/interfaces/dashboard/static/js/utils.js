@@ -262,6 +262,11 @@ export function stableLatencyOf(node) {
 }
 
 export function resourceUtil(node, key) {
+  const runtime = node?.runtime_utilization?.[key] ?? node?.runtime_telemetry?.[key];
+  if (runtime !== null && runtime !== undefined && Number.isFinite(Number(runtime))) {
+    const value = Number(runtime);
+    return Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
+  }
   const total = Number(node?.capacity?.[key] ?? 0);
   const available = Number(node?.available?.[key] ?? 0);
   if (total <= 0) return 0;

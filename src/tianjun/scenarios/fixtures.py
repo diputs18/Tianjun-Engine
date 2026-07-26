@@ -52,6 +52,12 @@ def node_from_dict(data: dict[str, Any]) -> Node:
         task_energy_kwh_total=float(data.get("task_energy_kwh_total", 0.0)),
         task_operational_carbon_g_total=float(data.get("task_operational_carbon_g_total", 0.0)),
         carbon_signal_timestamp=data.get("carbon_signal_timestamp"),
+        runtime_telemetry={
+            str(key): float(value)
+            for key, value in dict(data.get("runtime_telemetry", {})).items()
+        },
+        telemetry_source=data.get("telemetry_source"),
+        simulation_tick=data.get("simulation_tick"),
     )
 
 

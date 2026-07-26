@@ -78,6 +78,9 @@ class Node:
     task_energy_kwh_total: float = 0.0
     task_operational_carbon_g_total: float = 0.0
     carbon_signal_timestamp: float | None = None
+    runtime_telemetry: dict[str, float] = field(default_factory=dict)
+    telemetry_source: str | None = None
+    simulation_tick: float | None = None
 
     def __post_init__(self) -> None:
         self.location = self.location or self.region
@@ -104,6 +107,11 @@ class Node:
                 profile if isinstance(profile, NetworkPathProfile) else NetworkPathProfile(**profile)
             )
             for region, profile in self.network_paths.items()
+        }
+        self.runtime_telemetry = {
+            str(key): clamp(float(value))
+            for key, value in self.runtime_telemetry.items()
+            if value is not None
         }
 
     def used(self) -> ResourceVector:
@@ -258,4 +266,10 @@ class Node:
             "task_energy_kwh_total": round(self.task_energy_kwh_total, 8),
             "task_operational_carbon_g_total": round(self.task_operational_carbon_g_total, 6),
             "carbon_signal_timestamp": self.carbon_signal_timestamp,
+            "runtime_telemetry": {
+                key: round(value, 6)
+                for key, value in sorted(self.runtime_telemetry.items())
+            },
+            "telemetry_source": self.telemetry_source,
+            "simulation_tick": self.simulation_tick,
         }

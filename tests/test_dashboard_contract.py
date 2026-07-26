@@ -29,7 +29,33 @@ def test_topology_displays_gpu_capacity() -> None:
     assert "GPU ${escapeHtml(gpu)}" in topology
     assert "node-gpu" not in topology
     assert ".node-gpu" not in styles
-    assert topology.index('${detailRow("内存使用率", `${vm.memory}%`)}') < topology.index("${gpuDetail}")
+    assert topology.index('${detailRow("内存使用率", vm.memory)}') < topology.index("${gpuDetail}")
+    assert 'const cpu = utilizationOf(actualNode, "cpu")' in topology
+    assert "Math.min(92, Math.max(12" not in topology
+    assert 'recommendedLabel = parsedRecommended?.vmIndex' in topology
+
+
+def test_dashboard_tabs_expose_selected_state_and_controlled_panels() -> None:
+    index = Path("src/tianjun/interfaces/dashboard/static/index.html").read_text(encoding="utf-8")
+    router = Path("src/tianjun/interfaces/dashboard/static/js/router.js").read_text(encoding="utf-8")
+
+    assert 'aria-selected="true" aria-controls="page-overview"' in index
+    assert 'role="tabpanel" aria-labelledby="tab-overview"' in index
+    assert 'button.setAttribute("aria-selected", String(selected))' in router
+    assert "handleTabKeydown" in router
+
+
+def test_dashboard_uses_bounded_views_and_non_overlapping_polling() -> None:
+    api = Path("src/tianjun/interfaces/dashboard/static/js/api.js").read_text(encoding="utf-8")
+    router = Path("src/tianjun/interfaces/dashboard/static/js/router.js").read_text(encoding="utf-8")
+
+    assert 'fetchReport("summary"' in router
+    assert 'fetchReport(page' in router
+    assert 'setTimeout(() => void refreshDashboard()' in router
+    assert "setInterval" not in router
+    assert 'new AbortController()' in router
+    assert 'document.addEventListener("visibilitychange"' in router
+    assert '`/report/${encodeURIComponent(view)}${suffix}`' in api
 
 
 def test_dashboard_exposes_hierarchical_batch_strategy_and_group_weights() -> None:

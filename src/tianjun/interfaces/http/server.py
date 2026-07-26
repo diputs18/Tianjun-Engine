@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -10,12 +12,43 @@ from urllib.parse import parse_qs, urlparse
 
 from ...application.control_plane import CentralControlPlane
 from ...application.batch_scheduling_service import BatchRequestError, MAX_BATCH_BYTES
+from ...application.dashboard_reporting import dashboard_report_view
 from ...chat import ChatRuntime
 from ...scenarios import node_from_dict, task_from_dict
 from ..dashboard.page import render_dashboard_html
 from .legacy_routes import handle_legacy_get, handle_legacy_post
 
 STATIC_DASHBOARD_DIR = Path(__file__).resolve().parents[1] / "dashboard" / "static"
+LOGGER = logging.getLogger(__name__)
+
+
+def _public_health_payload(control_plane: CentralControlPlane, chat: ChatRuntime) -> dict[str, Any]:
+    model_runtime = dict(control_plane.scheduler.model_runtime.describe())
+    model_runtime.pop("model_dir", None)
+    trained_models = model_runtime.pop("trained_models", {}) or {}
+    model_runtime["trained_models"] = sorted(trained_models)
+
+    chat_runtime = chat.describe()
+    llm = dict(chat_runtime.get("llm") or {})
+    settings = dict(llm.get("settings") or {})
+    settings.pop("api_key_fingerprint", None)
+    settings.pop("api_key_source", None)
+    llm["settings"] = settings
+    chat_runtime = {**chat_runtime, "llm": llm}
+
+    issues: list[str] = []
+    if model_runtime.get("status") in {"error", "missing", "unavailable"}:
+        issues.append("模型运行时不可用")
+    if settings.get("required") and not llm.get("enabled"):
+        issues.append("必需的 LLM 未启用")
+    return {
+        "status": "ok" if not issues else "degraded",
+        "ready": not issues,
+        "issues": issues,
+        "model_runtime": model_runtime,
+        "chat_runtime": chat_runtime,
+        "persistence": {"enabled": control_plane.state_store is not None},
+    }
 
 
 def build_http_server(
@@ -27,7 +60,10 @@ def build_http_server(
 ) -> ThreadingHTTPServer:
     chat = chat_runtime or ChatRuntime(control_plane)
     class ControlPlaneHandler(BaseHTTPRequestHandler):
-        server_version = "TianjunControlPlane/0.2"
+        server_version = "TianjunControlPlane/0.3"
+
+        def version_string(self) -> str:
+            return self.server_version
 
         def do_GET(self) -> None:  # noqa: N802
             path = urlparse(self.path).path
@@ -40,15 +76,28 @@ def build_http_server(
                 if path == "/report":
                     self._write_json(200, control_plane.build_report())
                     return
-                if path == "/health":
+                if path.startswith("/report/"):
+                    view = path.removeprefix("/report/").strip("/")
+                    query = parse_qs(urlparse(self.path).query)
+                    cursor = int(query.get("cursor", ["0"])[0])
+                    limit = int(query.get("limit", ["50"])[0])
                     self._write_json(
                         200,
-                        {
-                            "status": "ok",
-                            "model_runtime": control_plane.scheduler.model_runtime.describe(),
-                            "chat_runtime": chat.describe(),
-                        },
+                        dashboard_report_view(
+                            control_plane.build_report(),
+                            view,
+                            cursor=cursor,
+                            limit=limit,
+                        ),
                     )
+                    return
+                if path == "/health":
+                    payload = _public_health_payload(control_plane, chat)
+                    self._write_json(200, payload)
+                    return
+                if path == "/ready":
+                    payload = _public_health_payload(control_plane, chat)
+                    self._write_json(200 if payload["ready"] else 503, payload)
                     return
                 if handle_legacy_get(self, path, control_plane, chat):
                     return
@@ -56,13 +105,11 @@ def build_http_server(
                     if path.endswith("/metrics"):
                         batch_id = path.removeprefix("/task-batches/").removesuffix("/metrics").strip("/")
                         result = control_plane.get_task_batch_actual_metrics(batch_id)
-                        self._record_external_tool("get_batch_actual_metrics", result, batch_id=batch_id)
                         self._write_json(200, result)
                         return
                     batch_id = path.removeprefix("/task-batches/").strip("/")
                     if batch_id:
                         result = control_plane.get_task_batch(batch_id)
-                        self._record_external_tool("get_task_batch", result, batch_id=batch_id)
                         self._write_json(200, result)
                         return
                 if path.startswith("/policies/"):
@@ -84,7 +131,7 @@ def build_http_server(
             except BatchRequestError as exc:
                 self._write_json(exc.status_code, exc.payload)
             except Exception as exc:  # noqa: BLE001
-                self._write_json(400, {"error": str(exc)})
+                self._write_exception(exc)
 
         def do_POST(self) -> None:  # noqa: N802
             path = urlparse(self.path).path
@@ -97,7 +144,6 @@ def build_http_server(
                         result = control_plane.import_task_batch_csv(raw.decode("utf-8"), batch_name=name)
                     else:
                         result = control_plane.import_task_batch(json.loads(raw.decode("utf-8") or "{}"))
-                    self._record_external_tool("import_task_batch", result, batch_id=result.get("batch_id"))
                     self._write_json(201, result)
                     return
                 payload = self._read_json()
@@ -125,6 +171,9 @@ def build_http_server(
                         operational_carbon_g_delta=payload.get("operational_carbon_g_delta"),
                         carbon_intensity_g_per_kwh=payload.get("carbon_intensity_g_per_kwh"),
                         carbon_signal_timestamp=payload.get("carbon_signal_timestamp"),
+                        runtime_telemetry=payload.get("telemetry"),
+                        telemetry_source=("cloudsim" if payload.get("simulated") else "node_agent"),
+                        simulation_tick=payload.get("sim_tick"),
                     )
                     self._write_json(200, result)
                     return
@@ -135,14 +184,10 @@ def build_http_server(
                             batch_id = path.removeprefix("/task-batches/").removesuffix(suffix).strip("/")
                             if suffix == "/preview":
                                 result = control_plane.preview_batch_schedule(batch_id, payload)
-                                tool_name = "preview_batch_schedule"
                             elif suffix == "/compare":
                                 result = control_plane.compare_batch_strategies(batch_id, payload)
-                                tool_name = "compare_batch_strategies"
                             else:
                                 result = control_plane.commit_batch_schedule(batch_id, payload)
-                                tool_name = "commit_batch_schedule"
-                            self._record_external_tool(tool_name, result, batch_id=batch_id, plan_id=result.get("plan_id"))
                             self._write_json(200, result)
                             return
                 if path == "/schedule/preview":
@@ -341,7 +386,7 @@ def build_http_server(
             except BatchRequestError as exc:
                 self._write_json(exc.status_code, exc.payload)
             except Exception as exc:  # noqa: BLE001
-                self._write_json(400, {"error": str(exc)})
+                self._write_exception(exc)
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
             return
@@ -357,10 +402,13 @@ def build_http_server(
             return self.rfile.read(length) if length else b""
 
         def _write_json(self, status: int, payload: Any) -> None:
+            self._record_external_tool_response(status, payload)
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self._write_security_headers()
             self.end_headers()
             self.wfile.write(body)
 
@@ -378,6 +426,8 @@ def build_http_server(
             self.send_response(200)
             self.send_header("Content-Type", f"{content_type}; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache")
+            self._write_security_headers()
             self.end_headers()
             self.wfile.write(body)
             return True
@@ -427,22 +477,17 @@ def build_http_server(
                 "policy": policy,
             }
 
-        def _record_external_tool(
-            self,
-            fallback_tool_name: str,
-            result: dict[str, Any],
-            *,
-            batch_id: str | None = None,
-            plan_id: str | None = None,
-        ) -> None:
-            if self.headers.get("X-Tianjun-Caller") != "external_mcp":
+        def _record_external_tool_response(self, status: int, payload: Any) -> None:
+            tool_name = self.headers.get("X-Tianjun-Tool")
+            if self.headers.get("X-Tianjun-Caller") != "external_mcp" or not tool_name:
                 return
+            result = payload if isinstance(payload, dict) else {}
             control_plane.record_tool_call(
-                tool_name=self.headers.get("X-Tianjun-Tool") or fallback_tool_name,
+                tool_name=tool_name,
                 actor="external_mcp",
-                result_status="success",
-                batch_id=batch_id,
-                plan_id=plan_id,
+                result_status="success" if 200 <= status < 400 else "error",
+                batch_id=result.get("batch_id"),
+                plan_id=result.get("plan_id"),
                 session_id=self.headers.get("X-Tianjun-Session"),
                 request_id=self.headers.get("X-Request-ID"),
             )
@@ -453,6 +498,7 @@ def build_http_server(
             self.send_header("Cache-Control", "no-cache, no-transform")
             self.send_header("Connection", "close")
             self.send_header("X-Accel-Buffering", "no")
+            self._write_security_headers()
             self.end_headers()
 
             def emit(event: dict[str, Any]) -> None:
@@ -474,7 +520,34 @@ def build_http_server(
             self.send_response(status)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache")
+            self._write_security_headers()
             self.end_headers()
             self.wfile.write(body)
+
+        def _write_security_headers(self) -> None:
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+                "base-uri 'none'; frame-ancestors 'none'",
+            )
+
+        def _write_exception(self, exc: Exception) -> None:
+            if isinstance(exc, KeyError):
+                self._write_json(404, {"error": "not_found", "detail": str(exc).strip("'")})
+                return
+            if isinstance(exc, PermissionError):
+                self._write_json(403, {"error": "forbidden", "detail": str(exc)})
+                return
+            if isinstance(exc, (ValueError, TypeError, json.JSONDecodeError)):
+                self._write_json(400, {"error": "invalid_request", "detail": str(exc)})
+                return
+            request_id = self.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+            LOGGER.exception("Unhandled HTTP request error request_id=%s", request_id, exc_info=exc)
+            self._write_json(500, {"error": "internal_error", "request_id": request_id})
 
     return ThreadingHTTPServer((host, port), ControlPlaneHandler)

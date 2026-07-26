@@ -1,7 +1,13 @@
 const BASE = "";
 
-export async function fetchReport() { return _get("/report"); }
-export async function fetchHealth() { return _get("/health"); }
+export async function fetchReport(view = "summary", options = {}) {
+  const query = new URLSearchParams();
+  if (options.cursor !== undefined) query.set("cursor", String(options.cursor));
+  if (options.limit !== undefined) query.set("limit", String(options.limit));
+  const suffix = query.size ? `?${query}` : "";
+  return _get(`/report/${encodeURIComponent(view)}${suffix}`, options.signal);
+}
+export async function fetchHealth(options = {}) { return _get("/health", options.signal); }
 export async function startHermesSession(payload) { return _post("/chat/sessions", payload); }
 
 export async function streamHermesChat(sessionId, message, signal) {
@@ -45,8 +51,8 @@ export async function importTaskBatch(file) {
   return response.json();
 }
 
-async function _get(path) {
-  const r = await fetch(BASE + path);
+async function _get(path, signal) {
+  const r = await fetch(BASE + path, { signal });
   if (!r.ok) throw await responseError(r, `GET ${path}`);
   return r.json();
 }

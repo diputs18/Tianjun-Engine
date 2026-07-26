@@ -208,6 +208,7 @@ class TaskLeaseService:
         if remove_from_pending and task.task_id in control.pending_queue:
             control.pending_queue.remove(task.task_id)
         control.decision_log.append(decision)
+        control.decision_log = control.decision_log[-2000:]
 
         lease = TaskLease(
             task_id=task.task_id,

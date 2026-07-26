@@ -161,6 +161,8 @@ class CentralControlPlane:
                 "result_status": result_status,
             })
             self.tool_audit_log = self.tool_audit_log[-200:]
+            if self.state_store is not None:
+                self.state_store.set_control_value("tool_audit_log", list(self.tool_audit_log))
 
     def parse_requirement(
         self,
@@ -309,6 +311,9 @@ class CentralControlPlane:
         operational_carbon_g_delta: float | None = None,
         carbon_intensity_g_per_kwh: float | None = None,
         carbon_signal_timestamp: float | None = None,
+        runtime_telemetry: dict[str, float] | None = None,
+        telemetry_source: str | None = None,
+        simulation_tick: float | None = None,
     ) -> dict[str, Any]:
         return self.node_registry.record_heartbeat(
             node_id,
@@ -327,6 +332,9 @@ class CentralControlPlane:
             operational_carbon_g_delta=operational_carbon_g_delta,
             carbon_intensity_g_per_kwh=carbon_intensity_g_per_kwh,
             carbon_signal_timestamp=carbon_signal_timestamp,
+            runtime_telemetry=runtime_telemetry,
+            telemetry_source=telemetry_source,
+            simulation_tick=simulation_tick,
         )
 
     def request_lease(self, node_id: str) -> dict[str, Any] | None:
@@ -459,6 +467,7 @@ class CentralControlPlane:
                 storage_utilization=clamp(float(result_metadata.get("storage_utilization", 0.0))),
             )
             self.execution_history.append(record)
+            self.execution_history = self.execution_history[-SQLiteStateStore.MAX_EXECUTION_RECORDS:]
             self.task_progress.pop(task_id, None)
             node.update_after_record(task, record)
             node.task_energy_kwh_total += energy_kwh
@@ -645,8 +654,16 @@ class CentralControlPlane:
                 ),
                 self.current_tick(),
             )
+            external_mcp_calls = [
+                item for item in self.tool_audit_log if item.get("actor") == "external_mcp"
+            ]
+            external_mcp_successes = [
+                item for item in external_mcp_calls if item.get("result_status") == "success"
+            ]
             return {
                 "tick": self.current_tick(),
+                "generated_at": time.time(),
+                "report_version": f"{self.resource_snapshot_version}:{self.current_tick()}",
                 "totals": {
                     "tasks": len(self.tasks),
                     "completed_attempts": len(self.execution_history),
@@ -720,7 +737,10 @@ class CentralControlPlane:
                 },
                 "batch_scheduling": self.batch_scheduling_service.report(),
                 "toolchain_runtime": {
-                    "external_mcp_last_success": next((item for item in reversed(self.tool_audit_log) if item["actor"] == "external_mcp" and item["result_status"] == "success"), None),
+                    "external_mcp_last_call": external_mcp_calls[-1] if external_mcp_calls else None,
+                    "external_mcp_last_success": external_mcp_successes[-1] if external_mcp_successes else None,
+                    "external_mcp_call_count": len(external_mcp_calls),
+                    "external_mcp_success_count": len(external_mcp_successes),
                     "recent_calls": list(self.tool_audit_log[-20:]),
                 },
                 "resource_snapshot_version": self.resource_snapshot_version,
@@ -805,7 +825,13 @@ class CentralControlPlane:
             **node.to_dict(),
             "last_heartbeat_age": round(time.monotonic() - self.last_heartbeat_at.get(node.node_id, self.started_at), 3),
         }
-        runtime_utilization = {"cpu": 0.0, "memory": 0.0, "gpu": 0.0, "storage": 0.0}
+        runtime_utilization: dict[str, float | None] = {
+            "cpu": node.runtime_telemetry.get("cpu"),
+            "memory": node.runtime_telemetry.get("memory"),
+            "gpu": node.runtime_telemetry.get("gpu"),
+            "storage": node.runtime_telemetry.get("storage"),
+            "bandwidth": node.runtime_telemetry.get("bandwidth"),
+        }
         active_task_ids: list[str] = []
         active_stages: list[str] = []
         for progress in self.task_progress.values():
@@ -819,10 +845,17 @@ class CentralControlPlane:
             util = dict(dict(progress.get("metrics") or {}).get("simulated_utilization") or {})
             for key in runtime_utilization:
                 try:
-                    runtime_utilization[key] = max(runtime_utilization[key], float(util.get(key, 0.0)))
+                    observed = util.get(key)
+                    if observed is not None:
+                        current = runtime_utilization[key]
+                        runtime_utilization[key] = max(0.0 if current is None else current, float(observed))
                 except (TypeError, ValueError):
                     pass
-        payload["runtime_utilization"] = {key: round(clamp(value), 4) for key, value in runtime_utilization.items()}
+        payload["runtime_utilization"] = {
+            key: None if value is None else round(clamp(value), 4)
+            for key, value in runtime_utilization.items()
+        }
+        payload["runtime_telemetry_available"] = any(value is not None for value in runtime_utilization.values())
         payload["active_task_ids"] = active_task_ids
         payload["active_stages"] = active_stages
         return payload
@@ -1028,6 +1061,12 @@ class CentralControlPlane:
         restored_group_weights = snapshot["control_state"].get("policy_group_weights")
         if restored_group_weights:
             self.policy_state.group_weights = restored_group_weights
+
+        restored_tool_audit_log = snapshot["control_state"].get("tool_audit_log")
+        if isinstance(restored_tool_audit_log, list):
+            self.tool_audit_log = [
+                dict(item) for item in restored_tool_audit_log if isinstance(item, dict)
+            ][-200:]
 
         restored_topology = snapshot["control_state"].get("physical_topology")
         if restored_topology:

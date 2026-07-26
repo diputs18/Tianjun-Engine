@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .control_plane import CentralControlPlane
     from ..domain import Node
 
-from ..domain import NetworkPathProfile
+from ..domain import NetworkPathProfile, clamp
 
 
 @dataclass(slots=True)
@@ -57,6 +57,9 @@ class NodeRegistry:
         operational_carbon_g_delta: float | None = None,
         carbon_intensity_g_per_kwh: float | None = None,
         carbon_signal_timestamp: float | None = None,
+        runtime_telemetry: dict[str, float] | None = None,
+        telemetry_source: str | None = None,
+        simulation_tick: float | None = None,
     ) -> dict[str, Any]:
         control = self.control_plane
         with control.lock:
@@ -102,6 +105,24 @@ class NodeRegistry:
                 node.operational_carbon_g_total += max(0.0, float(energy_kwh_delta)) * node.carbon_profile.pue * intensity
             if carbon_signal_timestamp is not None:
                 node.carbon_signal_timestamp = float(carbon_signal_timestamp)
+            if runtime_telemetry is not None:
+                aliases = {
+                    "ram_utilization": "memory",
+                    "memory_utilization": "memory",
+                    "cpu_utilization": "cpu",
+                    "gpu_utilization": "gpu",
+                    "storage_utilization": "storage",
+                    "bandwidth_utilization": "bandwidth",
+                }
+                node.runtime_telemetry = {
+                    aliases.get(str(key), str(key)): clamp(float(value))
+                    for key, value in runtime_telemetry.items()
+                    if value is not None
+                }
+            if telemetry_source is not None:
+                node.telemetry_source = str(telemetry_source)
+            if simulation_tick is not None:
+                node.simulation_tick = float(simulation_tick)
             node.resource_version += 1
             control.resource_snapshot_version += 1
             control.last_heartbeat_at[node_id] = time.monotonic()
@@ -117,6 +138,9 @@ class NodeRegistry:
                 "energy_kwh_total": node.energy_kwh_total,
                 "operational_carbon_g_total": node.operational_carbon_g_total,
                 "carbon_signal_timestamp": node.carbon_signal_timestamp,
+                "runtime_telemetry": dict(node.runtime_telemetry),
+                "telemetry_source": node.telemetry_source,
+                "simulation_tick": node.simulation_tick,
                 "network_paths": {
                     region: profile.to_dict()
                     for region, profile in sorted(node.network_paths.items(), key=lambda item: item[0])
