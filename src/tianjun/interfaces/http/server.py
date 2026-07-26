@@ -12,7 +12,8 @@ from urllib.parse import parse_qs, urlparse
 
 from ...application.control_plane import CentralControlPlane
 from ...application.batch_scheduling_service import BatchRequestError, MAX_BATCH_BYTES
-from ...application.dashboard_reporting import dashboard_report_view
+from ...application.dashboard_reporting import build_dashboard_report
+from ...application.lifecycle import LifecycleSweeper
 from ...chat import ChatRuntime
 from ...scenarios import node_from_dict, task_from_dict
 from ..dashboard.page import render_dashboard_html
@@ -22,7 +23,30 @@ STATIC_DASHBOARD_DIR = Path(__file__).resolve().parents[1] / "dashboard" / "stat
 LOGGER = logging.getLogger(__name__)
 
 
-def _public_health_payload(control_plane: CentralControlPlane, chat: ChatRuntime) -> dict[str, Any]:
+class TianjunHttpServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, server_address, handler, lifecycle: LifecycleSweeper) -> None:
+        self.lifecycle = lifecycle
+        super().__init__(server_address, handler)
+
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        self.lifecycle.start()
+        try:
+            super().serve_forever(poll_interval=poll_interval)
+        finally:
+            self.lifecycle.stop()
+
+    def server_close(self) -> None:
+        self.lifecycle.stop()
+        super().server_close()
+
+
+def _public_health_payload(
+    control_plane: CentralControlPlane,
+    chat: ChatRuntime,
+    lifecycle: LifecycleSweeper | None = None,
+) -> dict[str, Any]:
     model_runtime = dict(control_plane.scheduler.model_runtime.describe())
     model_runtime.pop("model_dir", None)
     trained_models = model_runtime.pop("trained_models", {}) or {}
@@ -41,13 +65,29 @@ def _public_health_payload(control_plane: CentralControlPlane, chat: ChatRuntime
         issues.append("模型运行时不可用")
     if settings.get("required") and not llm.get("enabled"):
         issues.append("必需的 LLM 未启用")
+    persistence = {
+        "enabled": control_plane.state_store is not None,
+        "schema_version": None,
+        "integrity": None,
+        "writable": None,
+    }
+    if control_plane.state_store is not None:
+        database_readiness = control_plane.state_store.readiness()
+        persistence.update({
+            "schema_version": control_plane.state_store.schema_version,
+            "integrity": database_readiness.get("integrity"),
+            "writable": database_readiness.get("writable"),
+        })
+        if not database_readiness.get("ready"):
+            issues.append("状态数据库不可写或完整性检查失败")
     return {
         "status": "ok" if not issues else "degraded",
         "ready": not issues,
         "issues": issues,
         "model_runtime": model_runtime,
         "chat_runtime": chat_runtime,
-        "persistence": {"enabled": control_plane.state_store is not None},
+        "persistence": persistence,
+        "lifecycle": None if lifecycle is None else lifecycle.snapshot(),
     }
 
 
@@ -57,7 +97,8 @@ def build_http_server(
     port: int,
     *,
     chat_runtime: ChatRuntime | None = None,
-) -> ThreadingHTTPServer:
+    lifecycle_sweep_interval_seconds: float = 1.0,
+) -> TianjunHttpServer:
     chat = chat_runtime or ChatRuntime(control_plane)
     class ControlPlaneHandler(BaseHTTPRequestHandler):
         server_version = "TianjunControlPlane/0.3"
@@ -83,8 +124,8 @@ def build_http_server(
                     limit = int(query.get("limit", ["50"])[0])
                     self._write_json(
                         200,
-                        dashboard_report_view(
-                            control_plane.build_report(),
+                        build_dashboard_report(
+                            control_plane,
                             view,
                             cursor=cursor,
                             limit=limit,
@@ -92,11 +133,11 @@ def build_http_server(
                     )
                     return
                 if path == "/health":
-                    payload = _public_health_payload(control_plane, chat)
+                    payload = _public_health_payload(control_plane, chat, self.server.lifecycle)
                     self._write_json(200, payload)
                     return
                 if path == "/ready":
-                    payload = _public_health_payload(control_plane, chat)
+                    payload = _public_health_payload(control_plane, chat, self.server.lifecycle)
                     self._write_json(200 if payload["ready"] else 503, payload)
                     return
                 if handle_legacy_get(self, path, control_plane, chat):
@@ -172,7 +213,10 @@ def build_http_server(
                         carbon_intensity_g_per_kwh=payload.get("carbon_intensity_g_per_kwh"),
                         carbon_signal_timestamp=payload.get("carbon_signal_timestamp"),
                         runtime_telemetry=payload.get("telemetry"),
-                        telemetry_source=("cloudsim" if payload.get("simulated") else "node_agent"),
+                        telemetry_source=(
+                            payload.get("telemetry_source")
+                            or ("cloudsim" if payload.get("simulated") else "node_agent")
+                        ),
                         simulation_tick=payload.get("sim_tick"),
                     )
                     self._write_json(200, result)
@@ -340,6 +384,13 @@ def build_http_server(
                 if path == "/leases/next":
                     self._write_json(200, control_plane.request_lease(payload["node_id"]))
                     return
+                if path == "/leases/ack":
+                    self._write_json(200, control_plane.acknowledge_lease(
+                        node_id=str(payload["node_id"]),
+                        task_id=str(payload["task_id"]),
+                        lease_id=str(payload["lease_id"]),
+                    ))
+                    return
                 if path == "/task-runs/progress":
                     self._write_json(
                         200,
@@ -351,6 +402,7 @@ def build_http_server(
                             progress=payload.get("progress"),
                             message=payload.get("message"),
                             metrics=payload.get("metrics"),
+                            lease_id=payload.get("lease_id"),
                         ),
                     )
                     return
@@ -379,6 +431,8 @@ def build_http_server(
                         returncode=payload.get("returncode"),
                         cost=payload.get("cost"),
                         metadata=result_metadata,
+                        lease_id=payload.get("lease_id"),
+                        result_id=payload.get("result_id"),
                     )
                     self._write_json(200, result)
                     return
@@ -550,4 +604,8 @@ def build_http_server(
             LOGGER.exception("Unhandled HTTP request error request_id=%s", request_id, exc_info=exc)
             self._write_json(500, {"error": "internal_error", "request_id": request_id})
 
-    return ThreadingHTTPServer((host, port), ControlPlaneHandler)
+    lifecycle = LifecycleSweeper(
+        control_plane,
+        interval_seconds=lifecycle_sweep_interval_seconds,
+    )
+    return TianjunHttpServer((host, port), ControlPlaneHandler, lifecycle)

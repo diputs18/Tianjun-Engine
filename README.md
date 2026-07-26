@@ -86,9 +86,13 @@ CloudSimPlus 示例节点会随注册请求上报 CPU、内存、GPU、存储、
 任务下发后的状态流转如下：
 
 1. `/tasks` 或策略提交只把任务写入控制平面并加入 `pending_queue`，此时任务会显示为“待调度”，还不会出现在执行记录。
-2. CloudSimPlus 桥接器或真实节点代理持续心跳并请求 `/leases/next`，控制平面才会做调度决策并把任务租约发给目标节点。
-3. 节点执行过程中回传 `/task-runs/progress`，Dashboard 的拓扑路径会根据 `/report` 中的 `active_runs`、最新进度、调度决策和节点 inventory 实时切换。
-4. 节点最终回传 `/task-runs/result` 后，控制平面才写入执行记录；因此“执行记录没有这个任务”通常表示任务还在待调度队列或已发租约但尚未回传结果。
+2. CloudSimPlus 桥接器或真实节点代理持续心跳并请求 `/leases/next`，取得带唯一 `lease_id` 和 TTL 的任务租约，再通过 `/leases/ack` 确认领取。
+3. 节点执行过程中回传 `/task-runs/progress`，进度会续期租约；超时且没有续期的租约会释放资源并按重试策略重新排队。
+4. 节点最终通过 `/task-runs/result` 携带 `lease_id` 与稳定的 `result_id` 回传结果；相同结果重试会返回同一收据，不会重复写执行记录。
+
+控制平面默认把 SQLite v2 状态库写入平台用户状态目录（`${TIANJUN_STATE_DIR}/tianjun-state.sqlite`）。节点最后在线时间、任务、批次、预演计划、预留账本、幂等映射与结果收据均可跨进程重启恢复；可用 `--state-db` 覆盖路径。数据库升级前会在原目录创建 `*.pre-v2-from-v*.bak` 完整备份；高于程序支持版本的数据库会拒绝打开，迁移失败会整体回滚。`/ready` 会执行完整性检查和可逆写入探测。Dashboard 中“实时遥测”“CloudSim 模拟”“配置曲线”和“分配估算”是不同来源，不应互相替代解读。
+
+HTTP 服务内置独立生命周期清理器，不依赖 Dashboard 轮询即可回收过期节点和租约。默认每秒检查一次，可通过 `server.lifecycle_sweep_interval_seconds` 调整；服务关闭时会等待清理线程安全退出。
 
 ### 5. 打开 Dashboard
 
@@ -113,6 +117,8 @@ python -B main.py mcp-server `
 ```
 
 MCP server 会把 Tianjun HTTP API 包装为工具，包括读取集群状态、开始/继续聊天会话、起草/比较/仿真/解释策略，以及带确认边界的策略提交和任务调度。
+
+顶部的 MCP 状态只统计真正带 MCP 工具标识的 HTTP 请求，启动 MCP 进程本身不算成功调用。测试套件会启动真实 stdio MCP 子进程并调用 `get_cluster_state`，验证 Dashboard 的最近调用和成功计数同步更新。
 
 ### 7. 可选：真实节点代理
 
@@ -144,6 +150,15 @@ python scripts\smoke_test.py --port 8135
 ```
 
 该脚本会启动离线控制平面，检查 `/health`、`/report`、`/dashboard`，并验证 MCP 工具契约可导入。它用于快速验证，不代表完整启动。
+
+前端逻辑和真实浏览器回归分别运行：
+
+```powershell
+npm run test:frontend
+npm run test:browser
+```
+
+浏览器回归使用 Chromium 覆盖 1366 和 1920 两档 PC 视口，包括标签页键盘语义、轮询竞态、拓扑图层、空态/错误态和拓扑几何边界。
 
 
 ## LLM 配置

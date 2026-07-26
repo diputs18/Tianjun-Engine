@@ -24,6 +24,16 @@ def handle(args: Namespace, app_config: TianjunConfig) -> None:
         app_config.get("control_plane.heartbeat_timeout_seconds"),
         default=15.0,
     ))
+    lease_timeout = float(first_present(
+        app_config.get("server.lease_timeout_seconds"),
+        app_config.get("control_plane.lease_timeout_seconds"),
+        default=60.0,
+    ))
+    lifecycle_sweep_interval = float(first_present(
+        app_config.get("server.lifecycle_sweep_interval_seconds"),
+        app_config.get("control_plane.lifecycle_sweep_interval_seconds"),
+        default=1.0,
+    ))
     policy_update_interval = int(first_present(
         args.policy_update_interval,
         app_config.get("server.policy_update_interval"),
@@ -34,6 +44,7 @@ def handle(args: Namespace, app_config: TianjunConfig) -> None:
     control_plane = build_control_plane(
         state_store=state_store,
         heartbeat_timeout_seconds=heartbeat_timeout,
+        lease_timeout_seconds=lease_timeout,
         policy_update_interval=policy_update_interval,
         model_dir=resolved_model_dir(args, app_config),
         require_model=require_model(args, app_config),
@@ -53,7 +64,13 @@ def handle(args: Namespace, app_config: TianjunConfig) -> None:
         for task in scenario_tasks():
             control_plane.submit_task(task)
     chat_runtime = ChatRuntime.with_llm_settings(control_plane, resolved_llm_settings(args, app_config))
-    server = build_http_server(control_plane, host, port, chat_runtime=chat_runtime)
+    server = build_http_server(
+        control_plane,
+        host,
+        port,
+        chat_runtime=chat_runtime,
+        lifecycle_sweep_interval_seconds=lifecycle_sweep_interval,
+    )
     print(f"Control plane listening on http://{host}:{port}")
     print(f"Dashboard available at http://{host}:{port}/dashboard")
     try:

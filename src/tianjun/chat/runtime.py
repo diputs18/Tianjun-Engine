@@ -4,126 +4,23 @@ import json
 import re
 import time
 import uuid
-from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ..application.control_plane import CentralControlPlane
 from ..llm import LLMSettings, OpenAICompatibleClient
 from ..tools import TianjunToolService
-from ..policy.generator import REGION_ALIASES
+from ..policy.constants import REGION_ALIASES
+from .constants import (
+    CANCEL_WORDS as _CANCEL_WORDS,
+    CONFIRM_WORDS as _CONFIRM_WORDS,
+    FACTOR_LABELS as _FACTOR_LABELS,
+    FEEDBACK_WORDS as _FEEDBACK_WORDS,
+    REGION_LABELS as _REGION_LABELS,
+    WORKLOAD_LABELS as _WORKLOAD_LABELS,
+)
+from .models import ChatSession, ChatTurn
 
 StreamEmit = Callable[[dict[str, Any]], None]
-
-_CONFIRM_WORDS = ("确认", "提交", "同意", "批准", "可以执行", "开始执行", "commit", "approve", "submit", "yes")
-_CANCEL_WORDS = ("取消", "先不", "不要提交", "别提交", "stop", "cancel")
-_FEEDBACK_WORDS = (
-    "太高",
-    "太慢",
-    "太贵",
-    "不满意",
-    "优化",
-    "调整",
-    "换",
-    "降低",
-    "提高",
-    "成本",
-    "预算",
-    "延迟",
-    "时延",
-    "安全",
-    "sla",
-    "qos",
-    "反馈",
-)
-_REGION_LABELS = {
-    "east": "东部区域",
-    "west": "西部区域",
-    "south": "华南区域",
-    "dc1": "DC1",
-    "dc2": "DC2",
-    "dc3": "DC3",
-    "shanghai": "上海",
-    "beijing": "北京",
-    "hangzhou": "杭州",
-    "shenzhen": "深圳",
-    "guangzhou": "广州",
-    "dongguan": "东莞",
-    "chengdu": "成都",
-    "chongqing": "重庆",
-    "wuhan": "武汉",
-    "huizhou": "惠州",
-    "zhuhai": "珠海",
-    "foshan": "佛山",
-    "zhongshan": "中山",
-}
-_WORKLOAD_LABELS = {
-    "inference": "推理",
-    "training": "训练",
-    "streaming": "流式处理",
-    "analytics": "分析",
-    "batch": "批处理",
-}
-_FACTOR_LABELS = {
-    "network": "网络质量",
-    "completion": "任务完成能力",
-    "performance": "算力性能",
-    "security": "安全匹配度",
-    "cost": "成本表现",
-    "load": "负载余量",
-    "availability": "可用性",
-}
-
-
-@dataclass(slots=True)
-class ChatTurn:
-    role: str
-    content: str
-    created_at: float = field(default_factory=time.time)
-    tool_name: str | None = None
-    tool_payload: dict[str, Any] | None = None
-
-    def to_dict(self, *, include_tool_payload: bool = True) -> dict[str, Any]:
-        payload = {
-            "role": self.role,
-            "content": self.content,
-            "created_at": round(self.created_at, 4),
-        }
-        if self.tool_name:
-            payload["tool_name"] = self.tool_name
-        if include_tool_payload and self.tool_payload is not None:
-            payload["tool_payload"] = self.tool_payload
-        return payload
-
-
-@dataclass(slots=True)
-class ChatSession:
-    session_id: str
-    status: str = "active"
-    requirement_session_id: str | None = None
-    policy_id: str | None = None
-    pending_confirmation: bool = False
-    pending_option_selection: bool = False
-    policy_options: dict[str, str] = field(default_factory=dict)
-    turns: list[ChatTurn] = field(default_factory=list)
-    tool_trace: list[dict[str, Any]] = field(default_factory=list)
-    created_at: float = field(default_factory=time.time)
-    updated_at: float = field(default_factory=time.time)
-
-    def to_dict(self, *, include_tool_payload: bool = True) -> dict[str, Any]:
-        return {
-            "session_id": self.session_id,
-            "status": self.status,
-            "requirement_session_id": self.requirement_session_id,
-            "policy_id": self.policy_id,
-            "pending_confirmation": self.pending_confirmation,
-            "pending_option_selection": self.pending_option_selection,
-            "policy_options": dict(self.policy_options),
-            "turns": [turn.to_dict(include_tool_payload=include_tool_payload) for turn in self.turns],
-            "tool_trace": list(self.tool_trace),
-            "created_at": round(self.created_at, 4),
-            "updated_at": round(self.updated_at, 4),
-        }
-
 
 class ChatRuntime:
     """Conversation orchestrator for Tianjun's controlled LLM/chat boundary.

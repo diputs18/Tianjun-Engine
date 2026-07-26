@@ -7,19 +7,19 @@ from statistics import mean
 from typing import Any
 
 from ..core import ComputeNetworkPolicy, UserFeedback, UserRequirement
-from ..domain import BatchStatus, ExecutionRecord, Node, PhysicalTopology, PolicyAdjustment, PolicyState, ResourceVector, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
+from ..domain import BatchSchedulingPlan, BatchStatus, ExecutionRecord, Node, PhysicalTopology, PolicyState, ReservationLedger, ResourceVector, SchedulingDecision, Task, TaskBatch, TaskStatus, clamp, normalize_weights
 from ..policy.optimizer import PolicyOptimizer
 from ..policy.clarifier import RequirementSession
 from ..policy.generator import ComputeNetworkPolicyGenerator
 from ..storage.sqlite_state_store import SQLiteStateStore
 from ..scheduling.engine import ClosedLoopAdaptiveScheduler
 from ..ml.runtime import TrainedModelRuntime
-from ..scenarios import node_from_dict, task_from_dict
 from .node_registry import NodeRegistry
 from .policy_workflow import PolicyWorkflowService
 from .requirement_dialogue import RequirementDialogueService
 from .task_lease_service import TaskLease, TaskLeaseService
 from .batch_scheduling_service import BatchSchedulingService
+from .control_plane_state import restore_control_plane
 
 
 def _truncate(text: str, limit: int = 400) -> str:
@@ -48,6 +48,7 @@ class CentralControlPlane:
         policy_state: PolicyState | None = None,
         policy_update_interval: int = 2,
         heartbeat_timeout_seconds: float = 15.0,
+        lease_timeout_seconds: float = 60.0,
         state_store: SQLiteStateStore | None = None,
         scheduler: ClosedLoopAdaptiveScheduler | None = None,
         model_runtime: TrainedModelRuntime | None = None,
@@ -61,9 +62,11 @@ class CentralControlPlane:
         self.policy_generator = ComputeNetworkPolicyGenerator()
         self.policy_update_interval = policy_update_interval
         self.heartbeat_timeout_seconds = heartbeat_timeout_seconds
+        self.lease_timeout_seconds = max(1.0, float(lease_timeout_seconds))
         self.state_store = state_store
 
         self.lock = threading.RLock()
+        self.planning_lock = threading.Lock()
         self.started_at = time.monotonic()
         self.nodes: dict[str, Node] = {}
         self.tasks: dict[str, Task] = {}
@@ -74,6 +77,7 @@ class CentralControlPlane:
         self.task_progress: dict[str, dict[str, Any]] = {}
         self.progress_events: list[dict[str, Any]] = []
         self.last_heartbeat_at: dict[str, float] = {}
+        self.last_heartbeat_epoch: dict[str, float] = {}
         self.policies: dict[str, ComputeNetworkPolicy] = {}
         self.policy_tasks: dict[str, Task] = {}
         self.user_feedback: list[UserFeedback] = []
@@ -84,6 +88,8 @@ class CentralControlPlane:
         self.batch_plans: dict[str, Any] = {}
         self.batch_idempotency: dict[str, str] = {}
         self.reservation_ledgers: dict[str, Any] = {}
+        self.task_result_receipts: dict[str, dict[str, Any]] = {}
+        self.latest_task_result_receipts: dict[str, dict[str, Any]] = {}
         self.tool_audit_log: list[dict[str, Any]] = []
         self.node_registry = NodeRegistry(self)
         self.task_lease_service = TaskLeaseService(self)
@@ -340,6 +346,13 @@ class CentralControlPlane:
     def request_lease(self, node_id: str) -> dict[str, Any] | None:
         return self.task_lease_service.request_lease(node_id)
 
+    def acknowledge_lease(self, *, node_id: str, task_id: str, lease_id: str) -> dict[str, Any]:
+        return self.task_lease_service.acknowledge_lease(
+            node_id=node_id,
+            task_id=task_id,
+            lease_id=lease_id,
+        )
+
     def report_task_progress(
         self,
         *,
@@ -350,6 +363,7 @@ class CentralControlPlane:
         progress: float | None = None,
         message: str | None = None,
         metrics: dict[str, Any] | None = None,
+        lease_id: str | None = None,
     ) -> dict[str, Any]:
         """Record an in-flight task lifecycle update from a real or simulated agent."""
         with self.lock:
@@ -359,6 +373,9 @@ class CentralControlPlane:
                 raise ValueError(f"Task {task_id} does not have an active lease.")
             if lease.node_id != node_id:
                 raise ValueError(f"Task {task_id} is leased to {lease.node_id}, not {node_id}.")
+            if lease_id is not None and lease.lease_id != lease_id:
+                raise ValueError("Lease identity does not match the active task lease.")
+            self.task_lease_service.renew_lease(lease)
             tick = self.current_tick()
             payload = {
                 "task_id": task_id,
@@ -379,6 +396,7 @@ class CentralControlPlane:
             if node is not None:
                 node.telemetry_tick = tick
                 self.last_heartbeat_at[node_id] = time.monotonic()
+                self.last_heartbeat_epoch[node_id] = time.time()
                 self._persist_node(node)
             return payload
 
@@ -395,14 +413,28 @@ class CentralControlPlane:
         returncode: int | None = None,
         cost: float | None = None,
         metadata: dict[str, Any] | None = None,
+        lease_id: str | None = None,
+        result_id: str | None = None,
     ) -> dict[str, Any]:
         with self.lock:
             self._expire_stale_nodes()
+            if result_id and result_id in self.task_result_receipts:
+                receipt = self.task_result_receipts[result_id]
+                if receipt.get("task_id") != task_id or receipt.get("node_id") != node_id:
+                    raise ValueError("Result identity belongs to a different task or node.")
+                if lease_id is not None and receipt.get("lease_id") != lease_id:
+                    raise ValueError("Result identity belongs to a different lease.")
+                return {**receipt, "idempotent_replay": True}
             lease = self.leases.get(task_id)
             if lease is None:
+                previous = self.latest_task_result_receipts.get(task_id)
+                if previous is not None and previous.get("node_id") == node_id and (lease_id is None or previous.get("lease_id") == lease_id):
+                    return {**previous, "idempotent_replay": True}
                 raise ValueError(f"Task {task_id} does not have an active lease.")
             if lease.node_id != node_id:
                 raise ValueError(f"Task {task_id} is leased to {lease.node_id}, not {node_id}.")
+            if lease_id is not None and lease.lease_id != lease_id:
+                raise ValueError("Lease identity does not match the active task lease.")
             if node_id not in self.nodes:
                 raise ValueError(f"Unknown node {node_id}.")
             self.leases.pop(task_id)
@@ -513,7 +545,20 @@ class CentralControlPlane:
                     latest_adjustment = self.policy_state.adjustment_history[-1]
                     self.state_store.append_policy_adjustment(latest_adjustment.to_dict())
                     self.state_store.set_control_value("policy_weights", self.policy_state.current_weights())
-            return record.to_dict()
+            receipt = {
+                **record.to_dict(),
+                "lease_id": lease.lease_id,
+                "result_id": result_id or f"result-{lease.lease_id}",
+                "idempotent_replay": False,
+            }
+            self.task_result_receipts[receipt["result_id"]] = receipt
+            self.latest_task_result_receipts[task_id] = receipt
+            if len(self.task_result_receipts) > SQLiteStateStore.MAX_EXECUTION_RECORDS:
+                oldest = next(iter(self.task_result_receipts))
+                self.task_result_receipts.pop(oldest, None)
+            if self.state_store is not None:
+                self.state_store.set_control_value("task_result_receipts", list(self.task_result_receipts.values()))
+            return receipt
 
     def cancel_task_run(self, *, task_id: str, requeue: bool = False) -> dict[str, Any]:
         with self.lock:
@@ -821,9 +866,13 @@ class CentralControlPlane:
 
 
     def _node_report_payload(self, node: Node) -> dict[str, Any]:
+        heartbeat_age = max(
+            0.0,
+            time.monotonic() - self.last_heartbeat_at.get(node.node_id, self.started_at),
+        )
         payload = {
             **node.to_dict(),
-            "last_heartbeat_age": round(time.monotonic() - self.last_heartbeat_at.get(node.node_id, self.started_at), 3),
+            "last_heartbeat_age": round(heartbeat_age, 3),
         }
         runtime_utilization: dict[str, float | None] = {
             "cpu": node.runtime_telemetry.get("cpu"),
@@ -858,6 +907,47 @@ class CentralControlPlane:
         payload["runtime_telemetry_available"] = any(value is not None for value in runtime_utilization.values())
         payload["active_task_ids"] = active_task_ids
         payload["active_stages"] = active_stages
+        telemetry_source = str(node.telemetry_source or "").strip().lower()
+        telemetry_is_current = node.online and heartbeat_age <= self.heartbeat_timeout_seconds
+        if telemetry_source in {"cloudsim", "cloudsimplus", "simulator"}:
+            load_source = "simulated_telemetry"
+            load_source_label = "CloudSim Plus 模拟遥测"
+        elif telemetry_source:
+            load_source = "live_telemetry"
+            load_source_label = "节点实时遥测"
+        elif payload["runtime_telemetry_available"]:
+            load_source = "task_progress_estimate"
+            load_source_label = "任务进度估算"
+        elif node.running_tasks or active_task_ids:
+            load_source = "allocation_estimate"
+            load_source_label = "任务分配估算"
+        else:
+            load_source = "unavailable"
+            load_source_label = "暂无负载遥测"
+        payload["resource_load_source"] = load_source
+        payload["resource_load_source_label"] = load_source_label
+        payload["telemetry_freshness"] = (
+            "current" if telemetry_is_current and load_source != "unavailable" else
+            "stale" if load_source != "unavailable" else
+            "unavailable"
+        )
+
+        carbon_version = str(node.carbon_profile.source_version or "").strip().lower()
+        if node.carbon_signal_timestamp is not None:
+            carbon_source = "simulated_signal" if load_source == "simulated_telemetry" else "live_signal"
+            carbon_source_label = "CloudSim Plus 模拟碳信号" if carbon_source == "simulated_signal" else "节点实时碳信号"
+            carbon_freshness = "current" if telemetry_is_current else "stale"
+        elif any(marker in carbon_version for marker in ("synthetic", "simulated", "trace")):
+            carbon_source = "simulated_profile"
+            carbon_source_label = "模拟碳强度曲线"
+            carbon_freshness = "profile"
+        else:
+            carbon_source = "configured_profile"
+            carbon_source_label = "配置碳强度"
+            carbon_freshness = "profile"
+        payload["carbon_data_source"] = carbon_source
+        payload["carbon_data_source_label"] = carbon_source_label
+        payload["carbon_data_freshness"] = carbon_freshness
         return payload
 
     def current_tick(self) -> int:
@@ -931,12 +1021,6 @@ class CentralControlPlane:
         now = time.monotonic()
         stale_node_ids: set[str] = set()
         for node_id, node in self.nodes.items():
-            if self._is_cloudsim_snapshot_node(node):
-                if not node.online:
-                    node.online = True
-                    self.last_heartbeat_at[node_id] = now
-                    self._persist_node(node)
-                continue
             last_seen = self.last_heartbeat_at.get(node_id, self.started_at)
             if now - last_seen > self.heartbeat_timeout_seconds:
                 stale_node_ids.add(node_id)
@@ -945,11 +1029,7 @@ class CentralControlPlane:
                     self._persist_node(node)
         if stale_node_ids:
             self._recover_leases_for_stale_nodes(stale_node_ids)
-
-    @staticmethod
-    def _is_cloudsim_snapshot_node(node: Node) -> bool:
-        labels = {str(label).lower() for label in node.labels}
-        return "cloudsim" in labels or "cloudsimplus" in labels
+        self.task_lease_service.expire_stale_leases()
 
     def _recover_leases_for_stale_nodes(self, stale_node_ids: set[str]) -> None:
         """Release leases held by offline agents so tasks can be retried elsewhere."""
@@ -1042,8 +1122,8 @@ class CentralControlPlane:
     def _persist_node(self, node: Node) -> None:
         if self.state_store is None:
             return
-        last_seen = self.last_heartbeat_at.get(node.node_id, time.monotonic())
-        self.state_store.save_node(node.to_dict(), last_seen)
+        last_seen_epoch = self.last_heartbeat_epoch.get(node.node_id, time.time())
+        self.state_store.save_node(node.to_dict(), last_seen_epoch)
 
     def _persist_task(self, task: Task) -> None:
         if self.state_store is None:
@@ -1051,71 +1131,4 @@ class CentralControlPlane:
         self.state_store.save_task(task.to_dict())
 
     def _restore_from_store(self) -> None:
-        if self.state_store is None:
-            return
-        snapshot = self.state_store.load_state()
-
-        restored_weights = snapshot["control_state"].get("policy_weights")
-        if restored_weights:
-            self.policy_state.weights = restored_weights
-        restored_group_weights = snapshot["control_state"].get("policy_group_weights")
-        if restored_group_weights:
-            self.policy_state.group_weights = restored_group_weights
-
-        restored_tool_audit_log = snapshot["control_state"].get("tool_audit_log")
-        if isinstance(restored_tool_audit_log, list):
-            self.tool_audit_log = [
-                dict(item) for item in restored_tool_audit_log if isinstance(item, dict)
-            ][-200:]
-
-        restored_topology = snapshot["control_state"].get("physical_topology")
-        if restored_topology:
-            self.physical_topology = PhysicalTopology.from_dict(restored_topology)
-            self.scheduler.set_physical_topology(self.physical_topology)
-
-        self.policy_state.adjustment_history = [
-            PolicyAdjustment(
-                tick=int(payload["tick"]),
-                weights={str(key): float(value) for key, value in payload["weights"].items()},
-                reasons=list(payload["reasons"]),
-                affected_records=int(payload.get("affected_records", 0)),
-                metrics={str(key): float(value) for key, value in dict(payload.get("metrics") or {}).items()},
-            )
-            for payload in snapshot["policy_adjustments"]
-        ]
-
-        for node_entry in snapshot["nodes"]:
-            node = node_from_dict(node_entry["payload"])
-            node.running_tasks = {}
-            self.nodes[node.node_id] = node
-            self.last_heartbeat_at[node.node_id] = float(node_entry["last_heartbeat_at"])
-
-        for payload in snapshot["tasks"]:
-            task = task_from_dict(payload)
-            if task.status in {TaskStatus.RUNNING, TaskStatus.RESERVED, TaskStatus.LEASED}:
-                task.status = TaskStatus.PENDING
-            self.tasks[task.task_id] = task
-            if task.status == TaskStatus.PENDING and task.task_id not in self.pending_queue:
-                self.pending_queue.append(task.task_id)
-
-        self.decision_log = [
-            SchedulingDecision(**payload)
-            for payload in snapshot["decisions"]
-        ]
-        self.execution_history = [
-            ExecutionRecord(**payload)
-            for payload in snapshot["execution_records"]
-        ]
-
-        for lease_payload in snapshot["leases"]:
-            task_id = lease_payload["task_id"]
-            if task_id in self.tasks and self.tasks[task_id].status != TaskStatus.SUCCEEDED:
-                self.tasks[task_id].status = TaskStatus.PENDING
-                if task_id not in self.pending_queue:
-                    self.pending_queue.append(task_id)
-            self.state_store.delete_lease(task_id)
-
-        for task in self.tasks.values():
-            self._persist_task(task)
-        for node in self.nodes.values():
-            self._persist_node(node)
+        restore_control_plane(self)

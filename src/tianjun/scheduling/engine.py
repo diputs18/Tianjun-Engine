@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from math import ceil
 from statistics import mean
 from typing import Any, Iterable
@@ -44,6 +45,7 @@ class ClosedLoopAdaptiveScheduler:
         self.policy_state = policy_state
         self.model_runtime = model_runtime or get_default_model_runtime()
         self._deterministic_latency_state: dict[str, float] = {}
+        self._latency_state_lock = threading.Lock()
         self.physical_topology: PhysicalTopology | None = None
 
     def set_physical_topology(self, topology: PhysicalTopology | None) -> None:
@@ -784,12 +786,13 @@ class ClosedLoopAdaptiveScheduler:
         )
         robust_stable_latency_ms = max(1.0, predicted_latency_ms + risk_margin_ms)
         state_key = f"{node.node_id}:{task.network_source() or node.region}:{task.task_type}"
-        previous_stable_latency = self._deterministic_latency_state.get(state_key)
-        if previous_stable_latency is None:
-            stable_latency_ms = robust_stable_latency_ms
-        else:
-            stable_latency_ms = (previous_stable_latency * 0.84) + (robust_stable_latency_ms * 0.16)
-        self._deterministic_latency_state[state_key] = stable_latency_ms
+        with self._latency_state_lock:
+            previous_stable_latency = self._deterministic_latency_state.get(state_key)
+            if previous_stable_latency is None:
+                stable_latency_ms = robust_stable_latency_ms
+            else:
+                stable_latency_ms = (previous_stable_latency * 0.84) + (robust_stable_latency_ms * 0.16)
+            self._deterministic_latency_state[state_key] = stable_latency_ms
 
         risk_factor = 1.0 + (task.network_sensitivity * 0.9)
         guaranteed_bandwidth_mbps = profile.guaranteed_bandwidth_mbps(risk_factor=risk_factor)

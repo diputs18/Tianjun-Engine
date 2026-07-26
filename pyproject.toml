@@ -30,6 +30,15 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"tianjun.interfaces.dashboard" = [
+    "static/*.html",
+    "static/css/*.css",
+    "static/css/pages/*.css",
+    "static/js/*.js",
+    "static/js/pages/*.js",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

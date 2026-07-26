@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 from statistics import mean
 from typing import TYPE_CHECKING, Any
@@ -30,6 +31,13 @@ from ..domain import (
 )
 from ..scenarios import task_from_dict
 from ..experiments import AssignmentCandidate, milp_oracle, nsga2_assignments
+from .batch_input import (
+    BatchRequestError,
+    csv_row,
+    rejection_reason,
+    validated_objectives,
+    validated_weights,
+)
 
 if TYPE_CHECKING:
     from .control_plane import CentralControlPlane
@@ -74,13 +82,6 @@ def _percentile(values: list[float], percentile: float) -> float:
     return ordered[lower] + fraction * (ordered[upper] - ordered[lower])
 
 
-class BatchRequestError(ValueError):
-    def __init__(self, status_code: int, payload: dict[str, Any]) -> None:
-        super().__init__(str(payload.get("error") or payload))
-        self.status_code = status_code
-        self.payload = payload
-
-
 @dataclass(slots=True)
 class BatchSchedulingService:
     control_plane: CentralControlPlane
@@ -113,7 +114,7 @@ class BatchSchedulingService:
         csv_issues: list[BatchValidationIssue] = []
         for index, row in enumerate(rows, start=2):
             try:
-                raw_tasks.append(self._csv_row(row, index))
+                raw_tasks.append(csv_row(row, index))
             except BatchRequestError as exc:
                 for item in exc.payload.get("validation", {}).get("errors", []):
                     csv_issues.append(BatchValidationIssue(
@@ -226,16 +227,23 @@ class BatchSchedulingService:
             )
             control.task_batches[batch_id] = batch
             control.batch_idempotency[client_id] = batch_id
+            if control.state_store is not None:
+                control.state_store.save_task_batch(batch.to_dict())
             return {**batch.to_dict(include_tasks=False), "validation": BatchValidationReport(len(tasks)).to_dict()}
 
     def get_batch(self, batch_id: str) -> dict[str, Any]:
-        batch = self._batch(batch_id)
-        payload = batch.to_dict()
-        if batch.latest_plan_id and batch.latest_plan_id in self.control_plane.batch_plans:
-            payload["latest_plan"] = self.control_plane.batch_plans[batch.latest_plan_id].to_dict()
-        return payload
+        with self.control_plane.lock:
+            batch = self._batch(batch_id)
+            payload = batch.to_dict()
+            if batch.latest_plan_id and batch.latest_plan_id in self.control_plane.batch_plans:
+                payload["latest_plan"] = self.control_plane.batch_plans[batch.latest_plan_id].to_dict()
+            return payload
 
     def actual_metrics(self, batch_id: str) -> dict[str, Any]:
+        with self.control_plane.lock:
+            return self._actual_metrics_locked(batch_id)
+
+    def _actual_metrics_locked(self, batch_id: str) -> dict[str, Any]:
         """Return measured execution outcomes, distinct from preview predictions."""
         batch = self._batch(batch_id)
         committed_plans = [
@@ -255,6 +263,7 @@ class BatchSchedulingService:
         succeeded = sum(1 for record in records if record.success)
         failed = len(records) - succeeded
         unassigned_count = len(plan.unassigned_tasks) if plan else 0
+        previous_status = batch.status
         if assigned_ids and len(records) >= len(assigned_ids):
             if failed >= len(assigned_ids):
                 batch.status = BatchStatus.FAILED
@@ -262,6 +271,8 @@ class BatchSchedulingService:
                 batch.status = BatchStatus.PARTIAL_FAILED
             else:
                 batch.status = BatchStatus.COMPLETED
+        if batch.status != previous_status and self.control_plane.state_store is not None:
+            self.control_plane.state_store.save_task_batch(batch.to_dict())
         return {
             "batch_id": batch_id,
             "status": batch.status.value,
@@ -312,23 +323,36 @@ class BatchSchedulingService:
         control = self.control_plane
         with control.lock:
             control._expire_stale_nodes()
-            batch = self._batch(batch_id)
-            active_metrics = self._validated_objectives(options.get("active_metrics"), METRIC_KEYS, "active_metrics")
-            active_groups = self._validated_objectives(options.get("active_groups"), GROUP_KEYS, "active_groups")
-            group_weight_overrides = self._validated_weights(
+            batch_snapshot = copy.deepcopy(self._batch(batch_id))
+            nodes_snapshot = copy.deepcopy(control.nodes)
+            snapshot_version = control.resource_snapshot_version
+            snapshot_tick = control.current_tick()
+            active_metrics = validated_objectives(options.get("active_metrics"), METRIC_KEYS, "active_metrics")
+            active_groups = validated_objectives(options.get("active_groups"), GROUP_KEYS, "active_groups")
+            group_weight_overrides = validated_weights(
                 options.get("group_weights"), GROUP_KEYS, "group_weights"
             )
+        with control.planning_lock:
             plan = self._build_plan(
-                batch,
+                batch_snapshot,
                 strategy=strategy,
                 active_metrics=active_metrics,
                 active_groups=active_groups,
                 group_weight_overrides=group_weight_overrides,
+                nodes_snapshot=nodes_snapshot,
+                snapshot_version=snapshot_version,
+                snapshot_tick=snapshot_tick,
             )
-            plan.strategy = requested_strategy
+        plan.strategy = requested_strategy
+        with control.lock:
+            batch = self._batch(batch_id)
             control.batch_plans[plan.plan_id] = plan
             batch.latest_plan_id = plan.plan_id
             batch.status = BatchStatus.PREVIEWED
+            if control.state_store is not None:
+                with control.state_store.transaction():
+                    control.state_store.save_batch_plan(plan.to_dict())
+                    control.state_store.save_task_batch(batch.to_dict())
             return plan.to_dict()
 
     def compare(self, batch_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -378,32 +402,64 @@ class BatchSchedulingService:
                 if node is None or not demand.fits_in(node.available()):
                     raise BatchRequestError(409, {"error": "SNAPSHOT_CONFLICT", "node_id": node_id})
 
-            ledger = ReservationLedger(plan_id=plan.plan_id, resource_snapshot_version=plan.resource_snapshot_version)
-            for node_id, demand in demand_by_node.items():
-                ledger.reserve(node_id, demand)
-            control.reservation_ledgers[plan.plan_id] = ledger
-            tick = control.current_tick()
-            for task in batch.tasks:
-                if task.task_id not in control.tasks:
-                    task.submit_tick = tick
-                    control.tasks[task.task_id] = task
-                    control.pending_queue.append(task.task_id)
-                    control._persist_task(task)
-            leases = []
-            for assignment in plan.assignments:
-                task = task_by_id[assignment.task_id]
-                task.status = TaskStatus.RESERVED
-                lease = control.task_lease_service.activate_task_lease(
-                    task=task,
-                    node=control.nodes[assignment.node_id],
-                    decision=assignment.decision,
-                    tick=tick,
-                    remove_from_pending=True,
-                )
-                leases.append(lease.to_dict())
-            control.resource_snapshot_version += 1
-            batch.status = BatchStatus.RUNNING if leases else BatchStatus.COMMITTED
-            plan.status = "committed"
+            memory_snapshot = {
+                "nodes": copy.deepcopy(control.nodes),
+                "tasks": copy.deepcopy(control.tasks),
+                "pending_queue": list(control.pending_queue),
+                "leases": copy.deepcopy(control.leases),
+                "decision_log": copy.deepcopy(control.decision_log),
+                "reservation_ledgers": copy.deepcopy(control.reservation_ledgers),
+                "resource_snapshot_version": control.resource_snapshot_version,
+                "batch_tasks": copy.deepcopy(batch.tasks),
+                "batch_status": batch.status,
+                "plan_status": plan.status,
+            }
+            transaction = control.state_store.transaction() if control.state_store is not None else nullcontext()
+            try:
+                with transaction:
+                    ledger = ReservationLedger(plan_id=plan.plan_id, resource_snapshot_version=plan.resource_snapshot_version)
+                    for node_id, demand in demand_by_node.items():
+                        ledger.reserve(node_id, demand)
+                    control.reservation_ledgers[plan.plan_id] = ledger
+                    tick = control.current_tick()
+                    for task in batch.tasks:
+                        if task.task_id not in control.tasks:
+                            task.submit_tick = tick
+                            control.tasks[task.task_id] = task
+                            control.pending_queue.append(task.task_id)
+                            control._persist_task(task)
+                    leases = []
+                    for assignment in plan.assignments:
+                        task = task_by_id[assignment.task_id]
+                        task.status = TaskStatus.RESERVED
+                        lease = control.task_lease_service.activate_task_lease(
+                            task=task,
+                            node=control.nodes[assignment.node_id],
+                            decision=assignment.decision,
+                            tick=tick,
+                            remove_from_pending=True,
+                        )
+                        leases.append(lease.to_dict())
+                    control.resource_snapshot_version += 1
+                    batch.status = BatchStatus.RUNNING if leases else BatchStatus.COMMITTED
+                    plan.status = "committed"
+                    if control.state_store is not None:
+                        control.state_store.save_reservation_ledger(ledger.to_dict())
+                        control.state_store.save_task_batch(batch.to_dict())
+                        control.state_store.save_batch_plan(plan.to_dict())
+                        control.state_store.set_control_value("resource_snapshot_version", control.resource_snapshot_version)
+            except Exception:
+                control.nodes = memory_snapshot["nodes"]
+                control.tasks = memory_snapshot["tasks"]
+                control.pending_queue = memory_snapshot["pending_queue"]
+                control.leases = memory_snapshot["leases"]
+                control.decision_log = memory_snapshot["decision_log"]
+                control.reservation_ledgers = memory_snapshot["reservation_ledgers"]
+                control.resource_snapshot_version = memory_snapshot["resource_snapshot_version"]
+                batch.tasks = memory_snapshot["batch_tasks"]
+                batch.status = memory_snapshot["batch_status"]
+                plan.status = memory_snapshot["plan_status"]
+                raise
             return {
                 "status": "committed",
                 "batch_id": batch_id,
@@ -416,16 +472,17 @@ class BatchSchedulingService:
 
     def report(self) -> dict[str, Any]:
         control = self.control_plane
-        batches = list(control.task_batches.values())
-        assigned = sum(len(plan.assignments) for plan in control.batch_plans.values() if plan.status == "committed")
-        total = sum(len(batch.tasks) for batch in batches)
-        return {
-            "total_batches": len(batches),
-            "total_batch_tasks": total,
-            "committed_assignments": assigned,
-            "batch_acceptance_rate": round(assigned / total, 4) if total else 0.0,
-            "recent_batches": [batch.to_dict(include_tasks=False) for batch in batches[-8:]],
-        }
+        with control.lock:
+            batches = list(control.task_batches.values())
+            assigned = sum(len(plan.assignments) for plan in control.batch_plans.values() if plan.status == "committed")
+            total = sum(len(batch.tasks) for batch in batches)
+            return {
+                "total_batches": len(batches),
+                "total_batch_tasks": total,
+                "committed_assignments": assigned,
+                "batch_acceptance_rate": round(assigned / total, 4) if total else 0.0,
+                "recent_batches": [batch.to_dict(include_tasks=False) for batch in batches[-8:]],
+            }
 
     def _build_plan(
         self,
@@ -435,18 +492,33 @@ class BatchSchedulingService:
         active_metrics: tuple[str, ...] | None = None,
         active_groups: tuple[str, ...] | None = None,
         group_weight_overrides: dict[str, float] | None = None,
+        nodes_snapshot: dict[str, Any] | None = None,
+        snapshot_version: int | None = None,
+        snapshot_tick: int | None = None,
     ) -> BatchSchedulingPlan:
         control = self.control_plane
         started = time.perf_counter()
-        shadow_nodes = {node_id: copy.deepcopy(node) for node_id, node in control.nodes.items()}
+        source_nodes = nodes_snapshot if nodes_snapshot is not None else control.nodes
+        shadow_nodes = {node_id: copy.deepcopy(node) for node_id, node in source_nodes.items()}
         snapshot = ResourceSnapshot(
-            version=control.resource_snapshot_version,
-            tick=control.current_tick(),
+            version=control.resource_snapshot_version if snapshot_version is None else snapshot_version,
+            tick=control.current_tick() if snapshot_tick is None else snapshot_tick,
             available_by_node={node_id: node.available() for node_id, node in shadow_nodes.items()},
         )
         # B0 preserves the legacy submission order. Joint strategies use the
         # deterministic urgency/priority/scarcity ordering defined for batches.
-        ordered = list(batch.tasks) if strategy == "B0-current" else sorted(batch.tasks, key=self._task_sort_key)
+        ordered = (
+            list(batch.tasks)
+            if strategy == "B0-current"
+            else sorted(
+                batch.tasks,
+                key=lambda task: self._task_sort_key(
+                    task,
+                    tick=snapshot.tick,
+                    nodes=shadow_nodes.values(),
+                ),
+            )
+        )
         assignments: list[BatchAssignment] = []
         unassigned: list[UnassignedTask] = []
         if strategy == "B6-hierarchical-batch":
@@ -485,7 +557,7 @@ class BatchSchedulingService:
                     future_tasks=future_tasks_for_scoring,
                 )
                 if decision is None:
-                    unassigned.append(UnassignedTask(task.task_id, self._rejection_reason(task, shadow_nodes.values())))
+                    unassigned.append(UnassignedTask(task.task_id, rejection_reason(task, shadow_nodes.values())))
                     continue
                 node = shadow_nodes[decision.node_id]
                 carbon = dict(decision.network_snapshot.get("carbon") or {})
@@ -522,7 +594,7 @@ class BatchSchedulingService:
             )
 
         task_samples = batch.tasks[: min(64, len(batch.tasks))]
-        future_before = self._future_fit(control.nodes.values(), task_samples)
+        future_before = self._future_fit(source_nodes.values(), task_samples, tick=snapshot.tick)
         summary = self._plan_hierarchical_summary(
             batch,
             assignments,
@@ -609,7 +681,7 @@ class BatchSchedulingService:
             solution = max(front, key=lambda item: (item.assigned_count, item.utility), default=None)
             if solution is None:
                 selected_ids: set[str] = set()
-                return [], [UnassignedTask(task.task_id, self._rejection_reason(task, nodes)) for task in ordered if task.task_id not in selected_ids]
+                return [], [UnassignedTask(task.task_id, rejection_reason(task, nodes)) for task in ordered if task.task_id not in selected_ids]
         assignments: list[BatchAssignment] = []
         selected_ids = {item.task_id for item in solution.selected}
         for item in solution.selected:
@@ -627,7 +699,7 @@ class BatchSchedulingService:
             assignments.append(assignment)
             shadow_nodes[item.node_id].running_tasks[f"__batch__{item.task_id}"] = self._shadow_running_task(task, decision, tick)
         unassigned = [
-            UnassignedTask(task.task_id, self._rejection_reason(task, nodes))
+            UnassignedTask(task.task_id, rejection_reason(task, nodes))
             for task in ordered
             if task.task_id not in selected_ids
         ]
@@ -878,7 +950,7 @@ class BatchSchedulingService:
         )
         should_calculate_future_fit = calculate_future_fit or "resource_efficiency" in selected_groups
         task_samples = batch.tasks[: min(64, len(batch.tasks))]
-        future_fit_after = self._future_fit(nodes, task_samples) if should_calculate_future_fit else 0.0
+        future_fit_after = self._future_fit(nodes, task_samples, tick=tick) if should_calculate_future_fit else 0.0
         if count and should_calculate_future_fit:
             group_scores["resource_efficiency"] = clamp(
                 0.60 * group_scores["resource_efficiency"] + 0.40 * future_fit_after
@@ -939,54 +1011,28 @@ class BatchSchedulingService:
             success_probability=1.0,
         )
 
-    @staticmethod
-    def _validated_objectives(value: Any, allowed: tuple[str, ...], field: str) -> tuple[str, ...] | None:
-        if value is None:
-            return None
-        if not isinstance(value, (list, tuple)):
-            raise BatchRequestError(422, {"error": f"{field} must be an array"})
-        unknown = [str(item) for item in value if str(item) not in allowed]
-        if unknown:
-            raise BatchRequestError(422, {"error": f"unknown {field}: {', '.join(unknown)}"})
-        unique = tuple(dict.fromkeys(str(item) for item in value))
-        if not unique:
-            raise BatchRequestError(422, {"error": f"{field} cannot be empty"})
-        return unique
-
-    @staticmethod
-    def _validated_weights(
-        value: Any,
-        allowed: tuple[str, ...],
-        field: str,
-    ) -> dict[str, float] | None:
-        if value is None:
-            return None
-        if not isinstance(value, dict):
-            raise BatchRequestError(422, {"error": f"{field} must be an object"})
-        unknown = [str(key) for key in value if str(key) not in allowed]
-        if unknown:
-            raise BatchRequestError(422, {"error": f"unknown {field}: {', '.join(unknown)}"})
-        weights = {str(key): float(weight) for key, weight in value.items()}
-        if any(weight < 0.0 for weight in weights.values()) or sum(weights.values()) <= 0.0:
-            raise BatchRequestError(422, {"error": f"{field} values must be non-negative with a positive sum"})
-        return weights
-
     def _batch(self, batch_id: str) -> TaskBatch:
         batch = self.control_plane.task_batches.get(batch_id)
         if batch is None:
             raise BatchRequestError(404, {"error": f"unknown batch {batch_id}"})
         return batch
 
-    def _task_sort_key(self, task: Task) -> tuple[float, int, float, int, str]:
-        tick = self.control_plane.current_tick()
+    def _task_sort_key(
+        self,
+        task: Task,
+        *,
+        tick: int | None = None,
+        nodes: Any | None = None,
+    ) -> tuple[float, int, float, int, str]:
+        current_tick = self.control_plane.current_tick() if tick is None else tick
         fleet = ResourceVector()
-        for node in self.control_plane.nodes.values():
+        for node in (self.control_plane.nodes.values() if nodes is None else nodes):
             fleet = fleet + node.capacity
         scarcity = task.demand.dominant_share_against(fleet)
         deadline = task.effective_deadline_tick() if task.effective_deadline_tick() is not None else 10**12
-        return (float(deadline - tick - task.estimated_duration), -task.priority, -scarcity, task.submit_tick, task.task_id)
+        return (float(deadline - current_tick - task.estimated_duration), -task.priority, -scarcity, task.submit_tick, task.task_id)
 
-    def _future_fit(self, nodes: Any, tasks: list[Task]) -> float:
+    def _future_fit(self, nodes: Any, tasks: list[Task], *, tick: int | None = None) -> float:
         nodes_list = list(nodes)
         if not nodes_list or not tasks:
             return 0.0
@@ -998,11 +1044,11 @@ class BatchSchedulingService:
             1
             for node in nodes_list
             for task in tasks
-            if self._future_task_fits(node, task)
+            if self._future_task_fits(node, task, tick=tick)
         )
         return feasible_pairs / (len(nodes_list) * len(tasks))
 
-    def _future_task_fits(self, node: Any, task: Task) -> bool:
+    def _future_task_fits(self, node: Any, task: Task, *, tick: int | None = None) -> bool:
         if not node.can_host_now(task):
             return False
         path = node.path_profile_for(task.network_source())
@@ -1011,68 +1057,11 @@ class BatchSchedulingService:
         if task.min_bandwidth_mbps is not None and path.guaranteed_bandwidth_mbps() < task.min_bandwidth_mbps:
             return False
         if task.carbon_budget_g is not None:
-            predicted = node.predict_operational_carbon(task, node.predict_duration(task), self.control_plane.current_tick())
+            predicted = node.predict_operational_carbon(
+                task,
+                node.predict_duration(task),
+                self.control_plane.current_tick() if tick is None else tick,
+            )
             if float(predicted["operational_carbon_g"]) > task.carbon_budget_g:
                 return False
         return True
-
-    @staticmethod
-    def _rejection_reason(task: Task, nodes: Any) -> str:
-        nodes_list = list(nodes)
-        if task.demand.gpu > 0 and all(node.available().gpu + 1e-9 < task.demand.gpu for node in nodes_list):
-            return "INSUFFICIENT_GPU"
-        if task.allowed_regions and all(not any(node.matches_deployment_region(region) for region in task.allowed_regions) for node in nodes_list):
-            return "REGION_FORBIDDEN"
-        if task.carbon_budget_g is not None:
-            return "CARBON_BUDGET_EXCEEDED"
-        if task.deadline is not None:
-            return "DEADLINE_INFEASIBLE"
-        return "NO_FEASIBLE_NODE"
-
-    @staticmethod
-    def _csv_row(row: dict[str, str], row_number: int) -> dict[str, Any]:
-        def number(name: str, default: float = 0.0) -> float:
-            text = str(row.get(name, "")).strip()
-            if text == "":
-                return default
-            try:
-                return float(text)
-            except ValueError as exc:
-                raise BatchRequestError(422, {"error": "batch validation failed", "validation": BatchValidationReport(0, errors=[BatchValidationIssue(row_number, name, "INVALID_NUMBER", f"{name} must be numeric")]).to_dict()}) from exc
-
-        def boolean(name: str, default: bool) -> bool:
-            text = str(row.get(name, "")).strip().lower()
-            if text == "":
-                return default
-            if text not in {"true", "false"}:
-                raise BatchRequestError(422, {"error": "batch validation failed", "validation": BatchValidationReport(0, errors=[BatchValidationIssue(row_number, name, "INVALID_BOOLEAN", f"{name} must be true or false")]).to_dict()})
-            return text == "true"
-
-        payload: dict[str, Any] = {
-            "task_id": str(row.get("task_id", "")).strip(),
-            "task_type": str(row.get("task_type", "batch")).strip() or "batch",
-            "demand": {key: number(key) for key in ("cpu", "memory", "gpu", "storage")},
-            "estimated_duration": int(number("estimated_duration", 0)),
-            "priority": int(number("priority", 5)),
-            "security_level": str(row.get("security_level", "medium")).strip() or "medium",
-            "isolation_level": str(row.get("isolation_level", "process")).strip() or "process",
-            "allowed_regions": [item for item in str(row.get("allowed_regions", "")).split("|") if item],
-            "forbidden_nodes": [item for item in str(row.get("forbidden_nodes", "")).split("|") if item],
-            "require_encrypted_transport": boolean("require_encrypted_transport", True),
-            "allow_region_shift": boolean("allow_region_shift", True),
-            "allow_time_shift": boolean("allow_time_shift", False),
-            "carbon_priority": number("carbon_priority", 0.0),
-        }
-        region = str(row.get("region", "")).strip()
-        if region and not payload["allowed_regions"]:
-            payload["allowed_regions"] = [region]
-        optional_numbers = ("budget", "deadline", "input_size_gb", "max_latency_ms", "min_bandwidth_mbps", "carbon_budget_g", "deferrable_until_tick")
-        for key in optional_numbers:
-            text = str(row.get(key, "")).strip()
-            if text:
-                payload[key] = float(text) if key not in {"deadline", "deferrable_until_tick"} else int(float(text))
-        for key in ("data_region", "source_region"):
-            text = str(row.get(key, "")).strip()
-            if text:
-                payload[key] = text
-        return payload

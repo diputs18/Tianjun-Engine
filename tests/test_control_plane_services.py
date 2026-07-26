@@ -131,6 +131,44 @@ def test_cloudsim_heartbeat_telemetry_survives_into_node_report() -> None:
     }
     assert node["telemetry_source"] == "cloudsim"
     assert node["simulation_tick"] == 12.5
+    assert node["resource_load_source"] == "simulated_telemetry"
+    assert node["resource_load_source_label"] == "CloudSim Plus 模拟遥测"
+    assert node["telemetry_freshness"] == "current"
+
+
+def test_cloudsim_label_does_not_exempt_node_from_heartbeat_expiry() -> None:
+    control_plane = CentralControlPlane(heartbeat_timeout_seconds=1.0)
+    control_plane.register_node(Node(
+        node_id="cloudsim-node",
+        region="dc1",
+        labels={"cloudsim"},
+        capacity=ResourceVector(cpu=4),
+    ))
+    control_plane.last_heartbeat_at["cloudsim-node"] -= 2.0
+
+    node = control_plane.build_report()["nodes"][0]
+
+    assert node["online"] is False
+    assert node["telemetry_freshness"] == "unavailable"
+
+
+def test_report_distinguishes_configured_carbon_from_live_signal() -> None:
+    control_plane = CentralControlPlane()
+    control_plane.register_node(Node(node_id="node-a", region="dc1", capacity=ResourceVector(cpu=4)))
+
+    configured = control_plane.build_report()["nodes"][0]
+    assert configured["carbon_data_source"] == "simulated_profile"
+    assert configured["carbon_data_freshness"] == "profile"
+
+    control_plane.record_heartbeat(
+        "node-a",
+        carbon_intensity_g_per_kwh=320.0,
+        carbon_signal_timestamp=100.0,
+        telemetry_source="node_agent",
+    )
+    live = control_plane.build_report()["nodes"][0]
+    assert live["carbon_data_source"] == "live_signal"
+    assert live["carbon_data_freshness"] == "current"
 
 
 def test_task_lease_service_handles_task_lifecycle_through_facade() -> None:

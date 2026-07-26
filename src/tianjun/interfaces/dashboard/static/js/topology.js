@@ -1,4 +1,19 @@
 import { escapeHtml } from "./utils.js";
+import { measuredPath } from "./topology-geometry.js";
+import {
+  aggregateResources,
+  firstNumber,
+  firstOnlineNodeId,
+  gpuSummary,
+  latestBy,
+  nodeName,
+  normalizeGpu,
+  parseDciNode,
+  percentFrom,
+  ratioPercent,
+  resourceUsed,
+  zoneAggregate,
+} from "./topology-resource.js";
 
 let activeTopologyKey = "global";
 let selectedDetail = null;
@@ -314,7 +329,7 @@ function updateLiveTopology(report) {
     globalTopology.currentRoute = [];
     globalTopology.currentPathText = "当前无活动调度路径";
     globalTopology.footer = [
-      "实时来源：在线节点 inventory",
+      "数据来源：节点 inventory（当前与最近状态）",
       `在线节点：${(report?.nodes ?? []).filter((node) => node.online !== false).length} 个`,
       "调度状态：当前无活动任务",
     ];
@@ -322,7 +337,7 @@ function updateLiveTopology(report) {
       topology.currentRoute = [];
       topology.currentPath = "当前无活动调度路径";
       topology.internalPath = "当前无活动调度路径";
-      topology.footer = ["当前无活动调度路径", `${topology.dcName} 资源遥测保持可用`, "路径高亮将在任务调度后恢复"];
+      topology.footer = ["当前无活动调度路径", `${topology.dcName} 资源视图保留最近数据`, "路径高亮将在任务调度后恢复"];
     }
     return;
   }
@@ -331,7 +346,7 @@ function updateLiveTopology(report) {
   globalTopology.currentRoute = livePathContext.activityState === "idle" ? [] : targetRoute.nodes;
   globalTopology.currentPathText = livePathContext.globalPathText;
   globalTopology.footer = [
-    `实时来源：${livePathContext.sourceKind} / tick ${livePathContext.tick ?? "--"}`,
+    `数据来源：${livePathContext.sourceKind} / tick ${livePathContext.tick ?? "--"}`,
     `目标节点：${livePathContext.nodeId}`,
     `链路画像：${livePathContext.latencyText} / 风险 ${livePathContext.riskText}`,
   ];
@@ -531,164 +546,9 @@ function buildLivePathContext(report) {
   };
 }
 
-function latestBy(items, key) {
-  return items.filter(Boolean).sort((a, b) => Number(a?.[key] ?? 0) - Number(b?.[key] ?? 0)).at(-1);
-}
-
-function firstNumber(...values) {
-  for (const value of values) {
-    if (value === null || value === undefined || value === "") continue;
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) return numeric;
-  }
-  return null;
-}
-
-function percentFrom(...values) {
-  const value = firstNumber(...values);
-  if (value == null) return null;
-  return Math.round(value <= 1 ? value * 100 : value);
-}
-
-function ratioPercent(used, total) {
-  const safeTotal = Number(total);
-  if (!Number.isFinite(safeTotal) || safeTotal <= 0) return 0;
-  return Math.round(Math.max(0, Number(used) || 0) / safeTotal * 100);
-}
-
-function resourceUsed(node, key) {
-  const capacity = Number(node?.capacity?.[key] ?? 0);
-  const available = Number(node?.available?.[key] ?? capacity);
-  return Math.max(0, capacity - available);
-}
-
-function aggregateResources(nodes, scope) {
-  const result = new Map();
-  for (const node of nodes) {
-    const parsed = parseDciNode(node.node_id, node);
-    if (!parsed.dcKey || (scope === "zone" && !parsed.location)) continue;
-    const key = scope === "zone" ? `${parsed.dcKey}:${parsed.location}` : parsed.dcKey;
-    const bucket = result.get(key) ?? {
-      nodes: 0,
-      cpuUsed: 0,
-      cpuTotal: 0,
-      memoryUsed: 0,
-      memoryTotal: 0,
-      gpuUsed: 0,
-      gpuTotal: 0,
-      cpuTelemetry: 0,
-      cpuSamples: 0,
-      memoryTelemetry: 0,
-      memorySamples: 0,
-      gpuTelemetry: 0,
-      gpuSamples: 0,
-      tasks: 0,
-    };
-    bucket.nodes += 1;
-    bucket.cpuTotal += Number(node?.capacity?.cpu ?? 0);
-    bucket.cpuUsed += resourceUsed(node, "cpu");
-    bucket.memoryTotal += Number(node?.capacity?.memory ?? 0);
-    bucket.memoryUsed += resourceUsed(node, "memory");
-    bucket.gpuTotal += Number(node?.capacity?.gpu ?? 0);
-    bucket.gpuUsed += resourceUsed(node, "gpu");
-    const cpuTelemetry = percentFrom(node.runtime_utilization?.cpu, node.runtime_telemetry?.cpu);
-    const memoryTelemetry = percentFrom(node.runtime_utilization?.memory, node.runtime_telemetry?.memory);
-    const gpuTelemetry = percentFrom(node.runtime_utilization?.gpu, node.runtime_telemetry?.gpu);
-    if (cpuTelemetry != null) {
-      bucket.cpuTelemetry += cpuTelemetry;
-      bucket.cpuSamples += 1;
-    }
-    if (memoryTelemetry != null) {
-      bucket.memoryTelemetry += memoryTelemetry;
-      bucket.memorySamples += 1;
-    }
-    if (gpuTelemetry != null) {
-      bucket.gpuTelemetry += gpuTelemetry;
-      bucket.gpuSamples += 1;
-    }
-    bucket.tasks += node.active_task_ids?.length ?? (Array.isArray(node.running_tasks) ? node.running_tasks.length : 0);
-    result.set(key, bucket);
-  }
-  for (const bucket of result.values()) {
-    bucket.cpuPercent = bucket.cpuSamples ? Math.round(bucket.cpuTelemetry / bucket.cpuSamples) : ratioPercent(bucket.cpuUsed, bucket.cpuTotal);
-    bucket.memoryPercent = bucket.memorySamples ? Math.round(bucket.memoryTelemetry / bucket.memorySamples) : ratioPercent(bucket.memoryUsed, bucket.memoryTotal);
-    bucket.gpuUsed = Math.round(bucket.gpuUsed);
-    bucket.gpuTotal = Math.round(bucket.gpuTotal);
-    bucket.gpuPercent = bucket.gpuSamples ? Math.round(bucket.gpuTelemetry / bucket.gpuSamples) : ratioPercent(bucket.gpuUsed, bucket.gpuTotal);
-  }
-  return result;
-}
-
-function parseDciNode(nodeId = "", node = {}) {
-  const match = String(nodeId).match(/^dci-dc(\d+)-([a-z]+)-vm-(\d+)$/i);
-  const dcKey = match ? `dc${match[1]}` : String(node.region ?? "").match(/^dc\d+$/i)?.[0]?.toLowerCase();
-  return {
-    dcKey,
-    location: String(match?.[2] ?? node.location ?? "").toLowerCase(),
-    vmIndex: match ? Number(match[3]) : null,
-  };
-}
-
 function firstZoneModel(dcKey) {
   const zones = Object.values(dcZoneModel[dcKey]?.zones ?? {});
   return zones[0] ?? { leaf: "leaf-a", cluster: "cluster-a", label: "资源区", clusterName: "计算集群" };
-}
-
-function firstOnlineNodeId(nodes) {
-  return nodes.find((node) => node.online !== false)?.node_id ?? "";
-}
-
-function zoneAggregate(nodes, report, metric) {
-  const result = new Map();
-  for (const node of nodes) {
-    const parsed = parseDciNode(node.node_id, node);
-    if (!parsed.location) continue;
-    if (metric === "tasks") {
-      const count = node.active_task_ids?.length ?? (Array.isArray(node.running_tasks) ? node.running_tasks.length : 0);
-      result.set(parsed.location, (result.get(parsed.location) ?? 0) + count);
-    } else if (metric === "cpu") {
-      const value = percentFrom(node.runtime_utilization?.cpu, node.runtime_telemetry?.cpu, node.cpu_utilization, node.used_cpu_ratio);
-      if (value != null) result.set(parsed.location, Math.max(result.get(parsed.location) ?? 0, value));
-    } else if (metric === "memory") {
-      const value = percentFrom(node.runtime_utilization?.memory, node.runtime_telemetry?.memory, node.memory_utilization, node.used_memory_ratio);
-      if (value != null) result.set(parsed.location, Math.max(result.get(parsed.location) ?? 0, value));
-    } else if (metric === "gpu") {
-      const current = result.get(parsed.location) ?? { used: 0, total: 0, percent: 0 };
-      current.used += resourceUsed(node, "gpu");
-      current.total += Number(node?.capacity?.gpu ?? 0);
-      current.used = Math.round(current.used);
-      current.total = Math.round(current.total);
-      current.percent = ratioPercent(current.used, current.total);
-      result.set(parsed.location, current);
-    }
-  }
-  for (const run of report?.active_runs ?? []) {
-    const parsed = parseDciNode(run.node_id, {});
-    if (parsed.location) result.set(parsed.location, Math.max(1, result.get(parsed.location) ?? 0));
-  }
-  return result;
-}
-
-function normalizeGpu(value) {
-  if (!value || typeof value !== "object") return { used: 0, total: 0, percent: 0 };
-  const used = Math.round(Number(value.used ?? 0));
-  const total = Math.round(Number(value.total ?? 0));
-  return { used, total, percent: ratioPercent(used, total) };
-}
-
-function gpuSummary(value) {
-  if (value && typeof value === "object" && ("gpuUsed" in value || "gpuTotal" in value)) {
-    const used = Math.round(Number(value.gpuUsed ?? 0));
-    const total = Math.round(Number(value.gpuTotal ?? 0));
-    return total > 0 ? `${used}/${total} (${ratioPercent(used, total)}%)` : "0/0";
-  }
-  const gpu = normalizeGpu(value?.gpu ?? value);
-  return gpu.total > 0 ? `${gpu.used}/${gpu.total} (${gpu.percent}%)` : "0/0";
-}
-
-function nodeName(leafId, location) {
-  const suffix = leafId.endsWith("a") || leafId.endsWith("b") ? "1" : "2";
-  return `Leaf-${String(location || "zone").toUpperCase()}-${suffix}`;
 }
 
 function currentTopology() {
@@ -850,82 +710,6 @@ function drawMeasuredGlobalLinks(container, topology) {
       labelEl.style.top = `${d.label.y}px`;
     }
   });
-}
-
-function measuredPath(item, sourceEl, targetEl, stageRect) {
-  const s = box(sourceEl, stageRect);
-  const t = box(targetEl, stageRect);
-  const pair = `${item.source}-${item.target}`;
-  const reversePair = `${item.target}-${item.source}`;
-  const verticalPairs = new Set(["border1-pe1", "pe1-dc1", "border2-pe2", "pe2-dc2", "border3-pe3", "pe3-dc3"]);
-  const horizontalPairs = new Set(["pe1-pe2", "pe2-pe3"]);
-  const accessPairs = new Set(["user-access-border1", "user-access-border2", "user-access-border3"]);
-
-  if (accessPairs.has(pair) || accessPairs.has(reversePair)) {
-    const sourceIsAccess = item.source === "user-access";
-    const accessBox = sourceIsAccess ? s : t;
-    const borderBox = sourceIsAccess ? t : s;
-    const start = bottom(accessBox);
-    const end = top(borderBox);
-    const midY = start.y + Math.max(20, (end.y - start.y) * 0.48);
-    const path = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${end.x} ${midY}, ${end.x} ${end.y}`;
-    return { path, label: { x: (start.x + end.x) / 2, y: midY - 10 } };
-  }
-
-  if (verticalPairs.has(pair) || verticalPairs.has(reversePair)) {
-    const sourceAboveTarget = s.y <= t.y;
-    const start = sourceAboveTarget ? bottom(s) : top(s);
-    const end = sourceAboveTarget ? top(t) : bottom(t);
-    const path = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
-    return { path, label: labelPoint(item, start, end, start.x) };
-  }
-
-  if (horizontalPairs.has(pair) || horizontalPairs.has(reversePair)) {
-    const sourceLeftOfTarget = s.x < t.x;
-    const start = sourceLeftOfTarget ? right(s) : left(s);
-    const end = sourceLeftOfTarget ? left(t) : right(t);
-    return { path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`, label: { x: (start.x + end.x) / 2, y: start.y + 42 } };
-  }
-
-  const start = smartAnchor(s, t);
-  const end = smartAnchor(t, s);
-  const midX = (start.x + end.x) / 2;
-  const bendY = item.type.includes("access") ? Math.min(start.y, end.y) + 70 : (start.y + end.y) / 2;
-  const path = item.type.includes("branch")
-    ? `M ${start.x} ${start.y} C ${midX + 40} ${start.y}, ${midX + 40} ${end.y}, ${end.x} ${end.y}`
-    : `M ${start.x} ${start.y} C ${midX} ${bendY}, ${midX} ${bendY}, ${end.x} ${end.y}`;
-  return { path, label: { x: (start.x + end.x) / 2 + (item.labelAnchor === "right" ? 48 : 0), y: (start.y + end.y) / 2 - 16 } };
-}
-
-function box(element, stageRect) {
-  const rect = element.getBoundingClientRect();
-  return {
-    left: rect.left - stageRect.left,
-    right: rect.right - stageRect.left,
-    top: rect.top - stageRect.top,
-    bottom: rect.bottom - stageRect.top,
-    x: rect.left - stageRect.left + rect.width / 2,
-    y: rect.top - stageRect.top + rect.height / 2,
-  };
-}
-
-function top(b) { return { x: b.x, y: b.top }; }
-function bottom(b) { return { x: b.x, y: b.bottom }; }
-function left(b) { return { x: b.left, y: b.y }; }
-function right(b) { return { x: b.right, y: b.y }; }
-
-function smartAnchor(from, to) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? right(from) : left(from);
-  return dy > 0 ? bottom(from) : top(from);
-}
-
-function labelPoint(item, start, end, lane) {
-  if (item.labelAnchor === "left") return { x: start.x - 62, y: (start.y + end.y) / 2 };
-  if (item.labelAnchor === "right") return { x: lane + 28, y: (start.y + end.y) / 2 };
-  if (item.labelAnchor === "below") return { x: (start.x + end.x) / 2, y: start.y + 42 };
-  return { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
 }
 
 function renderInternalScene(topology) {

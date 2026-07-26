@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import threading
+import time
+
 import pytest
 
-from tianjun.application.batch_scheduling_service import BatchRequestError
+from tianjun.application.batch_scheduling_service import BatchRequestError, BatchSchedulingService
 from tianjun.application.control_plane import CentralControlPlane
 from tianjun.domain import CarbonSiteProfile, Node, PowerProfile, ResourceVector, RunningTask, Task
 
@@ -122,6 +125,42 @@ def test_snapshot_conflict_creates_no_partial_reservation() -> None:
     assert conflict.value.status_code == 409
     assert control.leases == {}
     assert control.reservation_ledgers == {}
+
+
+def test_slow_batch_planning_does_not_block_node_heartbeat(monkeypatch) -> None:
+    control = CentralControlPlane()
+    control.register_node(node("green", carbon=120))
+    imported = control.import_task_batch(batch_payload("nonblocking-planning"))
+    planning_started = threading.Event()
+    release_planning = threading.Event()
+    original = BatchSchedulingService._build_plan
+
+    def slow_build(self, *args, **kwargs):
+        planning_started.set()
+        assert release_planning.wait(timeout=3)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(BatchSchedulingService, "_build_plan", slow_build)
+    error: list[BaseException] = []
+
+    def preview() -> None:
+        try:
+            control.preview_batch_schedule(imported["batch_id"], {"strategy": "B1-batch-greedy"})
+        except BaseException as exc:  # pragma: no cover - asserted below
+            error.append(exc)
+
+    worker = threading.Thread(target=preview)
+    worker.start()
+    assert planning_started.wait(timeout=2)
+    started = time.perf_counter()
+    control.record_heartbeat("green", health_score=0.99)
+    heartbeat_elapsed = time.perf_counter() - started
+    release_planning.set()
+    worker.join(timeout=5)
+
+    assert not worker.is_alive()
+    assert error == []
+    assert heartbeat_elapsed < 0.25
 
 
 def test_carbon_time_shift_uses_lowest_forecast_tick_only_when_allowed() -> None:

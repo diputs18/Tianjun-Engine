@@ -1,3 +1,5 @@
+import { requestJson, responseError } from "./request.js";
+
 const BASE = "";
 
 export async function fetchReport(view = "summary", options = {}) {
@@ -52,28 +54,9 @@ export async function importTaskBatch(file) {
 }
 
 async function _get(path, signal) {
-  const r = await fetch(BASE + path, { signal });
-  if (!r.ok) throw await responseError(r, `GET ${path}`);
-  return r.json();
+  return requestJson(BASE + path, { signal });
 }
 
 async function _post(path, body) {
-  const r = await fetch(BASE + path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw await responseError(r, `POST ${path}`);
-  return r.json();
-}
-
-async function responseError(response, operation) {
-  let detail = "";
-  try {
-    const payload = await response.json();
-    detail = payload.error || payload.message || payload.validation?.errors?.[0]?.reason || JSON.stringify(payload);
-  } catch (_) {
-    detail = await response.text();
-  }
-  return new Error(`${operation} -> ${response.status}${detail ? `: ${detail}` : ""}`);
+  return requestJson(BASE + path, { method: "POST", body });
 }

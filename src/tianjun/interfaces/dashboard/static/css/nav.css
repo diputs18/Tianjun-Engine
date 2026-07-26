@@ -80,7 +80,3 @@
   .tab-btn { height: 34px; border-radius: var(--radius-sm); }
   .alert-banner { top: 88px; }
 }
-
-@media (max-width: 480px) {
-  .topnav-status .badge { max-width: 8.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-}

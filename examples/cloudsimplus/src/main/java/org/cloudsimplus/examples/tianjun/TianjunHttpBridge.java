@@ -21,6 +21,7 @@ import java.util.regex.Pattern;
 public class TianjunHttpBridge {
     private static final Pattern NODE_ID_PATTERN = Pattern.compile("\"node_id\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern TASK_ID_PATTERN = Pattern.compile("\"task_id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern LEASE_ID_PATTERN = Pattern.compile("\"lease_id\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern STATUS_PATTERN = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern SCORE_PATTERN = Pattern.compile("\"total_score\"\\s*:\\s*([0-9.]+)");
     private static final Pattern LEASE_TASK_PATTERN = Pattern.compile("\"lease\"\\s*:\\s*\\{\\s*\"task_id\"\\s*:\\s*\"([^\"]+)\"");
@@ -33,6 +34,7 @@ public class TianjunHttpBridge {
     private final HttpClient client;
     private final String server;
     private final Map<String, Double> lastHeartbeatTickByNode = new ConcurrentHashMap<>();
+    private final Map<String, String> leaseIdByTask = new ConcurrentHashMap<>();
 
     public TianjunHttpBridge(final String server) {
         this.server = stripTrailingSlash(server);
@@ -216,6 +218,13 @@ public class TianjunHttpBridge {
         if (taskId.isBlank()) {
             return null;
         }
+        final String leaseId = matchString(LEASE_ID_PATTERN, response, "");
+        if (!leaseId.isBlank()) {
+            post("/leases/ack", """
+                {"node_id": "%s", "task_id": "%s", "lease_id": "%s"}
+                """.formatted(escapeJson(nodeId), escapeJson(taskId), escapeJson(leaseId)));
+            leaseIdByTask.put(taskId, leaseId);
+        }
         return new LeaseResult(
             taskId,
             matchString(NODE_ID_PATTERN, response, nodeId),
@@ -231,6 +240,7 @@ public class TianjunHttpBridge {
 
     public void reportResult(final SimTaskResult result) {
         post("/task-runs/result", resultJson(result));
+        leaseIdByTask.remove(result.taskId());
     }
 
     private String get(final String path) throws IOException, InterruptedException {
@@ -457,10 +467,17 @@ public class TianjunHttpBridge {
     }
 
     private String resultJson(final SimTaskResult result) {
+        final String leaseId = leaseIdByTask.getOrDefault(result.taskId(), "");
+        final String leaseFields = leaseId.isBlank()
+            ? ""
+            : "\"lease_id\": \"%s\",\n  \"result_id\": \"cloudsim-%s-%s\",".formatted(
+                escapeJson(leaseId), escapeJson(result.taskId()), escapeJson(leaseId)
+            );
         return """
             {
               "node_id": "%s",
               "task_id": "%s",
+              %s
               "success": %s,
               "duration_seconds": %.4f,
               "stdout": "%s",
@@ -484,6 +501,7 @@ public class TianjunHttpBridge {
             """.formatted(
             result.nodeId(),
             result.taskId(),
+            leaseFields,
             result.success() ? "true" : "false",
             result.durationSeconds(),
             escapeJson(result.stdout()),
@@ -532,10 +550,15 @@ public class TianjunHttpBridge {
     }
 
     private String progressJson(final SimTaskProgress progress) {
+        final String leaseId = leaseIdByTask.getOrDefault(progress.taskId(), "");
+        final String leaseField = leaseId.isBlank()
+            ? ""
+            : "\"lease_id\": \"%s\",".formatted(escapeJson(leaseId));
         return """
             {
               "node_id": "%s",
               "task_id": "%s",
+              %s
               "stage": "%s",
               "status": "%s",
               "progress": %.4f,
@@ -553,6 +576,7 @@ public class TianjunHttpBridge {
             """.formatted(
             progress.nodeId(),
             progress.taskId(),
+            leaseField,
             escapeJson(progress.stage()),
             escapeJson(progress.status()),
             clamp(progress.progress(), 0.0, 1.0),

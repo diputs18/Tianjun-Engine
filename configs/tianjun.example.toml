@@ -6,8 +6,10 @@
 host = "127.0.0.1"
 port = 8024
 heartbeat_timeout_seconds = 15
+lease_timeout_seconds = 60
+lifecycle_sweep_interval_seconds = 1
 policy_update_interval = 2
-state_db = "${TIANJUN_CONFIG_DIR}/tianjun-state.sqlite"
+state_db = "${TIANJUN_STATE_DIR}/tianjun-state.sqlite"
 
 [model]
 dir = "${TIANJUN_HOME}/data/trained_models"

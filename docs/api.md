@@ -41,9 +41,10 @@
 | POST | `/nodes/heartbeat` | 更新节点心跳和遥测数据 |
 | POST | `/tasks` | 提交任务 |
 | POST | `/tasks/{task_id}/schedule` | 调度待处理任务；需要明确确认 |
-| POST | `/leases/next` | 节点代理租约轮询 |
-| POST | `/task-runs/progress` | 报告任务进度 |
-| POST | `/task-runs/result` | 报告最终任务结果 |
+| POST | `/leases/next` | 节点代理租约轮询；返回 `lease_id`、签发时间与到期时间 |
+| POST | `/leases/ack` | 使用 `node_id`、`task_id`、`lease_id` 确认领取并续期 |
+| POST | `/task-runs/progress` | 报告任务进度并续期租约；新客户端应携带 `lease_id` |
+| POST | `/task-runs/result` | 幂等报告最终结果；新客户端应携带 `lease_id` 和稳定 `result_id` |
 | POST | `/task-runs/cancel` | 取消活动任务运行 |
 | POST | `/schedule/preview` | CloudSimPlus 兼容的调度预览 |
 | POST | `/schedule/commit` | CloudSimPlus 兼容的直接提交 |
@@ -78,3 +79,5 @@ HTTP 路由调用 `CentralControlPlane` facade。facade 将已迁移的行为转
 Dashboard 只轮询按页面拆分的报告。所有报告视图都带有 `report_version`、`resource_snapshot_version` 和 `generated_at`，客户端可据此识别跨请求快照差异。完整 `/report` 不再用于浏览器高频轮询。
 
 CloudSimPlus 心跳中的 `telemetry.cpu_utilization`、`ram_utilization` 和 `bandwidth_utilization` 会规范化为节点的 `runtime_utilization`。未上报的指标保持 `null`，Dashboard 显示为 `--`，不会生成伪实时值。
+
+租约默认 TTL 为 60 秒，可通过 `server.lease_timeout_seconds` 配置。相同 `result_id` 的重试返回已保存的结果收据并标记 `idempotent_replay=true`，不会重复累计执行、能耗或碳数据。

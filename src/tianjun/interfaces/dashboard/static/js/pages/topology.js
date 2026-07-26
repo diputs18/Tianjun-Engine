@@ -1,4 +1,5 @@
 import { renderTopology as renderTopologyCanvas } from "../topology.js";
+import { carbonSourceSummary, loadSourceSummary, sourceLabel } from "../topology-data.js";
 import { escapeHtml, fmt } from "../utils.js";
 
 const topologyLayers = new Set(["network", "load", "carbon"]);
@@ -70,8 +71,8 @@ function renderLayerSummary(report) {
   const nodes = report.nodes ?? [];
   if (activeLayer === "load") {
     const groups = groupNodes(nodes, (node) => dcKey(node));
-    target.innerHTML = `<div class="layer-summary-head"><div><span class="layer-summary-kicker">RESOURCE LAYER</span><h3>数据中心负载</h3></div><span class="layer-summary-badge load">实时遥测</span></div>
-      <p class="layer-summary-copy">颜色取 CPU、内存、GPU 三项中的最高利用率：低于 60% 为充足，60%–79% 需观察，80% 以上为热点。</p>
+    target.innerHTML = `<div class="layer-summary-head"><div><span class="layer-summary-kicker">RESOURCE LAYER</span><h3>数据中心负载</h3></div><span class="layer-summary-badge load">${escapeHtml(loadSourceSummary(nodes))}</span></div>
+      <p class="layer-summary-copy">优先使用节点遥测；无遥测时使用任务分配量估算。颜色取 CPU、内存、GPU 中的最高利用率，并在每个数据中心标明来源。</p>
       <div class="layer-summary-list">${["dc1", "dc2", "dc3"].map((key) => renderLoadSummary(key, groups.get(key) ?? [])).join("")}</div>
       ${renderHeatLegend("负载", "%")}`;
     return;
@@ -80,16 +81,17 @@ function renderLayerSummary(report) {
   const sites = new Map();
   for (const node of nodes) {
     const key = node.site_id || node.region || "unknown";
-    if (!sites.has(key)) sites.set(key, { nodes: 0, pue: 0, ci: 0, power: 0, dc: dcKey(node) });
+    if (!sites.has(key)) sites.set(key, { nodes: 0, pue: 0, ci: 0, power: 0, dc: dcKey(node), sources: new Set() });
     const item = sites.get(key);
     item.nodes += 1;
     item.pue += Number(node.carbon_profile?.pue || 1);
     item.ci += carbonIntensity(node);
     item.power += Number(node.current_power_w || 0);
+    item.sources.add(node.carbon_data_source || "configured_profile");
   }
   const sortedSites = Array.from(sites.entries()).sort((left, right) => (left[1].ci / left[1].nodes) - (right[1].ci / right[1].nodes));
-  target.innerHTML = `<div class="layer-summary-head"><div><span class="layer-summary-kicker">CARBON LAYER</span><h3>站点碳强度</h3></div><span class="layer-summary-badge carbon">低碳优先</span></div>
-    <p class="layer-summary-copy">颜色依据实时 CI：300 g/kWh 以下为低碳，301–450 为中等，超过 450 为高碳；列表按 CI 从低到高排列。</p>
+  target.innerHTML = `<div class="layer-summary-head"><div><span class="layer-summary-kicker">CARBON LAYER</span><h3>站点碳强度</h3></div><span class="layer-summary-badge carbon">${escapeHtml(carbonSourceSummary(nodes))}</span></div>
+    <p class="layer-summary-copy">CI 可能来自实时信号、CloudSim 模拟或配置曲线；300 g/kWh 以下为低碳，301–450 为中等，超过 450 为高碳。</p>
     <div class="layer-summary-list">${sortedSites.map(([site, item], index) => renderCarbonSummary(site, item, index === 0)).join("") || `<p class="muted">等待节点能源遥测</p>`}</div>
     ${renderHeatLegend("CI", "g/kWh")}`;
 }
@@ -99,8 +101,9 @@ function renderLoadSummary(key, nodes) {
   const value = Math.max(metrics.cpu, metrics.memory, metrics.gpu);
   const level = heatLevel(value, 60, 80);
   const state = { low: "容量充足", medium: "需观察", high: "资源热点" }[level];
+  const source = loadSourceSummary(nodes);
   return `<article class="layer-summary-row heat-${level}">
-    <div class="layer-summary-row-head"><b>${escapeHtml(key.toUpperCase())}</b><span>${escapeHtml(state)}</span></div>
+    <div class="layer-summary-row-head"><b>${escapeHtml(key.toUpperCase())}</b><span>${escapeHtml(`${state} · ${source}`)}</span></div>
     <div class="layer-summary-metrics"><span><small>CPU</small><b>${fmt(metrics.cpu, 1)}%</b></span><span><small>内存</small><b>${fmt(metrics.memory, 1)}%</b></span><span><small>GPU</small><b>${fmt(metrics.gpu, 1)}%</b></span><span><small>任务</small><b>${metrics.tasks}</b></span></div>
   </article>`;
 }
@@ -110,8 +113,9 @@ function renderCarbonSummary(site, item, recommended) {
   const level = heatLevel(ci, 301, 451);
   const state = { low: "低碳", medium: "中等", high: "高碳" }[level];
   const dcLabel = item.dc && item.dc !== "unknown" ? item.dc.toUpperCase() : displayDcLabel(site);
+  const source = sourceLabel(Array.from(item.sources), "carbon");
   return `<article class="layer-summary-row heat-${level}">
-    <div class="layer-summary-row-head"><b>${escapeHtml(dcLabel)}</b><span>${recommended ? "推荐 · " : ""}${state}</span></div>
+    <div class="layer-summary-row-head"><b>${escapeHtml(dcLabel)}</b><span>${escapeHtml(`${recommended ? "推荐 · " : ""}${state} · ${source}`)}</span></div>
     <div class="layer-summary-metrics carbon"><span><small>CI</small><b>${fmt(ci, 1)} g/kWh</b></span><span><small>PUE</small><b>${fmt(item.pue / item.nodes, 2)}</b></span><span><small>功率</small><b>${fmt(item.power, 1)} W</b></span></div>
   </article>`;
 }
@@ -161,7 +165,8 @@ function decorateLayerTarget(element, nodes) {
   }
   element.classList.add("layer-heat-target", `heat-${level}`);
   element.dataset.layerValue = label;
-  element.title = `${element.title || element.textContent.trim()} / ${label}`;
+  const source = activeLayer === "load" ? loadSourceSummary(nodes) : carbonSourceSummary(nodes);
+  element.title = `${element.title || element.textContent.trim()} / ${label} / ${source}`;
 }
 
 function aggregateNodeMetrics(nodes) {

@@ -35,7 +35,10 @@ class NodeRegistry:
             node.resource_version += 1
             control.resource_snapshot_version += 1
             control.last_heartbeat_at[node.node_id] = time.monotonic()
+            control.last_heartbeat_epoch[node.node_id] = time.time()
             control._persist_node(node)
+            if control.state_store is not None:
+                control.state_store.set_control_value("resource_snapshot_version", control.resource_snapshot_version)
             return node.to_dict()
 
     def record_heartbeat(
@@ -126,6 +129,7 @@ class NodeRegistry:
             node.resource_version += 1
             control.resource_snapshot_version += 1
             control.last_heartbeat_at[node_id] = time.monotonic()
+            control.last_heartbeat_epoch[node_id] = time.time()
             heartbeat_payload = {
                 "node_id": node_id,
                 "tick": node.telemetry_tick,
@@ -150,5 +154,6 @@ class NodeRegistry:
             if node.online is False:
                 control._recover_leases_for_stale_nodes({node_id})
             if control.state_store is not None:
+                control.state_store.set_control_value("resource_snapshot_version", control.resource_snapshot_version)
                 control.state_store.record_heartbeat(node_id, heartbeat_payload)
             return heartbeat_payload

@@ -20,6 +20,22 @@ class SchedulingDecision:
     explanation: str
     network_snapshot: dict[str, Any] = field(default_factory=dict)
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "SchedulingDecision":
+        return cls(
+            task_id=str(payload["task_id"]),
+            node_id=str(payload["node_id"]),
+            total_score=float(payload.get("total_score", 0.0)),
+            metric_scores={str(key): float(value) for key, value in dict(payload.get("metric_scores") or {}).items()},
+            raw_metrics=dict(payload.get("raw_metrics") or {}),
+            weights={str(key): float(value) for key, value in dict(payload.get("weights") or {}).items()},
+            predicted_start_tick=int(payload.get("predicted_start_tick", 0)),
+            predicted_finish_tick=int(payload.get("predicted_finish_tick", 0)),
+            predicted_cost=float(payload.get("predicted_cost", 0.0)),
+            explanation=str(payload.get("explanation") or ""),
+            network_snapshot=dict(payload.get("network_snapshot") or {}),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,

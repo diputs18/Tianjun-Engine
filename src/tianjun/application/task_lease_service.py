@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +14,7 @@ from ..domain import RunningTask, TaskStatus
 
 @dataclass(slots=True)
 class TaskLease:
+    lease_id: str
     task_id: str
     node_id: str
     issued_tick: int
@@ -20,9 +23,13 @@ class TaskLease:
     explanation: str
     task: Task
     decision: SchedulingDecision
+    issued_at_epoch: float
+    expires_at_epoch: float
+    acknowledged_at_epoch: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "lease_id": self.lease_id,
             "task_id": self.task_id,
             "node_id": self.node_id,
             "issued_tick": self.issued_tick,
@@ -31,6 +38,11 @@ class TaskLease:
             "explanation": self.explanation,
             "task": self.task.to_dict(),
             "decision": self.decision.to_dict(),
+            "issued_at_epoch": round(self.issued_at_epoch, 6),
+            "expires_at_epoch": round(self.expires_at_epoch, 6),
+            "acknowledged_at_epoch": (
+                None if self.acknowledged_at_epoch is None else round(self.acknowledged_at_epoch, 6)
+            ),
         }
 
 @dataclass(slots=True)
@@ -133,7 +145,7 @@ class TaskLeaseService:
                 return None
 
             for lease in list(control.leases.values()):
-                if lease.node_id == node_id and lease.task_id not in control.task_progress:
+                if lease.node_id == node_id and lease.acknowledged_at_epoch is None:
                     return lease.to_dict()
 
             tick = control.current_tick()
@@ -166,6 +178,65 @@ class TaskLeaseService:
                 )
                 return lease.to_dict()
             return None
+
+    def acknowledge_lease(self, *, node_id: str, task_id: str, lease_id: str) -> dict[str, Any]:
+        control = self.control_plane
+        with control.lock:
+            lease = control.leases.get(task_id)
+            if lease is None:
+                raise ValueError(f"Task {task_id} does not have an active lease.")
+            if lease.node_id != node_id or lease.lease_id != lease_id:
+                raise ValueError("Lease identity does not match the active task lease.")
+            now = time.time()
+            if lease.acknowledged_at_epoch is None:
+                lease.acknowledged_at_epoch = now
+            lease.expires_at_epoch = self._renewed_expiry(lease, now)
+            if control.state_store is not None:
+                control.state_store.save_lease(lease.to_dict())
+            return {**lease.to_dict(), "status": "acknowledged"}
+
+    def renew_lease(self, lease: TaskLease) -> None:
+        now = time.time()
+        if lease.acknowledged_at_epoch is None:
+            lease.acknowledged_at_epoch = now
+        lease.expires_at_epoch = self._renewed_expiry(lease, now)
+        if self.control_plane.state_store is not None:
+            self.control_plane.state_store.save_lease(lease.to_dict())
+
+    def _renewed_expiry(self, lease: TaskLease, now: float) -> float:
+        timeout = self.control_plane.lease_timeout_seconds
+        initial_expiry = lease.issued_at_epoch + timeout
+        minimum_visible_renewal = round(initial_expiry, 6) + 0.000001
+        return max(now + timeout, minimum_visible_renewal)
+
+    def expire_stale_leases(self) -> list[str]:
+        control = self.control_plane
+        now = time.time()
+        expired: list[str] = []
+        with control.lock:
+            for task_id, lease in list(control.leases.items()):
+                if lease.expires_at_epoch > now:
+                    continue
+                expired.append(task_id)
+                control.leases.pop(task_id, None)
+                node = control.nodes.get(lease.node_id)
+                if node is not None:
+                    node.running_tasks.pop(task_id, None)
+                    node.resource_version += 1
+                    control._persist_node(node)
+                task = control.tasks.get(task_id)
+                if task is not None and task.status == TaskStatus.RUNNING:
+                    task.status = TaskStatus.PENDING if task.attempts <= task.max_retries else TaskStatus.FAILED
+                    if task.status == TaskStatus.PENDING and task_id not in control.pending_queue:
+                        control.pending_queue.append(task_id)
+                    control._persist_task(task)
+                control.task_progress.pop(task_id, None)
+                control.resource_snapshot_version += 1
+                if control.state_store is not None:
+                    control.state_store.delete_lease(task_id)
+            if expired and control.state_store is not None:
+                control.state_store.set_control_value("resource_snapshot_version", control.resource_snapshot_version)
+        return expired
 
     @staticmethod
     def task_sort_key(task: Task) -> tuple[float, int, int, str]:
@@ -210,7 +281,9 @@ class TaskLeaseService:
         control.decision_log.append(decision)
         control.decision_log = control.decision_log[-2000:]
 
+        issued_at_epoch = time.time()
         lease = TaskLease(
+            lease_id=f"lease-{uuid.uuid4().hex}",
             task_id=task.task_id,
             node_id=node.node_id,
             issued_tick=tick,
@@ -219,6 +292,8 @@ class TaskLeaseService:
             explanation=decision.explanation,
             task=task,
             decision=decision,
+            issued_at_epoch=issued_at_epoch,
+            expires_at_epoch=issued_at_epoch + control.lease_timeout_seconds,
         )
         control.leases[task.task_id] = lease
         control._persist_task(task)
