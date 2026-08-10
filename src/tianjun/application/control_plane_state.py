@@ -60,6 +60,10 @@ def restore_control_plane(control: CentralControlPlane) -> None:
         PolicyAdjustment(
             tick=int(payload["tick"]),
             weights={str(key): float(value) for key, value in payload["weights"].items()},
+            group_weights={
+                str(key): float(value)
+                for key, value in dict(payload.get("group_weights") or {}).items()
+            },
             reasons=list(payload["reasons"]),
             affected_records=int(payload.get("affected_records", 0)),
             metrics={

@@ -42,6 +42,13 @@ test("latest navigation wins when an earlier polling response is delayed", async
   await expect(page.locator("#page-topology")).toBeVisible();
 });
 
+test("overview keeps the summary compact and shows idle schedulable capacity as free", async ({ page }) => {
+  await expect(page.locator("#overviewMetrics .summary-caption")).toHaveCount(0);
+  const firstDcMetrics = page.locator("#capacityMatrix .capacity-row").first().locator(".capacity-metric > b");
+  await expect(firstDcMetrics.nth(0)).toHaveText("0%");
+  await expect(firstDcMetrics.nth(1)).toHaveText("0%");
+});
+
 test("topology layers change both semantics and visible supporting content", async ({ page }) => {
   await page.locator("#tab-topology").click();
   const canvas = page.locator("#topologyCanvas");

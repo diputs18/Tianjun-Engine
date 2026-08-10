@@ -12,6 +12,7 @@ import {
   percentFrom,
   ratioPercent,
   resourceUsed,
+  vmDisplayName,
   zoneAggregate,
 } from "./topology-resource.js";
 
@@ -431,12 +432,7 @@ function updateResourceTopology(report) {
           total: stats.gpuTotal,
           percent: stats.gpuPercent,
         },
-        nodes: nodes
-          .filter((nodeItem) => {
-            const parsed = parseDciNode(nodeItem.node_id, nodeItem);
-            return parsed.dcKey === dcKey && parsed.location === zoneInfo.id;
-          })
-          .sort((left, right) => (parseDciNode(left.node_id, left).vmIndex ?? 0) - (parseDciNode(right.node_id, right).vmIndex ?? 0)),
+        nodes: nodesForZone(nodes, dcKey, zoneInfo.id),
         scheduleState: stats.cpuPercent >= 75 || stats.gpuPercent >= 80 ? "高负载" : "可调度",
         status: stats.cpuPercent >= 75 || stats.gpuPercent >= 80 ? "congested" : "ok",
       };
@@ -472,9 +468,11 @@ function buildLivePathContext(report) {
   const parsed = parseDciNode(nodeId, node);
   if (!parsed.dcKey) return null;
   const zoneModel = dcZoneModel[parsed.dcKey]?.zones?.[parsed.location] ?? firstZoneModel(parsed.dcKey);
-  const vmNumber = parsed.vmIndex == null ? 2 : parsed.vmIndex + 1;
-  const vmName = `VM-${String(vmNumber).padStart(2, "0")}`;
-  const vmId = `${zoneModel.cluster}-vm-${String(vmNumber).padStart(2, "0")}`;
+  const zoneNodes = nodesForZone(nodes, parsed.dcKey, parsed.location);
+  const nodePosition = zoneNodes.findIndex((item) => item.node_id === nodeId);
+  const vmOrdinal = nodePosition >= 0 ? nodePosition + 1 : Math.max(1, (parsed.vmIndex ?? 0) + 1);
+  const vmName = vmDisplayName(parsed.vmIndex, vmOrdinal);
+  const vmId = `${zoneModel.cluster}-vm-${String(vmOrdinal).padStart(2, "0")}`;
   const snapshot = payload.network_snapshot ?? decision?.network_snapshot ?? {};
   const latency = firstNumber(snapshot.deterministic_latency_ms, snapshot.stable_latency_ms, snapshot.robust_latency_ms, payload.network_delay_ticks, payload.metrics?.network_latency_ms);
   const risk = firstNumber(snapshot.uncertainty, payload.network_risk);
@@ -549,6 +547,19 @@ function buildLivePathContext(report) {
 function firstZoneModel(dcKey) {
   const zones = Object.values(dcZoneModel[dcKey]?.zones ?? {});
   return zones[0] ?? { leaf: "leaf-a", cluster: "cluster-a", label: "资源区", clusterName: "计算集群" };
+}
+
+function nodesForZone(nodes, dcKey, location) {
+  return nodes
+    .filter((nodeItem) => {
+      const parsed = parseDciNode(nodeItem.node_id, nodeItem);
+      return parsed.dcKey === dcKey && parsed.location === location;
+    })
+    .sort((left, right) => {
+      const leftIndex = parseDciNode(left.node_id, left).vmIndex ?? Number.MAX_SAFE_INTEGER;
+      const rightIndex = parseDciNode(right.node_id, right).vmIndex ?? Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex || String(left.node_id).localeCompare(String(right.node_id));
+    });
 }
 
 function currentTopology() {
@@ -814,8 +825,7 @@ function renderClusterCard(topology, id, zoneInfo) {
 function renderVmNode(topology, clusterId, zoneInfo, index, routeCluster) {
   const actualNode = zoneInfo.nodes?.[index] ?? null;
   const parsedNode = actualNode ? parseDciNode(actualNode.node_id, actualNode) : null;
-  const vmNumber = parsedNode?.vmIndex == null ? index + 1 : parsedNode.vmIndex + 1;
-  const vmName = `VM-${String(vmNumber).padStart(2, "0")}`;
+  const vmName = vmDisplayName(parsedNode?.vmIndex, index + 1);
   const vmId = `${clusterId}-vm-${String(index + 1).padStart(2, "0")}`;
   const active = topology.key === currentTargetDcKey() && routeCluster && vmId === topology.vmId;
   const selected = selectedDetail?.kind === "vm" && selectedDetail.id === vmId;
@@ -979,7 +989,7 @@ function renderVmDetails(vm) {
     ${detailRow("所属集群", cluster?.name ?? vm.clusterId)}
     ${detailRow("所属资源区", vm.zone)}
     ${detailRow("节点职责", "任务执行 / 算力资源实例")}
-    ${detailRow("节点 ID", vm.nodeId || "--")}
+    ${detailRow("节点 ID", vm.name || "--")}
     ${detailRow("CPU 使用率", vm.cpu)}
     ${detailRow("内存使用率", vm.memory)}
     ${gpuDetail}
@@ -1057,7 +1067,7 @@ function renderMetricRows(item) {
   const parsedRecommended = recommended ? parseDciNode(recommended.node_id, recommended) : null;
   const recommendedLabel = parsedRecommended?.vmIndex == null
     ? "遥测不足"
-    : `VM-${String(parsedRecommended.vmIndex + 1).padStart(2, "0")}`;
+    : vmDisplayName(parsedRecommended.vmIndex);
   return `${gpuDetail}
     ${detailRow("VM 数量", `${metrics.vmCount} 个`)}
     ${detailRow("CPU 使用率", `${metrics.cpu}%`)}

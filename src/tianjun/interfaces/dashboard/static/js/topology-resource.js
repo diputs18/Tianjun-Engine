@@ -39,6 +39,15 @@ export function parseDciNode(nodeId = "", node = {}) {
   };
 }
 
+export function vmDisplayName(vmIndex, fallbackNumber = 1) {
+  const numericIndex = Number(vmIndex);
+  const numericFallback = Number(fallbackNumber);
+  const displayNumber = Number.isInteger(numericIndex) && numericIndex >= 0
+    ? numericIndex
+    : Math.max(0, Number.isFinite(numericFallback) ? numericFallback : 1);
+  return `VM-${String(displayNumber).padStart(2, "0")}`;
+}
+
 export function aggregateResources(nodes, scope) {
   const result = new Map();
   for (const node of nodes) {

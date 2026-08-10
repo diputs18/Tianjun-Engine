@@ -269,14 +269,15 @@ class CentralControlPlane:
             self.policy_state.update(
                 tick=self.current_tick(),
                 new_weights=normalized,
+                new_group_weights=(
+                    {str(key): float(value) for key, value in dict(group_weights).items()}
+                    if group_weights is not None
+                    else None
+                ),
                 reasons=[reason],
                 affected_records=0,
                 metrics={},
             )
-            if group_weights is not None:
-                self.policy_state.update_group_weights({
-                    str(key): float(value) for key, value in dict(group_weights).items()
-                })
             if self.state_store is not None:
                 latest_adjustment = self.policy_state.adjustment_history[-1]
                 self.state_store.append_policy_adjustment(latest_adjustment.to_dict())
@@ -545,6 +546,9 @@ class CentralControlPlane:
                     latest_adjustment = self.policy_state.adjustment_history[-1]
                     self.state_store.append_policy_adjustment(latest_adjustment.to_dict())
                     self.state_store.set_control_value("policy_weights", self.policy_state.current_weights())
+                    self.state_store.set_control_value(
+                        "policy_group_weights", self.policy_state.current_group_weights()
+                    )
             receipt = {
                 **record.to_dict(),
                 "lease_id": lease.lease_id,
@@ -1071,6 +1075,12 @@ class CentralControlPlane:
                 for record in locality_records[-12:]
             )
         recent_records = self.execution_history[-12:]
+        carbon_budget_records = [
+            (record, self.tasks.get(record.task_id))
+            for record in recent_records
+            if self.tasks.get(record.task_id) is not None
+            and self.tasks[record.task_id].carbon_budget_g is not None
+        ]
         return {
             "gpu_wait_ratio": (len(gpu_pending) / len(self.pending_queue)) if self.pending_queue else 0.0,
             "locality_miss_rate": locality_miss_rate,
@@ -1085,6 +1095,16 @@ class CentralControlPlane:
                     for record in recent_records
                 )
                 if recent_records
+                else 0.0
+            ),
+            "carbon_budget_violation_rate": (
+                mean(
+                    1.0
+                    if record.operational_carbon_g > float(task.carbon_budget_g)
+                    else 0.0
+                    for record, task in carbon_budget_records
+                )
+                if carbon_budget_records
                 else 0.0
             ),
         }
