@@ -9,6 +9,7 @@ import {
 import {
   aggregateResources,
   parseDciNode,
+  vmDisplayName,
 } from "../../src/tianjun/interfaces/dashboard/static/js/topology-resource.js";
 
 test("resource layer distinguishes real, simulated, estimated and mixed data", () => {
@@ -41,4 +42,9 @@ test("topology resource aggregation prefers heartbeat telemetry over allocation 
   assert.equal(result.cpuPercent, 50);
   assert.equal(result.memoryPercent, 25);
   assert.equal(result.tasks, 1);
+});
+
+test("topology VM labels preserve the backend numeric suffix", () => {
+  assert.equal(vmDisplayName(parseDciNode("dci-dc1-hangzhou-vm-1").vmIndex), "VM-01");
+  assert.equal(vmDisplayName(parseDciNode("dci-dc2-chongqing-vm-0").vmIndex), "VM-00");
 });

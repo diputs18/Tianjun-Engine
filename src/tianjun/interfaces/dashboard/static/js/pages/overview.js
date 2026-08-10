@@ -176,7 +176,6 @@ function renderSummaryGroup(group) {
       ${group.unit ? `<span class="summary-unit">${escapeHtml(group.unit)}</span>` : ""}
     </div>
     <span class="summary-label">${escapeHtml(group.label)}</span>
-    <span class="summary-caption">${escapeHtml(group.caption)}</span>
     <div class="summary-facts">
       ${group.facts.map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`).join("")}
     </div>
@@ -242,14 +241,14 @@ function dcKey(node) {
   return match ? `dc${match[1]}` : "dc1";
 }
 
-function resourceValue(node, key) {
-  const direct = node.runtime_utilization?.[key] ?? node.runtime_telemetry?.[key] ?? node[`${key}_utilization`] ?? node[`${key}_used_ratio`] ?? node[`${key}_usage`];
-  if (direct !== undefined && Number.isFinite(Number(direct))) return clamp01(Number(direct));
+export function resourceValue(node, key) {
   const cap = resourceCapacity(node, key);
   const used = resourceUsed(node, key, cap);
   if (cap > 0 && used !== null) return clamp01(used / cap);
+  const direct = node.runtime_utilization?.[key] ?? node.runtime_telemetry?.[key] ?? node[`${key}_utilization`] ?? node[`${key}_used_ratio`] ?? node[`${key}_usage`];
+  if (direct !== undefined && Number.isFinite(Number(direct))) return clamp01(Number(direct));
   if (key === "gpu") return 0;
-  return key === "cpu" ? nodeLoadFallback(node) : nodeLoadFallback(node) * 0.82;
+  return 0;
 }
 
 function gpuCapacitySummary(nodes) {
@@ -309,15 +308,6 @@ function resourceUsed(node, key, cap) {
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, Number(value) || 0));
-}
-
-function nodeLoadFallback(node) {
-  const perf = node.performance_factors ?? {};
-  const direct = node.load ?? node.current_load ?? perf.cpu_utilization ?? perf.memory_utilization;
-  if (direct !== undefined) return Number(direct);
-  const health = Number(node.health_score ?? 0.9);
-  const latency = Number(node.stable_latency_ms ?? node.avg_latency_ms ?? node.network_paths?.[0]?.latency_ms ?? 2);
-  return Math.max(0.08, Math.min(0.86, (1 - health) * 0.8 + latency / 18));
 }
 
 function renderQueue(report) {

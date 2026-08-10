@@ -35,6 +35,20 @@ def test_topology_displays_gpu_capacity() -> None:
     assert 'recommendedLabel = parsedRecommended?.vmIndex' in topology
 
 
+def test_topology_vm_detail_keeps_display_id_in_sync_with_name() -> None:
+    topology = Path("src/tianjun/interfaces/dashboard/static/js/topology.js").read_text(encoding="utf-8")
+    topology_page = Path("src/tianjun/interfaces/dashboard/static/js/pages/topology.js").read_text(encoding="utf-8")
+
+    assert '${detailRow("节点 ID", vm.name || "--")}' in topology
+    assert '${detailRow("节点 ID", vm.nodeId || "--")}' not in topology
+    assert "vmDisplayName(parsed.vmIndex, vmOrdinal)" in topology
+    assert "vmDisplayName(parsedNode?.vmIndex, index + 1)" in topology
+    assert "vmDisplayName(parsedRecommended.vmIndex)" in topology
+    assert "parsedNode.vmIndex + 1" not in topology
+    assert "parsedRecommended.vmIndex + 1" not in topology
+    assert 'element.dataset.name ?? "VM-00"' in topology_page
+
+
 def test_dashboard_tabs_expose_selected_state_and_controlled_panels() -> None:
     index = Path("src/tianjun/interfaces/dashboard/static/index.html").read_text(encoding="utf-8")
     router = Path("src/tianjun/interfaces/dashboard/static/js/router.js").read_text(encoding="utf-8")

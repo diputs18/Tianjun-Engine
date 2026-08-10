@@ -201,7 +201,7 @@ function actualNodeForVm(nodes, element) {
     if (exact) return exact;
   }
   const location = locationFromText(element.dataset.cluster);
-  const vmIndex = Math.max(0, Number(String(element.dataset.name ?? "VM-01").match(/\d+/)?.[0] ?? 1) - 1);
+  const vmIndex = Math.max(0, Number(String(element.dataset.name ?? "VM-00").match(/\d+/)?.[0] ?? 0));
   return nodes.find((node) => String(node.location ?? "").toLowerCase() === location && new RegExp(`vm[-_]${vmIndex}$`, "i").test(node.node_id ?? ""));
 }
 
